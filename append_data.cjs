@@ -1,40 +1,6 @@
-export type CardCategory = 'teka-teki' | 'vibe-check' | 'taaruf-realiti' | 'dare-santai';
+const fs = require('fs');
 
-export interface SwipeCardItem {
-  id: string;
-  category: CardCategory;
-  categoryLabel: string;
-  badgeColor: string;
-  turn: 'Lelaki' | 'Perempuan' | 'Dua-dua Serentak';
-  question: string;
-  flipContent: {
-    title: string;
-    description: string;
-    type: 'answer' | 'trap' | 'green-red-flag' | 'dare';
-    greenFlag?: string;
-    redFlag?: string;
-  };
-}
-
-export interface GuessQuizItem {
-  id: string;
-  targetRole: 'Lelaki' | 'Perempuan'; // Who is being guessed
-  question: string;
-  options: string[];
-  vibeText: string;
-}
-
-export interface WheelSegment {
-  id: string;
-  label: string;
-  icon: string;
-  color: string;
-  textColor: string;
-  category: string;
-  prompts: string[];
-}
-
-
+const code = `
 import taarufData from './taaruf_game_final.json';
 
 const getTurn = (index: number): 'Lelaki' | 'Perempuan' | 'Dua-dua Serentak' => {
@@ -48,9 +14,9 @@ const getTargetRole = (index: number): 'Lelaki' | 'Perempuan' => {
 
 export const SWIPE_CARDS: SwipeCardItem[] = [
   ...taarufData.teka_teki_bodoh.map((item, i) => ({
-    id: `tt-${i}`,
+    id: \`tt-\${i}\`,
     category: 'teka-teki' as CardCategory,
-    categoryLabel: 'Riddles',
+    categoryLabel: '🤣 Teka-Teki Lawak',
     badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
     turn: 'Dua-dua Serentak' as const,
     question: item.soalan,
@@ -61,9 +27,9 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
     }
   })),
   ...taarufData.vibe_check.map((item, i) => ({
-    id: `vc-${i}`,
+    id: \`vc-\${i}\`,
     category: 'vibe-check' as CardCategory,
-    categoryLabel: 'Vibe Check',
+    categoryLabel: '✨ Vibe Check',
     badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-300',
     turn: getTurn(i),
     question: item.soalan,
@@ -73,11 +39,11 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
       type: 'trap' as const
     }
   })),
-  ...Object.entries(taarufData.soalan_matang_prakahwinan).flatMap(([_key, items]: [string, any], categoryIndex) => 
-    items.map((item: any, i: number) => ({
-      id: `sm-${categoryIndex}-${i}`,
+  ...Object.entries(taarufData.soalan_matang_prakahwinan).flatMap(([key, items], categoryIndex) => 
+    items.map((item, i) => ({
+      id: \`sm-\${categoryIndex}-\${i}\`,
       category: 'taaruf-realiti' as CardCategory,
-      categoryLabel: 'Taaruf',
+      categoryLabel: '💍 Taaruf Realiti',
       badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       turn: getTurn(i),
       question: item.soalan,
@@ -88,40 +54,33 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
       }
     }))
   ),
-  ...taarufData.bonus_challenges.map((item: any, i) => ({
-    id: `bc-${i}`,
+  ...taarufData.bonus_challenges.map((item, i) => ({
+    id: \`bc-\${i}\`,
     category: 'dare-santai' as CardCategory,
-    categoryLabel: 'Bonus Challenge',
+    categoryLabel: '🔥 Bonus Challenge',
     badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
     turn: getTurn(i),
-    question: item.cabaran || item.cabaran_tajuk || item.tajuk || '',
+    question: item.cabaran,
     flipContent: {
       title: 'Cabaran:',
-      description: item.denda || item.deskripsi || item.arahan_game || 'Lakukan cabaran ini sekarang!',
+      description: item.denda || 'Lakukan cabaran ini sekarang!',
       type: 'dare' as const
     }
   }))
 ];
 
-const cleanOption = (opt: string) => opt.replace(/^[A-D]\.\s*/, '');
+const cleanOption = (opt: string) => opt.replace(/^[A-D]\\.\\s*/, '');
 
 export const GUESS_QUIZ_LIST: GuessQuizItem[] = taarufData.teka_hati_dia.map((item, i) => ({
-  id: `gq-${i}`,
+  id: \`gq-\${i}\`,
   targetRole: getTargetRole(i),
   question: item.soalan,
   options: item.pilihan.map(cleanOption),
   vibeText: item.kategori || 'Uji kefahaman hati pasangan!'
 }));
 
-export interface MatchQuestion {
-  id: string;
-  question: string;
-  options: string[];
-  vibeText: string;
-}
-
 export const MATCH_QUESTIONS: MatchQuestion[] = taarufData.compatibility_match_check.map((item, i) => ({
-  id: `m-${i}`,
+  id: \`m-\${i}\`,
   question: item.soalan,
   options: item.pilihan.map(cleanOption),
   vibeText: item.tip_perbincangan || 'Match Score check!'
@@ -165,3 +124,6 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
     prompts: ['Lakukan satu Bonus Challenge berani mati!']
   }
 ];
+`;
+
+fs.appendFileSync('src/data/questions.ts', code);

@@ -3,137 +3,141 @@ import confetti from 'canvas-confetti';
 import { Sparkles, Dices, RotateCcw, X } from 'lucide-react';
 import { WHEEL_SEGMENTS, WheelSegment } from '../data/questions';
 import { sounds } from '../utils/audio';
+import { useGame, HEART_POINTS } from '../store/GameContext';
+import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 
 export const SpinWheel: React.FC = () => {
+  const { t, addHeartPoints } = useGame();
+  const multiplayer = useMultiplayer();
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [selectedSegment, setSelectedSegment] = useState<WheelSegment | null>(null);
   const [activePrompt, setActivePrompt] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [myAnswer, setMyAnswer] = useState<string | null>(null);
+  const [partnerAnswer, setPartnerAnswer] = useState<string | null>(null);
+  const tickIntervalRef = useRef<number | null>(null);
 
   const numSegments = WHEEL_SEGMENTS.length;
   const segmentAngle = 360 / numSegments;
-  const tickIntervalRef = useRef<number | null>(null);
 
-  const spinTheWheel = () => {
-    if (spinning) return;
+  React.useEffect(() => {
+    if (multiplayer.status === 'connected') {
+      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+        if (msg.type === 'SPIN_WHEEL') {
+          executeSpin(msg.payload.rotation, msg.payload.segmentIndex, msg.payload.promptIndex);
+        } else if (msg.type === 'WHEEL_SUBMIT') {
+          setPartnerAnswer(msg.payload);
+        }
+      };
+    }
+  }, [multiplayer.status, multiplayer.messageListener]);
 
+  const executeSpin = (targetRotation: number, segmentIdx: number, promptIdx: number) => {
     setSpinning(true);
     setShowModal(false);
-
-    // Play initial whoosh
+    setMyAnswer(null);
+    setPartnerAnswer(null);
+    setRotation(targetRotation);
     sounds.playSwipe();
 
-    // Random extra spins between 5 and 9 full rotations (1800 - 3240 deg)
-    const extraRotations = 360 * (5 + Math.floor(Math.random() * 4));
-    const randomSegmentIndex = Math.floor(Math.random() * numSegments);
-
-    // Calculate landing angle so the arrow (at top, 270° or 90°) points directly to the center of the segment
-    const targetDegree = 360 - (randomSegmentIndex * segmentAngle + segmentAngle / 2);
-    const newRotation = rotation + extraRotations + (targetDegree - (rotation % 360));
-
-    setRotation(newRotation);
-
-    // Sound ticking effect while spinning
     let tickCount = 0;
     const maxTicks = 25;
     const playNextTick = () => {
       if (tickCount < maxTicks) {
         sounds.playTick();
         tickCount++;
-        const delay = 60 + Math.pow(tickCount / maxTicks, 2) * 260; // easing out
+        const delay = 60 + Math.pow(tickCount / maxTicks, 2) * 260;
         tickIntervalRef.current = window.setTimeout(playNextTick, delay);
       }
     };
     playNextTick();
 
-    // Once spin animation completes (4s)
     setTimeout(() => {
       setSpinning(false);
-      const landed = WHEEL_SEGMENTS[randomSegmentIndex];
+      const landed = WHEEL_SEGMENTS[segmentIdx];
       setSelectedSegment(landed);
-
-      // Pick a random prompt from that segment
-      const randomPrompt = landed.prompts[Math.floor(Math.random() * landed.prompts.length)];
-      setActivePrompt(randomPrompt);
+      setActivePrompt(landed.prompts[promptIdx]);
       setShowModal(true);
-
+      addHeartPoints(HEART_POINTS.COMPLETE_WHEEL);
       sounds.playSuccess();
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.7 }
-      });
+      confetti({ particleCount: 90, spread: 100, origin: { y: 0.6 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15', '#F97316'] });
     }, 4000);
   };
 
+  const spinTheWheel = () => {
+    if (spinning) return;
+    
+    const extraRotations = 360 * (5 + Math.floor(Math.random() * 4));
+    const randomSegmentIndex = Math.floor(Math.random() * numSegments);
+    const targetDegree = 360 - (randomSegmentIndex * segmentAngle + segmentAngle / 2);
+    const newRotation = rotation + extraRotations + (targetDegree - (rotation % 360));
+    
+    const landed = WHEEL_SEGMENTS[randomSegmentIndex];
+    const promptIndex = Math.floor(Math.random() * landed.prompts.length);
+
+    if (multiplayer.status === 'connected') {
+      setMyAnswer(null);
+      setPartnerAnswer(null);
+      multiplayer.sendMessage({ 
+        type: 'SPIN_WHEEL', 
+        payload: { rotation: newRotation, segmentIndex: randomSegmentIndex, promptIndex } 
+      });
+    }
+    
+    executeSpin(newRotation, randomSegmentIndex, promptIndex);
+  };
+
   return (
-    <div className="w-full max-w-sm mx-auto bg-white rounded-3xl p-6 shadow-xl border border-rose-100 flex flex-col items-center justify-between min-h-[500px]">
+    <div className="game-card w-full max-w-sm mx-auto p-6 flex flex-col items-center justify-between min-h-[510px]">
       {/* Header */}
       <div className="text-center space-y-1">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
-          <Sparkles className="w-3.5 h-3.5 text-rose-500" /> Mod Date Night & Lepak Cafe
+        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-black text-white"
+          style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316, #FF2D9B)', boxShadow: '0 4px 12px rgba(245,158,11,0.35)' }}>
+          <Sparkles className="w-3.5 h-3.5" /> Date Night Mode
         </div>
-        <h2 className="text-xl font-extrabold text-stone-800">Roda Jodoh: Anti-Kekok</h2>
-        <p className="text-[11px] text-stone-400">
-          Tengah mati kutu tak tahu nak sembang apa? Putar roda ni sekarang!
-        </p>
+        <h2 className="text-2xl font-black text-ink">{t.wheelTitle}</h2>
+        <p className="text-[11px] text-ink-3 font-medium">{t.wheelSub}</p>
       </div>
 
-      {/* Wheel Area */}
-      <div className="relative w-64 h-64 my-6 flex items-center justify-center">
-        {/* Top Indicator Arrow */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
-          <div className="w-0 h-0 border-l-[14px] border-l-transparent border-r-[14px] border-r-transparent border-t-[22px] border-t-rose-600 filter drop-shadow-md" />
+      {/* Wheel */}
+      <div className="relative my-4" style={{ width: 272, height: 272 }}>
+        {/* Pointer */}
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
+          <div className="w-0 h-0"
+            style={{ borderLeft: '14px solid transparent', borderRight: '14px solid transparent', borderTop: '22px solid #FF2D9B', filter: 'drop-shadow(0 2px 4px rgba(255,45,155,0.5))' }} />
         </div>
 
-        {/* Outer Ring Glow */}
-        <div className="absolute inset-0 rounded-full border-4 border-amber-200 shadow-xl pointer-events-none" />
+        {/* Outer ring */}
+        <div className="absolute inset-0 rounded-full pointer-events-none"
+          style={{ border: '4px solid white', boxShadow: '0 0 0 4px rgba(124,58,237,0.2), 0 12px 40px rgba(0,0,0,0.18)' }} />
 
-        {/* SVG Spinning Wheel */}
-        <svg
-          viewBox="0 0 300 300"
-          className="w-full h-full rounded-full transition-transform ease-out"
-          style={{
-            transform: `rotate(${rotation}deg)`,
-            transitionDuration: spinning ? '4000ms' : '0ms',
-            transitionTimingFunction: 'cubic-bezier(0.15, 0.95, 0.35, 1)'
-          }}
-        >
+        {/* SVG Wheel */}
+        <svg viewBox="0 0 300 300" style={{
+          width: '100%', height: '100%', borderRadius: '50%',
+          transform: `rotate(${rotation}deg)`,
+          transitionDuration: spinning ? '4000ms' : '0ms',
+          transitionTimingFunction: 'cubic-bezier(0.15, 0.95, 0.35, 1)',
+        }}>
           {WHEEL_SEGMENTS.map((seg, idx) => {
             const startAngle = idx * segmentAngle;
             const endAngle = startAngle + segmentAngle;
-
-            // Polar to Cartesian for SVG path arc
             const startRad = ((startAngle - 90) * Math.PI) / 180;
             const endRad = ((endAngle - 90) * Math.PI) / 180;
-
             const x1 = 150 + 145 * Math.cos(startRad);
             const y1 = 150 + 145 * Math.sin(startRad);
             const x2 = 150 + 145 * Math.cos(endRad);
             const y2 = 150 + 145 * Math.sin(endRad);
-
             const pathData = `M 150 150 L ${x1} ${y1} A 145 145 0 0 1 ${x2} ${y2} Z`;
-
-            // Text coordinates along the angle bisector
             const midRad = ((startAngle + segmentAngle / 2 - 90) * Math.PI) / 180;
             const tx = 150 + 95 * Math.cos(midRad);
             const ty = 150 + 95 * Math.sin(midRad);
-            const textRotation = startAngle + segmentAngle / 2;
-
             return (
               <g key={seg.id}>
-                <path d={pathData} fill={seg.color} stroke="#ffffff" strokeWidth="2.5" />
-                <text
-                  x={tx}
-                  y={ty}
-                  fill={seg.textColor}
-                  fontSize="12"
-                  fontWeight="bold"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  transform={`rotate(${textRotation}, ${tx}, ${ty})`}
-                >
+                <path d={pathData} fill={seg.color} stroke="white" strokeWidth="3" />
+                <text x={tx} y={ty} fill={seg.textColor} fontSize="11" fontWeight="900"
+                  textAnchor="middle" dominantBaseline="middle"
+                  transform={`rotate(${startAngle + segmentAngle / 2}, ${tx}, ${ty})`}>
                   {seg.icon} {seg.label.replace(/^[^\s]+\s/, '')}
                 </text>
               </g>
@@ -141,84 +145,120 @@ export const SpinWheel: React.FC = () => {
           })}
         </svg>
 
-        {/* Center Spin Button Knob */}
-        <button
-          onClick={spinTheWheel}
-          disabled={spinning}
-          className="absolute z-10 w-16 h-16 rounded-full bg-white border-4 border-rose-500 shadow-xl flex flex-col items-center justify-center text-stone-800 font-extrabold text-[10px] uppercase tracking-tighter hover:scale-105 active:scale-95 transition disabled:opacity-80"
-        >
-          <Dices className={`w-5 h-5 text-rose-500 mb-0.5 ${spinning ? 'animate-spin' : ''}`} />
-          {spinning ? 'PUTAR...' : 'PUTAR!'}
+        {/* Center button */}
+        <button onClick={spinTheWheel} disabled={spinning}
+          className="absolute z-10 flex flex-col items-center justify-center font-black text-[10px] uppercase tracking-tighter hover:scale-105 active:scale-95 transition text-white"
+          style={{
+            width: 64, height: 64, borderRadius: '50%',
+            top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)',
+            border: '4px solid white',
+            boxShadow: '0 4px 0 rgba(0,0,0,0.2), 0 8px 20px rgba(255,45,155,0.4)',
+          }}>
+          <Dices className={`w-5 h-5 mb-0.5 ${spinning ? 'animate-spin' : ''}`} />
+          {spinning ? '...' : 'SPIN!'}
         </button>
       </div>
 
-      {/* Action Button */}
+      {/* Spin button */}
       <div className="w-full space-y-2">
-        <button
-          onClick={spinTheWheel}
-          disabled={spinning}
-          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-rose-500 to-rose-600 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-200 hover:opacity-95 transition active:scale-98 disabled:opacity-70"
-        >
+        <button onClick={spinTheWheel} disabled={spinning}
+          className="btn-chunky btn-amber w-full text-sm disabled:opacity-60">
           <Dices className="w-4 h-4" />
-          {spinning ? 'Roda Sedang Berputar...' : 'Putar Roda Sekarang 🎡'}
+          {spinning ? t.wheelSpinning + ' 🎡' : t.wheelSpin + ' 🎡'}
         </button>
-
-        <p className="text-[10px] text-center text-stone-400">
-          Tip: Letak telefon di tengah meja cafe, ambil giliran putar!
-        </p>
+        <p className="text-[10px] text-center text-ink-3 font-semibold">{t.wheelTip}</p>
       </div>
 
-      {/* RESULT MODAL OVERLAY */}
+      {/* Result Modal */}
       {showModal && selectedSegment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="w-full max-w-xs bg-white rounded-3xl p-6 shadow-2xl border border-stone-200 text-center space-y-4 animate-in zoom-in-95 duration-200 relative">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-full text-stone-400 hover:bg-stone-100"
-            >
+        <div className="modal-overlay centered" onClick={() => setShowModal(false)}>
+          <div className="game-card w-full max-w-xs p-6 text-center space-y-4 animate-pop-in relative"
+            onClick={e => e.stopPropagation()}
+            style={{ boxShadow: `0 0 0 4px ${selectedSegment.color}30, 0 20px 60px rgba(0,0,0,0.25)` }}>
+
+            <button onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100">
               <X className="w-4 h-4" />
             </button>
 
-            <div
-              className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center text-2xl shadow-sm"
-              style={{ backgroundColor: `${selectedSegment.color}20`, color: selectedSegment.color }}
-            >
+            <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-3xl animate-float"
+              style={{ background: `${selectedSegment.color}18`, border: `3px solid ${selectedSegment.color}40`, boxShadow: `0 8px 24px ${selectedSegment.color}35` }}>
               {selectedSegment.icon}
             </div>
 
             <div>
-              <span
-                className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full"
-                style={{ backgroundColor: `${selectedSegment.color}20`, color: selectedSegment.color }}
-              >
+              <span className="tag text-xs" style={{ background: `${selectedSegment.color}15`, color: selectedSegment.color, border: `2px solid ${selectedSegment.color}30` }}>
                 {selectedSegment.label}
               </span>
-              <h3 className="text-base font-extrabold text-stone-800 mt-2 leading-snug">
-                "{activePrompt}"
-              </h3>
+              <h3 className="text-base font-black text-ink mt-2.5 leading-snug">{activePrompt}</h3>
             </div>
 
-            <div className="space-y-2 pt-2">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  sounds.playSuccess();
-                }}
-                className="w-full py-2.5 rounded-xl bg-stone-900 text-white font-bold text-xs hover:bg-rose-600 transition"
-              >
-                ✅ Dah Jawab / Selesai!
-              </button>
-
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  spinTheWheel();
-                }}
-                className="w-full py-2 rounded-xl bg-stone-100 text-stone-600 font-semibold text-xs hover:bg-stone-200 transition flex items-center justify-center gap-1.5"
-              >
-                <RotateCcw className="w-3.5 h-3.5" /> Putar Sekali Lagi
-              </button>
+            <div className="flex items-center gap-1 text-xs font-bold text-ink-3">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              +{HEART_POINTS.COMPLETE_WHEEL} Heart Points earned!
             </div>
+
+            {multiplayer.status === 'connected' ? (
+              <div className="space-y-3 mt-4">
+                {partnerAnswer && !myAnswer && (
+                  <p className="text-xs text-brand font-bold animate-pulse">Partner is ready! Waiting for you...</p>
+                )}
+                {!partnerAnswer && myAnswer && (
+                  <p className="text-xs text-brand font-bold animate-pulse">Waiting for partner...</p>
+                )}
+                
+                {partnerAnswer && myAnswer ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 text-left mb-4">
+                       <div className="bg-indigo-50 p-2.5 rounded-xl border border-indigo-100">
+                         <p className="text-[10px] uppercase font-black text-indigo-400 mb-1">You</p>
+                         <p className="text-sm font-bold text-ink break-words">{myAnswer}</p>
+                       </div>
+                       <div className="bg-pink-50 p-2.5 rounded-xl border border-pink-100">
+                         <p className="text-[10px] uppercase font-black text-pink-400 mb-1">{multiplayer.remoteProfile?.name}</p>
+                         <p className="text-sm font-bold text-ink break-words">{partnerAnswer}</p>
+                       </div>
+                    </div>
+                    <button onClick={() => setShowModal(false)}
+                      className="btn-chunky btn-green w-full text-xs" style={{ borderRadius: '12px' }}>
+                      ✅ Continue
+                    </button>
+                  </>
+                ) : !myAnswer ? (
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const val = new FormData(e.currentTarget).get('ans') as string;
+                    if (!val) return;
+                    setMyAnswer(val);
+                    multiplayer.sendMessage({ type: 'WHEEL_SUBMIT', payload: val });
+                    sounds.playSuccess();
+                  }}>
+                    <input
+                      type="text"
+                      name="ans"
+                      autoComplete="off"
+                      placeholder="Type answer or reaction..."
+                      className="w-full bg-stone-100 border-2 border-stone-200 p-3 rounded-xl text-sm font-semibold focus:border-brand outline-none mb-2"
+                    />
+                    <button type="submit" className="btn-chunky btn-pink w-full text-xs" style={{ borderRadius: '12px' }}>
+                      Submit & Reveal
+                    </button>
+                  </form>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button onClick={() => { setShowModal(false); sounds.playSuccess(); }}
+                  className="btn-chunky btn-green w-full text-xs" style={{ borderRadius: '12px' }}>
+                  ✅ {t.wheelDone}
+                </button>
+                <button onClick={() => { setShowModal(false); spinTheWheel(); }}
+                  className="btn-chunky btn-white w-full text-xs flex items-center justify-center gap-1.5" style={{ borderRadius: '12px' }}>
+                  <RotateCcw className="w-3.5 h-3.5" /> {t.wheelAgain}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

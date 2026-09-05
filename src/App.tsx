@@ -1,49 +1,287 @@
 import React, { useState, useMemo } from 'react';
-import { Layers, Dices, Heart, Users, Sparkles, ShoppingBag, CheckCircle, XCircle, RotateCw } from 'lucide-react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Layers, Dices, Heart, Users, Sparkles, RotateCw, HeartHandshake, Music, Volume2, VolumeX, Check } from 'lucide-react';
 import { SWIPE_CARDS, CardCategory } from './data/questions';
 import { SwipeCard } from './components/SwipeCard';
 import { CoupleGuessGame } from './components/CoupleGuessGame';
 import { SpinWheel } from './components/SpinWheel';
+import { MatchGame } from './components/MatchGame';
 import { RoomModal } from './components/RoomModal';
 import { SummaryModal } from './components/SummaryModal';
+import { Avatar } from './components/AvatarPicker';
+import { GameProvider, useGame, HEART_POINTS } from './store/GameContext';
+import { useAuth } from './store/AuthContext';
+import { MultiplayerProvider, useMultiplayer, MultiplayerMessage } from './store/MultiplayerContext';
+import { LandingPage } from './screens/LandingPage';
+import { WelcomeScreen } from './screens/WelcomeScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
 import { sounds } from './utils/audio';
 
-type ActiveTab = 'swipe' | 'quiz' | 'wheel';
+type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 
-export const App: React.FC = () => {
+// ---- Inner App (has access to GameContext) ----
+const AppInner: React.FC = () => {
+  const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
+  const multiplayer = useMultiplayer();
+  const { progress, isLoading, user } = useAuth();
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('swipe');
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>('all');
   const [cardIndex, setCardIndex] = useState(0);
+  const [roundCounter, setRoundCounter] = useState(0);
+  
+  // Multiplayer SwipeCard states
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
+  const [myCardAnswer, setMyCardAnswer] = useState<string | null>(null);
+  const [partnerCardAnswer, setPartnerCardAnswer] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
-
-  // Modals & Room state
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
-  const [activeRoomCode, setActiveRoomCode] = useState<string | null>(null);
+  const [sessionSeconds, setSessionSeconds] = useState(0);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [countdownNumber, setCountdownNumber] = useState<number | null>(null);
+  const [isMusicMenuOpen, setIsMusicMenuOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(sounds.isMuted);
+  const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
 
-  // Filtered Cards
+  const previousTab = React.useRef<ActiveTab | 'lobby'>('lobby');
+
+  // Timer effect
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setSessionSeconds(s => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (totalSeconds: number) => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // ---- Filtered Cards (must be before any early return!) ----
   const filteredCards = useMemo(() => {
-    if (selectedCategory === 'all') return SWIPE_CARDS;
-    return SWIPE_CARDS.filter((c) => c.category === selectedCategory);
-  }, [selectedCategory]);
+    // 1. Get answered set
+    const answeredIds = new Set(progress?.answered_questions || []);
+    if (!progress) {
+      try {
+        const stored = localStorage.getItem('jodohdeck_answered');
+        if (stored) JSON.parse(stored).forEach((id: string) => answeredIds.add(id));
+      } catch {}
+    }
+    
+    // 2. Filter by category & exclude answered
+    let available = SWIPE_CARDS.filter(c => {
+       if (selectedCategory !== 'all' && c.category !== selectedCategory) return false;
+       return !answeredIds.has(c.id);
+    });
 
-  const currentCard = filteredCards[cardIndex];
-  const nextCard = filteredCards[cardIndex + 1];
+    // 3. Shuffle
+    available.sort(() => Math.random() - 0.5);
 
-  const handleSwipe = (direction: 'left' | 'right') => {
-    if (direction === 'right') {
-      setAnsweredCount((prev) => prev + 1);
+    // 4. Return top 15 cards per round
+    return available.slice(0, 15);
+  }, [selectedCategory, roundCounter]); // Re-compute only on category change or explicit new round
+
+  // Auto-close partner left modal after 5 seconds
+  React.useEffect(() => {
+    if (multiplayer.status === 'partner_left') {
+      const t = setTimeout(() => multiplayer.leaveRoom(), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [multiplayer.status, multiplayer]);
+
+
+  // Monitor game start for countdown
+  React.useEffect(() => {
+    if (multiplayer.status === 'connected') {
+      setIsRoomModalOpen(false);
+      sounds.playBGM();
+      
+      // Trigger countdown when transitioning from lobby to a game
+      if (multiplayer.activeGame !== 'lobby' && previousTab.current === 'lobby') {
+        startCountdown();
+      }
     } else {
-      setSkippedCount((prev) => prev + 1);
+      sounds.stopBGM();
+    }
+    
+    // Fallback if Match Game is active but we are offline
+    if (multiplayer.status !== 'connected' && activeTab === 'match') {
+      setActiveTab('swipe');
+    }
+    
+    previousTab.current = multiplayer.status === 'connected' ? multiplayer.activeGame : 'lobby';
+  }, [multiplayer.status, multiplayer.activeGame, activeTab]);
+
+  const startCountdown = () => {
+    setIsCountingDown(true);
+    setCountdownNumber(3);
+    sounds.playFlip(); // Ticks
+    
+    setTimeout(() => { setCountdownNumber(2); sounds.playFlip(); }, 1000);
+    setTimeout(() => { setCountdownNumber(1); sounds.playFlip(); }, 2000);
+    setTimeout(() => { setCountdownNumber(0); sounds.playSuccess(); }, 3000); // 0 means 'GO!'
+    setTimeout(() => {
+      setIsCountingDown(false);
+      setCountdownNumber(null);
+    }, 4000);
+  };
+
+  // Sync tab with multiplayer game
+  const currentTab = multiplayer.status === 'connected' ? (multiplayer.activeGame as ActiveTab) : activeTab;
+
+  const handleTabClick = (tab: ActiveTab) => {
+    sounds.playFlip();
+    setActiveTab(tab);
+    if (multiplayer.status === 'connected') {
+      multiplayer.setGame(tab);
+    }
+  };
+
+  const executeSwipe = (direction: 'left' | 'right') => {
+    if (direction === 'right') setAnsweredCount((p) => p + 1);
+    else setSkippedCount((p) => p + 1);
+
+    setIsCardFlipped(false);
+    setMyCardAnswer(null);
+    setPartnerCardAnswer(null);
+    
+    const currentCard = filteredCards[cardIndex];
+    if (currentCard) {
+      recordAnsweredQuestion(currentCard.id);
     }
 
     if (cardIndex + 1 < filteredCards.length) {
-      setCardIndex((prev) => prev + 1);
+      setCardIndex((p) => p + 1);
     } else {
       setIsSummaryOpen(true);
+      addHeartPoints(HEART_POINTS.COMPLETE_DECK);
     }
   };
+
+  const handleSwipe = (direction: 'left' | 'right') => {
+    if (multiplayer.status === 'connected') {
+      multiplayer.sendMessage({ type: 'SWIPE_ACTION', payload: { direction } });
+    }
+    executeSwipe(direction);
+  };
+
+  React.useEffect(() => {
+    if (multiplayer.status === 'connected' && currentTab === 'swipe') {
+      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+        if (msg.type === 'SWIPE_ACTION') {
+          executeSwipe(msg.payload.direction);
+        } else if (msg.type === 'SWIPE_FLIP') {
+          setIsCardFlipped(msg.payload);
+        } else if (msg.type === 'CARD_SUBMIT') {
+          setPartnerCardAnswer(msg.payload);
+        }
+      };
+    }
+  }, [multiplayer.status, currentTab, multiplayer.messageListener, cardIndex, filteredCards.length]);
+
+  // Routes handle redirects; just show loading if AppInner rendered while loading
+  if (isLoading) return <LoadingSpinner />;
+
+  // ---- Multiplayer Lobby Overlay ----
+  if (multiplayer.status === 'hosting' || multiplayer.status === 'joining' || (multiplayer.status === 'connected' && multiplayer.activeGame === 'lobby')) {
+    return (
+      <div className="min-h-[100dvh] p-4 sm:p-6 md:p-8 flex items-center justify-center relative overflow-hidden" style={{ background: '#7C3AED' }}>
+        <div className="bg-blob w-96 h-96 -top-20 -left-20 bg-pink-500 opacity-20" />
+        <div className="bg-blob w-[500px] h-[500px] -bottom-40 -right-20 bg-cyan-400 opacity-20" />
+        
+        <div className="game-card w-full max-w-sm p-8 text-center space-y-6 relative z-10 animate-pop-in">
+          <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-white mb-2"
+            style={{ background: 'linear-gradient(135deg, #10B981, #059669)', boxShadow: '0 8px 24px rgba(16,185,129,0.4)' }}>
+            <Users className="w-8 h-8" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-ink">
+              {multiplayer.status === 'hosting' ? 'Hosting Room' : multiplayer.status === 'joining' ? 'Joining Room' : 'Room Connected!'}
+            </h2>
+            {multiplayer.status === 'connected' && (
+              <p className="text-sm text-ink-3 mt-1">You are playing with <strong>{multiplayer.remoteProfile?.name}</strong></p>
+            )}
+          </div>
+
+          <div className="p-4 rounded-2xl bg-indigo-50 border-2 border-indigo-100 space-y-3">
+            {multiplayer.status === 'hosting' && (
+              <div className="py-4 space-y-3">
+                <div className="w-8 h-8 rounded-full border-4 border-brand border-t-transparent animate-spin mx-auto" />
+                <p className="text-sm font-bold text-brand mt-4">Waiting for partner...</p>
+                <div className="my-3">
+                  <span className="text-3xl font-black text-ink tracking-widest bg-white py-2 px-4 rounded-xl shadow-sm border border-indigo-100 inline-block">{multiplayer.roomCode}</span>
+                </div>
+                <p className="text-xs text-ink-3">Share this code with your partner</p>
+              </div>
+            )}
+            
+            {multiplayer.status === 'joining' && (
+              <div className="py-4 space-y-3">
+                <div className="w-8 h-8 rounded-full border-4 border-teal-500 border-t-transparent animate-spin mx-auto" />
+                <p className="text-sm font-bold text-teal-600 mt-4">Connecting to room...</p>
+              </div>
+            )}
+
+            {multiplayer.status === 'connected' && multiplayer.isHost && (
+              <>
+                <p className="text-xs font-bold text-brand uppercase tracking-wider">Choose a Game</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => multiplayer.setGame('swipe')} className="btn-chunky btn-pink w-full text-[11px] px-1 py-3">Icebreaker Cards</button>
+                  <button onClick={() => multiplayer.setGame('quiz')} className="btn-chunky btn-teal w-full text-[11px] px-1 py-3">Guess My Heart</button>
+                  <button onClick={() => multiplayer.setGame('wheel')} className="btn-chunky btn-amber w-full text-[11px] px-1 py-3">Spin Wheel</button>
+                  <button onClick={() => multiplayer.setGame('match')} className="btn-chunky w-full text-[11px] px-1 py-3 text-white" style={{ background: 'linear-gradient(135deg, #7C3AED, #9333EA)', boxShadow: '0 6px 0 #5B21B6' }}>Couple Match</button>
+                </div>
+              </>
+            )}
+            
+            {multiplayer.status === 'connected' && !multiplayer.isHost && (
+              <div className="py-4 space-y-3">
+                <div className="w-8 h-8 rounded-full border-4 border-brand border-t-transparent animate-spin mx-auto" />
+                <p className="text-sm font-bold text-brand mt-4">Waiting for Host to pick a game...</p>
+              </div>
+            )}
+          </div>
+          
+          <button onClick={() => setIsDisconnectModalOpen(true)} className="text-xs font-bold text-red-500 hover:text-red-600 transition">
+            Leave Room
+          </button>
+        </div>
+
+        {/* Custom Disconnect Modal for Lobby */}
+        {isDisconnectModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-ink mb-2">Disconnect?</h3>
+              <p className="text-sm text-ink-3 mb-6">Are you sure you want to leave the room? The game will end for both of you.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setIsDisconnectModalOpen(false)} className="flex-1 py-3 rounded-2xl font-bold text-ink-3 bg-stone-100 hover:bg-stone-200 transition">
+                  Cancel
+                </button>
+                <button onClick={() => { setIsDisconnectModalOpen(false); multiplayer.leaveRoom(); }} className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/30">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const currentCard = filteredCards[cardIndex];
+  const nextCard = filteredCards[cardIndex + 1];
+  const thirdCard = filteredCards[cardIndex + 2];
+  const fourthCard = filteredCards[cardIndex + 3];
+  const fifthCard = filteredCards[cardIndex + 4];
 
   const handleManualAction = (direction: 'left' | 'right') => {
     sounds.playSwipe();
@@ -54,6 +292,7 @@ export const App: React.FC = () => {
     setCardIndex(0);
     setAnsweredCount(0);
     setSkippedCount(0);
+    setRoundCounter(prev => prev + 1); // Trigger new cards
     setIsSummaryOpen(false);
   };
 
@@ -65,262 +304,446 @@ export const App: React.FC = () => {
     setSkippedCount(0);
   };
 
-  return (
-    <div className="min-h-screen bg-stone-950 flex justify-center items-start sm:py-6 sm:px-4">
-      {/* Mobile-First Phone Container Frame */}
-      <div className="w-full max-w-md bg-stone-50 min-h-screen sm:min-h-[840px] sm:rounded-[40px] shadow-2xl border border-stone-800/20 flex flex-col justify-between overflow-hidden relative">
+  // Category tab config
+  const categories = [
+    { key: 'all' as const, label: t.catAll, count: SWIPE_CARDS.length, color: '#7C3AED', bg: '#EDE9FE' },
+    { key: 'teka-teki' as const, label: t.catRiddles, count: SWIPE_CARDS.filter(c => c.category === 'teka-teki').length, color: '#F59E0B', bg: '#FEF3C7' },
+    { key: 'vibe-check' as const, label: t.catVibeCheck, count: SWIPE_CARDS.filter(c => c.category === 'vibe-check').length, color: '#06B6D4', bg: '#CFFAFE' },
+    { key: 'taaruf-realiti' as const, label: t.catTaaruf, count: SWIPE_CARDS.filter(c => c.category === 'taaruf-realiti').length, color: '#FF2D9B', bg: '#FCE7F3' },
+  ];
 
-        {/* 1. TOP STATUS / NAVIGATION BAR */}
-        <header className="px-5 pt-4 pb-3 bg-white/90 backdrop-blur-md border-b border-stone-200/70 sticky top-0 z-40">
-          <div className="flex items-center justify-between">
-            {/* Logo & Tag */}
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-rose-500 to-amber-400 text-white flex items-center justify-center shadow-md shadow-rose-200">
-                <Heart className="w-5 h-5 fill-white" />
+  return (
+    <div className="min-h-screen flex justify-center items-start"
+      style={{ background: 'linear-gradient(160deg, #6D28D9 0%, #7C3AED 40%, #4F46E5 100%)' }}
+    >
+      {/* Decorative background shapes */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        {/* Top-right teal blob */}
+        <div className="absolute w-64 h-64 rounded-full opacity-40 top-[-60px] right-[-60px]"
+          style={{ background: '#06B6D4', filter: 'blur(40px)' }} />
+        {/* Bottom-left yellow blob */}
+        <div className="absolute w-56 h-56 rounded-full opacity-30 bottom-[15%] left-[-40px]"
+          style={{ background: '#FACC15', filter: 'blur(36px)' }} />
+        {/* Bottom-right pink blob */}
+        <div className="absolute w-48 h-48 rounded-full opacity-35 bottom-[-30px] right-[10%]"
+          style={{ background: '#FF2D9B', filter: 'blur(32px)' }} />
+        {/* Mid dot pattern */}
+        <div className="absolute inset-0 dotted-pattern opacity-20" />
+      </div>
+
+      {/* Phone container */}
+      <div className="w-full max-w-md min-h-screen sm:min-h-[900px] sm:rounded-[44px] flex flex-col overflow-hidden relative"
+        style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(0px)' }}
+      >
+        {/* ====== HEADER ====== */}
+        <header className="px-4 pt-4 pb-3 sticky top-0 z-30"
+          style={multiplayer.status === 'connected' 
+            ? { background: 'linear-gradient(180deg, rgba(16,185,129,0.95) 0%, rgba(5,150,105,0.90) 100%)', backdropFilter: 'blur(10px)' }
+            : { background: 'linear-gradient(180deg, rgba(109,40,217,0.98) 0%, rgba(109,40,217,0.92) 100%)', backdropFilter: 'blur(10px)' }}
+        >
+          {/* Top Row: Logo + Partner strip + Mode/Room */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Logo / Profile */}
+            <button onClick={() => { sounds.playFlip(); setIsProfileOpen(true); }}
+              className="flex items-center gap-2 active:scale-95 transition">
+              <Avatar avatarId={profile.avatarId} size={38} />
+              <div className="flex flex-col items-start text-left gap-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-black text-white leading-none">{profile.name}</p>
+                  {multiplayer.status === 'connected' ? (
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-emerald-600 uppercase tracking-wider">Online</span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white/20 text-white uppercase tracking-wider">Local</span>
+                  )}
+                </div>
+                <div className="hearts-pill" style={{ padding: '2px 8px', fontSize: '0.65rem', minHeight: 0 }}>
+                  <Heart className="w-2.5 h-2.5 fill-current" />
+                  {profile.heartPoints} pts
+                </div>
               </div>
-              <div>
-                <h1 className="text-base font-black tracking-tight text-stone-900 leading-none">
-                  JodohDeck<span className="text-rose-500 font-extrabold">.my</span>
-                </h1>
-                <span className="text-[10px] text-stone-400 font-semibold tracking-wide">
-                  Taaruf & Couple Game
-                </span>
+            </button>
+
+            {/* Partner middle strip */}
+            {partner && (
+              <div className="flex items-center gap-2 px-2 py-1 rounded-full"
+                style={{ background: 'rgba(255,255,255,0.15)' }}>
+                <Avatar avatarId={partner.avatarId} size={26} />
+                <div className="text-[10px] font-bold text-white/80 hidden xs:block max-w-[60px] truncate">{partner.name}</div>
+                <span className="text-base">💗</span>
               </div>
+            )}
+
+            {/* Middle: Timer */}
+            <div className="hidden xs:flex flex-col items-center">
+              <span className="text-[10px] font-bold text-white/70 uppercase tracking-widest">{t.playTogether || 'Session'}</span>
+              <span className="text-sm font-black text-white tracking-widest font-mono">{formatTime(sessionSeconds)}</span>
             </div>
 
-            {/* Room / Multiplayer Trigger */}
-            <button
-              onClick={() => setIsRoomModalOpen(true)}
-              className={`px-3 py-1.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition border ${
-                activeRoomCode
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              {activeRoomCode ? `Bilik #${activeRoomCode}` : 'Main Berdua'}
-            </button>
+            {/* Right side: Room / Disconnect & Music */}
+            <div className="flex items-center gap-2 relative">
+              <button
+                onClick={() => setIsMusicMenuOpen(!isMusicMenuOpen)}
+                className="w-8 h-8 flex items-center justify-center rounded-full transition active:scale-95 bg-white/20 hover:bg-white/30 border border-white/40 shadow-sm"
+              >
+                {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Music className="w-4 h-4 text-white" />}
+              </button>
+              
+              {isMusicMenuOpen && (
+                <div className="absolute top-10 right-0 w-48 bg-white rounded-2xl shadow-xl border border-stone-200 overflow-hidden z-50 animate-pop-in">
+                  <div className="p-3 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
+                    <span className="text-xs font-black text-ink">Background Music</span>
+                    <button 
+                      onClick={() => {
+                        const muted = sounds.toggleMute();
+                        setIsMuted(muted);
+                      }}
+                      className={`p-1.5 rounded-full ${isMuted ? 'bg-red-100 text-red-500' : 'bg-brand/10 text-brand'}`}
+                    >
+                      {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    {sounds.tracks.map((track, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          sounds.setTrack(idx);
+                          setCurrentTrack(idx);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-sm font-bold transition ${currentTrack === idx ? 'bg-brand/10 text-brand' : 'text-ink-3 hover:bg-stone-100'}`}
+                      >
+                        {track.name}
+                        {currentTrack === idx && <Check className="w-4 h-4" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  if (multiplayer.status === 'connected') {
+                    setIsDisconnectModalOpen(true);
+                  } else {
+                    setIsRoomModalOpen(true);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition active:scale-95"
+                style={multiplayer.status === 'connected' ? {
+                  background: 'rgba(255,255,255,0.2)', 
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  border: '1.5px solid rgba(255,255,255,0.4)' 
+                } : { 
+                  background: 'linear-gradient(135deg, #FF2D9B, #EC4899)', 
+                  boxShadow: '0 4px 12px rgba(255,45,155,0.4)',
+                  border: '1.5px solid rgba(255,255,255,0.25)' 
+                }}
+              >
+                <Users className="w-3.5 h-3.5 text-white" />
+                <span className="text-[10px] font-black text-white whitespace-nowrap tracking-wide">
+                  {multiplayer.status === 'connected' ? 'Disconnect' : t.playTogether}
+                </span>
+              </button>
+            </div>
           </div>
 
-          {/* GAME MODES TABS (Swipe vs Teka Hati vs Roda) */}
-          <div className="grid grid-cols-3 gap-1.5 mt-3 p-1 rounded-2xl bg-stone-100 border border-stone-200/80 text-xs font-extrabold text-stone-600">
+          {/* Game Mode Tabs */}
+          <div className={`grid ${multiplayer.status === 'connected' ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 mt-3 p-1.5 rounded-2xl`}
+            style={{ background: 'rgba(0,0,0,0.2)' }}>
+            {/* Swipe tab */}
             <button
-              onClick={() => {
-                sounds.playFlip();
-                setActiveTab('swipe');
-              }}
-              className={`py-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                activeTab === 'swipe' ? 'bg-white text-rose-600 shadow-xs' : 'hover:text-stone-900'
-              }`}
+              onClick={() => handleTabClick('swipe')}
+              className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              style={currentTab === 'swipe' ? {
+                background: '#FF2D9B',
+                color: 'white',
+                boxShadow: '0 4px 0 #C41D77, 0 6px 16px rgba(255,45,155,0.4)',
+              } : { color: 'rgba(255,255,255,0.6)' }}
             >
-              <Layers className="w-3.5 h-3.5" /> Kad Swipe
+              <Layers className="w-5 h-5 mb-0.5" />
+              <span>{t.tabSwipe}</span>
             </button>
 
+            {/* Quiz tab */}
             <button
-              onClick={() => {
-                sounds.playFlip();
-                setActiveTab('quiz');
-              }}
-              className={`py-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                activeTab === 'quiz' ? 'bg-white text-rose-600 shadow-xs' : 'hover:text-stone-900'
-              }`}
+              onClick={() => handleTabClick('quiz')}
+              className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              style={currentTab === 'quiz' ? {
+                background: '#06B6D4',
+                color: 'white',
+                boxShadow: '0 4px 0 #0E7490, 0 6px 16px rgba(6,182,212,0.4)',
+              } : { color: 'rgba(255,255,255,0.6)' }}
             >
-              <Heart className="w-3.5 h-3.5" /> Teka Hati
+              <Heart className="w-5 h-5 mb-0.5" />
+              <span>{t.tabQuiz}</span>
             </button>
 
+            {/* Wheel tab */}
             <button
-              onClick={() => {
-                sounds.playFlip();
-                setActiveTab('wheel');
-              }}
-              className={`py-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
-                activeTab === 'wheel' ? 'bg-white text-rose-600 shadow-xs' : 'hover:text-stone-900'
-              }`}
+              onClick={() => handleTabClick('wheel')}
+              className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              style={currentTab === 'wheel' ? {
+                background: '#F59E0B',
+                color: 'white',
+                boxShadow: '0 4px 0 #B45309, 0 6px 16px rgba(245,158,11,0.4)',
+              } : { color: 'rgba(255,255,255,0.6)' }}
             >
-              <Dices className="w-3.5 h-3.5" /> Roda Jodoh
+              <Dices className="w-5 h-5 mb-0.5" />
+              <span>{t.tabWheel}</span>
             </button>
+            
+            {/* Match tab (Online Only) */}
+            {multiplayer.status === 'connected' && (
+              <button
+                onClick={() => handleTabClick('match')}
+                className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                style={currentTab === 'match' ? {
+                  background: '#7C3AED',
+                  color: 'white',
+                  boxShadow: '0 4px 0 #5B21B6, 0 6px 16px rgba(124,58,237,0.4)',
+                } : { color: 'rgba(255,255,255,0.6)' }}
+              >
+                <HeartHandshake className="w-5 h-5 mb-0.5" />
+                <span>{t.tabMatch}</span>
+              </button>
+            )}
           </div>
         </header>
 
-        {/* 2. MAIN CONTENT AREA */}
-        <main className="flex-1 p-4 flex flex-col items-center justify-center relative overflow-hidden">
-          
-          {/* TAB 1: SWIPE CARD MODE */}
-          {activeTab === 'swipe' && (
-            <div className="w-full max-w-sm flex flex-col items-center space-y-4">
-              
-              {/* Category Filter Pills */}
-              <div className="w-full flex items-center justify-start gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs font-bold">
-                <button
-                  onClick={() => handleCategoryChange('all')}
-                  className={`px-3 py-1.5 rounded-full whitespace-nowrap transition border ${
-                    selectedCategory === 'all'
-                      ? 'bg-stone-900 text-white border-stone-900 shadow-xs'
-                      : 'bg-white text-stone-600 border-stone-200'
-                  }`}
-                >
-                  Semua ({SWIPE_CARDS.length})
-                </button>
-                <button
-                  onClick={() => handleCategoryChange('teka-teki')}
-                  className={`px-3 py-1.5 rounded-full whitespace-nowrap transition border ${
-                    selectedCategory === 'teka-teki'
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
-                      : 'bg-white text-stone-600 border-stone-200'
-                  }`}
-                >
-                  🤣 Teki-Teki
-                </button>
-                <button
-                  onClick={() => handleCategoryChange('vibe-check')}
-                  className={`px-3 py-1.5 rounded-full whitespace-nowrap transition border ${
-                    selectedCategory === 'vibe-check'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-white text-stone-600 border-stone-200'
-                  }`}
-                >
-                  ⚡ Vibe Check
-                </button>
-                <button
-                  onClick={() => handleCategoryChange('taaruf-realiti')}
-                  className={`px-3 py-1.5 rounded-full whitespace-nowrap transition border ${
-                    selectedCategory === 'taaruf-realiti'
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                      : 'bg-white text-stone-600 border-stone-200'
-                  }`}
-                >
-                  🌶️ Taaruf Realiti
-                </button>
+        <main className="flex-1 p-4 flex flex-col items-center relative overflow-hidden">
+          {currentTab === 'swipe' && (
+            <div className="w-full max-w-sm flex flex-col items-center space-y-3">
+              <div className="w-full flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                {categories.map(cat => (
+                  <button
+                    key={cat.key}
+                    onClick={() => handleCategoryChange(cat.key as CardCategory | 'all')}
+                    className="px-3.5 py-1.5 rounded-full whitespace-nowrap text-xs font-black transition active:scale-95 flex-shrink-0"
+                    style={selectedCategory === cat.key ? {
+                      background: cat.color,
+                      color: 'white',
+                      boxShadow: `0 4px 12px ${cat.color}50`,
+                    } : {
+                      background: 'rgba(255,255,255,0.9)',
+                      color: cat.color,
+                      border: `2px solid ${cat.color}30`,
+                    }}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Progress Count */}
-              <div className="w-full flex items-center justify-between text-xs text-stone-400 font-semibold px-2">
-                <span>Kad {cardIndex + 1} daripada {filteredCards.length}</span>
+              <div className="w-full flex items-center justify-between text-xs px-1">
+                <span className="text-white/70 font-bold">{t.cardCount(cardIndex + 1, filteredCards.length)}</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-emerald-600 font-bold">✓ {answeredCount}</span>
-                  <span className="text-stone-400 font-bold">✕ {skippedCount}</span>
+                  <span className="font-black px-2 py-0.5 rounded-full text-white text-[11px]"
+                    style={{ background: '#10B981' }}>✓ {answeredCount}</span>
+                  <span className="font-black px-2 py-0.5 rounded-full text-white text-[11px]"
+                    style={{ background: '#FF2D9B' }}>✕ {skippedCount}</span>
                 </span>
               </div>
 
-              {/* Card Container Stack */}
-              <div className="relative w-full h-[380px] select-none">
-                {nextCard && (
-                  <SwipeCard
-                    key={nextCard.id}
-                    card={nextCard}
-                    onSwipe={handleSwipe}
-                    isTop={false}
-                  />
-                )}
-
+              <div className="relative w-full h-[400px] select-none">
+                {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
+                {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
+                {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
+                {nextCard && <SwipeCard key={nextCard.id} card={nextCard} cardIndex={cardIndex + 1} stackDepth={1} onSwipe={handleSwipe} isTop={false} />}
                 {currentCard ? (
-                  <SwipeCard
-                    key={currentCard.id}
-                    card={currentCard}
-                    onSwipe={handleSwipe}
-                    isTop={true}
+                  <SwipeCard 
+                    key={currentCard.id} 
+                    card={currentCard} 
+                    cardIndex={cardIndex}
+                    stackDepth={0}
+                    onSwipe={handleSwipe} 
+                    isTop={true} 
+                    isFlipped={isCardFlipped}
+                    onToggleFlip={(flipped) => {
+                      setIsCardFlipped(flipped);
+                      if (multiplayer.status === 'connected') {
+                        multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: flipped });
+                      }
+                    }}
+                    myAnswer={myCardAnswer}
+                    partnerAnswer={partnerCardAnswer}
+                    onSubmitAnswer={(ans) => {
+                      setMyCardAnswer(ans);
+                      if (multiplayer.status === 'connected') {
+                        multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: ans });
+                      }
+                    }}
                   />
                 ) : (
-                  <div className="w-full h-full rounded-3xl bg-white border border-stone-200 flex flex-col items-center justify-center p-6 text-center space-y-3 shadow-md">
-                    <Sparkles className="w-10 h-10 text-rose-500 animate-bounce" />
-                    <h3 className="font-extrabold text-stone-800 text-lg">Semua Kad Selesai!</h3>
-                    <p className="text-xs text-stone-500">
-                      Korang dah selesaikan semua kad dalam kategori ini.
-                    </p>
-                    <button
-                      onClick={handleRestartDeck}
-                      className="px-4 py-2 bg-stone-900 text-white font-bold rounded-2xl text-xs flex items-center gap-1.5"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" /> Ulang Semula
+                  <div className="game-card w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl animate-float"
+                      style={{ background: 'linear-gradient(135deg, #FACC15, #F97316)' }}>
+                      <Sparkles className="w-8 h-8 text-white" />
+                    </div>
+                    <h3 className="font-black text-ink text-xl">{t.allCardsTitle}</h3>
+                    <p className="text-sm text-ink-3">{t.allCardsSub}</p>
+                    <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
+                      <RotateCw className="w-4 h-4" /> {t.playAgain}
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Manual Tap Controls (For accessibility / users who don't want to swipe) */}
-              <div className="flex items-center justify-center gap-5 pt-1">
-                <button
-                  onClick={() => handleManualAction('left')}
-                  disabled={!currentCard}
-                  className="w-13 h-13 rounded-full bg-white text-rose-600 border border-rose-200 shadow-md flex items-center justify-center hover:bg-rose-50 active:scale-90 transition disabled:opacity-40"
-                  title="Skip Kiri"
-                >
-                  <XCircle className="w-7 h-7 stroke-[2]" />
-                </button>
-
-                <div className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider px-2">
-                  Tarik Kad / Butang
-                </div>
-
-                <button
-                  onClick={() => handleManualAction('right')}
-                  disabled={!currentCard}
-                  className="w-13 h-13 rounded-full bg-white text-emerald-600 border border-emerald-200 shadow-md flex items-center justify-center hover:bg-emerald-50 active:scale-90 transition disabled:opacity-40"
-                  title="Lulus Kanan"
-                >
-                  <CheckCircle className="w-7 h-7 stroke-[2]" />
+              <div className="flex items-center justify-center pt-2">
+                <button onClick={() => handleManualAction('right')} disabled={!currentCard}
+                  className="btn-chunky btn-white text-xs px-6 py-3"
+                  style={{ borderRadius: '16px', color: '#10B981', boxShadow: '0 4px 0 #E5E7EB, 0 4px 12px rgba(0,0,0,0.05)' }}>
+                  Next Question
                 </button>
               </div>
             </div>
           )}
 
-          {/* TAB 2: COUPLE GUESSING QUIZ */}
-          {activeTab === 'quiz' && <CoupleGuessGame />}
-
-          {/* TAB 3: DATE NIGHT SPIN WHEEL */}
-          {activeTab === 'wheel' && <SpinWheel />}
-
+          {currentTab === 'quiz' && <CoupleGuessGame />}
+          {currentTab === 'wheel' && <SpinWheel />}
+          {currentTab === 'match' && <MatchGame />}
         </main>
 
-        {/* 3. BOTTOM BANNER & MONETIZATION (Shopee Digital Product Bridge) */}
-        <footer className="p-4 bg-gradient-to-r from-rose-100 via-amber-50 to-rose-100 border-t border-rose-200">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs">
-                <ShoppingBag className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-xs font-extrabold text-stone-900 leading-tight">
-                  150+ Soalan Taaruf VIP (PDF Dossier)
-                </p>
-                <p className="text-[10px] text-stone-600">
-                  Duit, Mertua, Trauma & Checklist MBKP. Hanya RM9 di Shopee!
-                </p>
-              </div>
-            </div>
+        {/* Clean bottom spacing */}
+        <div className="h-4" />
 
-            <button
-              onClick={() => {
-                sounds.playSuccess();
-                alert('Pautan ke Kedai Shopee anda! (Pengguna boleh terus checkout dokumen PDF penuh atau beli token VIP).');
-              }}
-              className="px-3 py-2 rounded-xl bg-stone-900 hover:bg-rose-600 text-white font-extrabold text-[11px] whitespace-nowrap transition shadow-xs active:scale-95"
-            >
-              Dapatkan VIP ✨
-            </button>
-          </div>
-        </footer>
-
-        {/* MODALS */}
         <RoomModal
           isOpen={isRoomModalOpen}
           onClose={() => setIsRoomModalOpen(false)}
-          onStartRoom={(code) => setActiveRoomCode(code)}
         />
 
         <SummaryModal
           isOpen={isSummaryOpen}
           answeredCount={answeredCount}
           skippedCount={skippedCount}
-          categoryLabel={selectedCategory === 'all' ? 'Semua Kategori' : selectedCategory}
+          categoryLabel={selectedCategory === 'all' ? t.catAll : selectedCategory}
           onRestart={handleRestartDeck}
-          onSelectCategory={() => {
-            setIsSummaryOpen(false);
-            setSelectedCategory('all');
-          }}
+          onSelectCategory={() => { setIsSummaryOpen(false); setSelectedCategory('all'); }}
         />
 
+        {isProfileOpen && <ProfileScreen onClose={() => setIsProfileOpen(false)} />}
+        
+        {/* Custom Disconnect Modal for Main App */}
+        {isDisconnectModalOpen && multiplayer.status === 'connected' && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-ink mb-2">Disconnect?</h3>
+              <p className="text-sm text-ink-3 mb-6">Are you sure you want to leave the room? The game will end for both of you.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setIsDisconnectModalOpen(false)} className="flex-1 py-3 rounded-2xl font-bold text-ink-3 bg-stone-100 hover:bg-stone-200 transition">
+                  Cancel
+                </button>
+                <button onClick={() => { setIsDisconnectModalOpen(false); multiplayer.leaveRoom(); }} className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/30">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Partner Left Modal */}
+        {multiplayer.status === 'partner_left' && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in border-4 border-red-500">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-black text-ink mb-2">Partner Disconnected</h3>
+              <p className="text-sm font-bold text-red-500 mb-2">Your partner has ended the session or lost connection.</p>
+              <p className="text-xs text-ink-3 animate-pulse">You will be automatically returned to the main menu in a few seconds...</p>
+            </div>
+          </div>
+        )}
+
+        {isCountingDown && (
+          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="text-9xl font-black text-transparent bg-clip-text bg-gradient-to-br from-pink-400 to-purple-500 animate-bounce-soft"
+                 style={{ WebkitTextStroke: '4px white' }}>
+              {countdownNumber === 0 ? 'GO!' : countdownNumber}
+            </div>
+            {countdownNumber === 0 && (
+              <p className="text-2xl font-bold text-white mt-8 animate-pulse">Have Fun!</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+const LoadingSpinner = () => (
+  <div className="min-h-[100dvh] w-full flex items-center justify-center bg-[#F8F7FF]">
+    <div className="flex flex-col items-center">
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+        style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)' }}>
+        <Heart className="w-7 h-7 fill-white text-white animate-pulse" />
+      </div>
+      <div className="w-32 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.1)' }}>
+        <div className="h-full rounded-full animate-pulse" style={{ background: 'linear-gradient(90deg, #FF2D9B, #7C3AED)', width: '60%' }} />
+      </div>
+    </div>
+  </div>
+);
+
+const ProtectedRoute = ({ children, requireProfile = true }: { children: React.ReactNode, requireProfile?: boolean }) => {
+  const { user, isLoading } = useAuth();
+  const { profile } = useGame();
+  const location = useLocation();
+
+  if (isLoading) return <LoadingSpinner />;
+  
+  if (!user) return <Navigate to="/" state={{ from: location }} replace />;
+  
+  if (requireProfile && !profile) return <Navigate to="/setup" replace />;
+  
+  if (!requireProfile && profile) return <Navigate to="/play" replace />;
+  
+  return <>{children}</>;
+};
+
+const PublicRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isLoading } = useAuth();
+  const { profile } = useGame();
+
+  if (isLoading) return <LoadingSpinner />;
+  
+  if (user) {
+    if (profile) return <Navigate to="/play" replace />;
+    return <Navigate to="/setup" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+export const AppRoutes: React.FC = () => {
+  return (
+    <Routes>
+      <Route path="/" element={
+        <PublicRoute>
+          <LandingPage />
+        </PublicRoute>
+      } />
+      <Route path="/setup" element={
+        <ProtectedRoute requireProfile={false}>
+          <WelcomeScreen onComplete={() => {}} />
+        </ProtectedRoute>
+      } />
+      <Route path="/play" element={
+        <ProtectedRoute requireProfile={true}>
+          <AppInner />
+        </ProtectedRoute>
+      } />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+};
+
+export const App: React.FC = () => (
+  <GameProvider>
+    <MultiplayerProvider>
+      <AppRoutes />
+    </MultiplayerProvider>
+  </GameProvider>
+);
