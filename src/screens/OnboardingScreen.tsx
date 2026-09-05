@@ -6,7 +6,7 @@ import { Heart, Sparkles, UserCircle2 } from 'lucide-react';
 
 export const OnboardingScreen: React.FC = () => {
   const { setProfile, t } = useGame();
-  const { signInWithGoogle, isLoading } = useAuth();
+  const { signInWithGoogle } = useAuth();
   const [name, setName] = useState('');
   const [avatarId, setAvatarId] = useState('sunny');
   const [step, setStep] = useState<'auth' | 'avatar' | 'name'>('auth');

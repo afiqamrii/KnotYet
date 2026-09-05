@@ -23,7 +23,7 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 const AppInner: React.FC = () => {
   const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
   const multiplayer = useMultiplayer();
-  const { progress, isLoading, user } = useAuth();
+  const { progress, isLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('swipe');
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>('all');
@@ -346,10 +346,10 @@ const AppInner: React.FC = () => {
             {/* Logo / Profile */}
             <button onClick={() => { sounds.playFlip(); setIsProfileOpen(true); }}
               className="flex items-center gap-2 active:scale-95 transition">
-              <Avatar avatarId={profile.avatarId} size={38} />
+              <Avatar avatarId={profile?.avatarId || 'default'} size={38} />
               <div className="flex flex-col items-start text-left gap-1">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-black text-white leading-none">{profile.name}</p>
+                  <p className="text-sm font-black text-white leading-none">{profile?.name || 'User'}</p>
                   {multiplayer.status === 'connected' ? (
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-emerald-600 uppercase tracking-wider">Online</span>
                   ) : (
@@ -358,7 +358,7 @@ const AppInner: React.FC = () => {
                 </div>
                 <div className="hearts-pill" style={{ padding: '2px 8px', fontSize: '0.65rem', minHeight: 0 }}>
                   <Heart className="w-2.5 h-2.5 fill-current" />
-                  {profile.heartPoints} pts
+                  {profile?.heartPoints || 0} pts
                 </div>
               </div>
             </button>
