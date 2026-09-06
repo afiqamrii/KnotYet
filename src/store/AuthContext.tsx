@@ -13,6 +13,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshProgress: () => Promise<void>;
   refreshCouple: () => Promise<void>;
+  incrementPlayCount: (type: 'solo' | 'multiplayer') => Promise<void>;
+  awardBonusPlay: (type: 'solo' | 'multiplayer') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -26,6 +28,8 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
   refreshProgress: async () => {},
   refreshCouple: async () => {},
+  incrementPlayCount: async () => {},
+  awardBonusPlay: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -45,8 +49,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .select('*')
       .eq('user_id', user.id)
       .single();
-    
+      
     if (data && !error) {
+      const today = new Date().toISOString().split('T')[0];
+      if (data.last_reset_date !== today) {
+        // Perform daily reset
+        const { data: updatedData } = await supabase
+          .from('user_progress')
+          .update({
+             last_reset_date: today,
+             play_together_count: 0,
+             solo_play_count: 0
+          })
+          .eq('user_id', user.id)
+          .select()
+          .single();
+          
+        if (updatedData) {
+          setProgress(updatedData);
+          return;
+        }
+      }
       setProgress(data);
     }
   };
@@ -170,9 +193,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };
+  
+  const incrementPlayCount = async (type: 'solo' | 'multiplayer') => {
+    if (!user || !progress) return;
+    const field = type === 'solo' ? 'solo_play_count' : 'play_together_count';
+    const newCount = (progress[field] || 0) + 1;
+    
+    const { data } = await supabase
+      .from('user_progress')
+      .update({ [field]: newCount })
+      .eq('user_id', user.id)
+      .select()
+      .single();
+      
+    if (data) setProgress(data);
+  };
+  
+  const awardBonusPlay = async (type: 'solo' | 'multiplayer') => {
+    if (!user || !progress) return;
+    const field = type === 'solo' ? 'solo_play_count' : 'play_together_count';
+    // By decrementing the count, we give them one "bonus" play that allows them back under the limit
+    const newCount = Math.max(0, (progress[field] || 0) - 1);
+    
+    const { data } = await supabase
+      .from('user_progress')
+      .update({ [field]: newCount })
+      .eq('user_id', user.id)
+      .select()
+      .single();
+      
+    if (data) setProgress(data);
+  };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay }}>
       {children}
     </AuthContext.Provider>
   );

@@ -25,6 +25,10 @@ export interface UserProgress {
   user_id: string;
   heart_points: number;
   answered_questions: string[];
+  play_together_count?: number;
+  solo_play_count?: number;
+  last_reset_date?: string;
+  is_premium?: boolean;
   last_played_at?: string;
 }
 

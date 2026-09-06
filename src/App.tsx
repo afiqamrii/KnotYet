@@ -8,6 +8,7 @@ import { SpinWheel } from './components/SpinWheel';
 import { MatchGame } from './components/MatchGame';
 import { RoomModal } from './components/RoomModal';
 import { SummaryModal } from './components/SummaryModal';
+import { AdModal } from './components/AdModal';
 import { getAvatar } from './components/AvatarPicker';
 import { GameProvider, useGame, HEART_POINTS } from './store/GameContext';
 import { useAuth } from './store/AuthContext';
@@ -24,7 +25,7 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
   const { profile, partner, setPartner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
-  const { user, couple, refreshCouple, progress, isLoading } = useAuth();
+  const { user, couple, refreshCouple, progress, isLoading, awardBonusPlay, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
@@ -60,6 +61,11 @@ const AppInner: React.FC = () => {
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
   const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
+  const [adLimitType, setAdLimitType] = useState<'solo' | 'multiplayer' | null>(null);
+  
+  const MULTIPLAYER_DAILY_LIMIT = 3;
+  const SOLO_DAILY_LIMIT = 5;
 
   const previousTab = React.useRef<ActiveTab | 'lobby'>('lobby');
 
@@ -210,6 +216,7 @@ const AppInner: React.FC = () => {
       
       // Trigger countdown when transitioning from lobby to a game
       if (multiplayer.activeGame !== 'lobby' && previousTab.current === 'lobby') {
+        incrementPlayCount('multiplayer');
         startCountdown();
       }
     } else {
@@ -222,7 +229,7 @@ const AppInner: React.FC = () => {
     }
     
     previousTab.current = multiplayer.status === 'connected' ? multiplayer.activeGame : 'lobby';
-  }, [multiplayer.status, multiplayer.activeGame, activeTab]);
+  }, [multiplayer.status, multiplayer.activeGame, activeTab, incrementPlayCount]);
 
   const startCountdown = () => {
     setIsCountingDown(true);
@@ -265,12 +272,19 @@ const AppInner: React.FC = () => {
     if (cardIndex + 1 < filteredCards.length) {
       setCardIndex((p) => p + 1);
     } else {
+      if (multiplayer.status !== 'connected') incrementPlayCount('solo');
       setIsSummaryOpen(true);
       addHeartPoints(HEART_POINTS.COMPLETE_DECK, multiplayer.status === 'connected');
     }
   };
 
   const handleSwipe = (direction: 'left' | 'right') => {
+    if (multiplayer.status !== 'connected' && !progress?.is_premium && (progress?.solo_play_count || 0) >= SOLO_DAILY_LIMIT) {
+      setAdLimitType('solo');
+      setIsAdModalOpen(true);
+      return;
+    }
+
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'SWIPE_ACTION', payload: { direction } });
     }
@@ -550,6 +564,11 @@ const AppInner: React.FC = () => {
                   if (multiplayer.status === 'connected') {
                     setIsDisconnectModalOpen(true);
                   } else {
+                    if (!progress?.is_premium && (progress?.play_together_count || 0) >= MULTIPLAYER_DAILY_LIMIT) {
+                      setAdLimitType('multiplayer');
+                      setIsAdModalOpen(true);
+                      return;
+                    }
                     setIsRoomModalOpen(true);
                   }
                 }}
@@ -731,9 +750,9 @@ const AppInner: React.FC = () => {
         {/* Clean bottom spacing */}
         <div className="h-4" />
 
-        <RoomModal
-          isOpen={isRoomModalOpen}
-          onClose={() => setIsRoomModalOpen(false)}
+        <RoomModal 
+          isOpen={isRoomModalOpen} 
+          onClose={() => setIsRoomModalOpen(false)} 
         />
 
         <SummaryModal
@@ -807,6 +826,20 @@ const AppInner: React.FC = () => {
               <p className="text-2xl font-bold text-white mt-8 animate-pulse">Have Fun!</p>
             )}
           </div>
+        )}
+        {isAdModalOpen && adLimitType && (
+          <AdModal 
+            title={adLimitType === 'multiplayer' ? "Multiplayer Limit Reached" : "Daily Limit Reached"}
+            description={adLimitType === 'multiplayer' 
+              ? `You've used your ${MULTIPLAYER_DAILY_LIMIT} free multiplayer sessions for today.`
+              : `You've completed ${SOLO_DAILY_LIMIT} solo games today!`}
+            rewardText={adLimitType === 'multiplayer' ? "1 Multiplayer Session" : "1 Solo Game"}
+            onClose={() => setIsAdModalOpen(false)}
+            onRewardEarned={() => {
+              awardBonusPlay(adLimitType);
+              setIsAdModalOpen(false);
+            }}
+          />
         )}
       </div>
     </div>
