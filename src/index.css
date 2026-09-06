@@ -6,12 +6,15 @@
 
 /* ===== BASE ===== */
 @layer base {
+  html {
+    background-color: #7C3AED;
+  }
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     background: #7C3AED;
-    min-height: 100vh;
+    min-height: 100dvh;
   }
   * {
     box-sizing: border-box;
