@@ -139,7 +139,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin
+        redirectTo: window.location.origin.includes('localhost') 
+          ? window.location.origin 
+          : 'https://knotyetapp.me'
       }
     });
     if (error) throw error;
