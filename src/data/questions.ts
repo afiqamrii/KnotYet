@@ -129,39 +129,81 @@ export const MATCH_QUESTIONS: MatchQuestion[] = taarufData.compatibility_match_c
 
 export const WHEEL_SEGMENTS: WheelSegment[] = [
   {
-    id: 'teka-teki',
-    label: '🤣 Teka-Teki Lawak',
-    icon: '🤣',
-    color: '#f59e0b',
+    id: 'masa-depan',
+    label: '🚀 Masa Depan',
+    icon: '🚀',
+    color: '#3b82f6', // blue
     textColor: '#ffffff',
-    category: 'Teka-teki',
-    prompts: ['Pilih kad Teka-Teki dan cuba teka bersama!']
+    category: 'Masa Depan',
+    prompts: [
+      'Apa impian terbesar awak yang belum tercapai?',
+      'Di mana awak nampak diri awak dalam masa 5 tahun?',
+      'Jika duit bukan masalah, apa kerja yang awak nak buat?'
+    ]
   },
   {
-    id: 'vibe-check',
-    label: '✨ Vibe Check',
-    icon: '✨',
-    color: '#6366f1',
+    id: 'zaman-kanak',
+    label: '🧸 Kenangan',
+    icon: '🧸',
+    color: '#f59e0b', // amber
     textColor: '#ffffff',
-    category: 'Vibe Check',
-    prompts: ['Pilih kad Vibe Check untuk lihat reaksi pasangan!']
+    category: 'Zaman Kanak-Kanak',
+    prompts: [
+      'Apa kenangan paling kelakar masa awak kecil?',
+      'Siapa crush pertama awak masa sekolah?',
+      'Apa benda paling nakal awak pernah buat masa kecil?'
+    ]
   },
   {
-    id: 'taaruf-realiti',
-    label: '💍 Taaruf Realiti',
-    icon: '💍',
-    color: '#10b981',
+    id: 'deep-talk',
+    label: '💭 Deep Talk',
+    icon: '💭',
+    color: '#6366f1', // indigo
     textColor: '#ffffff',
-    category: 'Taaruf Realiti',
-    prompts: ['Pilih kad Taaruf Realiti untuk topik matang!']
+    category: 'Deep Talk',
+    prompts: [
+      'Apa satu perkara yang paling awak takutkan dalam hidup?',
+      'Bila kali terakhir awak menangis dan kenapa?',
+      'Apa satu pengajaran terbesar yang kehidupan pernah ajar awak?'
+    ]
   },
   {
-    id: 'bonus-challenge',
-    label: '🔥 Bonus Challenge',
-    icon: '🔥',
-    color: '#f43f5e',
+    id: 'romantik',
+    label: '❤️ Romantik',
+    icon: '❤️',
+    color: '#ec4899', // pink
     textColor: '#ffffff',
-    category: 'Bonus Challenge',
-    prompts: ['Lakukan satu Bonus Challenge berani mati!']
+    category: 'Romantik',
+    prompts: [
+      'Apakah love language awak?',
+      'Macam mana awak tahu awak dah jatuh cinta?',
+      'Apa perkara kecil yang seseorang boleh buat untuk buat awak gembira?'
+    ]
+  },
+  {
+    id: 'spontan',
+    label: '🤪 Spontan',
+    icon: '🤪',
+    color: '#10b981', // emerald
+    textColor: '#ffffff',
+    category: 'Spontan',
+    prompts: [
+      'Kalau awak ada kuasa super, apa kuasa yang awak nak?',
+      'Apa lagu yang awak suka sangat nyanyi dalam bilik mandi?',
+      'Kalau terdampar di pulau, apa 3 benda awak nak bawa?'
+    ]
+  },
+  {
+    id: 'kewangan',
+    label: '💰 Kewangan',
+    icon: '💰',
+    color: '#f43f5e', // rose
+    textColor: '#ffffff',
+    category: 'Kewangan',
+    prompts: [
+      'Macam mana awak uruskan perbelanjaan bulanan?',
+      'Awak jenis suka simpan duit atau berbelanja?',
+      'Apa benda paling mahal awak pernah beli dan tak menyesal?'
+    ]
   }
 ];
