@@ -88,6 +88,14 @@ const AppInner: React.FC = () => {
            setPartnerAcceptedToast(data);
            setTimeout(() => setPartnerAcceptedToast(null), 5000);
         })
+        .on('broadcast', { event: 'partner_unlinked' }, () => {
+           setPartner(null);
+           refreshCouple();
+           // Optional toast for unlinking
+           setPartnerAcceptedToast({ name: 'Your partner', relationshipType: 'unlinked' });
+           setTimeout(() => setPartnerAcceptedToast(null), 5000);
+           sounds.playFlip();
+        })
         .subscribe();
         
       return () => { supabase.removeChannel(channel); }
@@ -751,10 +759,14 @@ const AppInner: React.FC = () => {
         {/* Partner Accepted Live Toast */}
         {partnerAcceptedToast && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-soft">
-            <div className="bg-white rounded-3xl p-4 shadow-2xl border-4 border-pink-400 flex flex-col items-center text-center">
-              <span className="text-4xl mb-2">💘</span>
-              <h3 className="text-lg font-black text-pink-500">Yay! {partnerAcceptedToast.name} accepted!</h3>
-              <p className="text-sm font-bold text-ink-3">Your accounts are now linked.</p>
+            <div className={`bg-white rounded-3xl p-4 shadow-2xl border-4 flex flex-col items-center text-center ${partnerAcceptedToast.relationshipType === 'unlinked' ? 'border-red-400' : 'border-pink-400'}`}>
+              <span className="text-4xl mb-2">{partnerAcceptedToast.relationshipType === 'unlinked' ? '💔' : '💘'}</span>
+              <h3 className={`text-lg font-black ${partnerAcceptedToast.relationshipType === 'unlinked' ? 'text-red-500' : 'text-pink-500'}`}>
+                {partnerAcceptedToast.relationshipType === 'unlinked' ? 'Partner Unlinked' : `Yay! ${partnerAcceptedToast.name} accepted!`}
+              </h3>
+              <p className="text-sm font-bold text-ink-3">
+                {partnerAcceptedToast.relationshipType === 'unlinked' ? 'Your accounts are no longer connected.' : 'Your accounts are now linked.'}
+              </p>
             </div>
           </div>
         )}

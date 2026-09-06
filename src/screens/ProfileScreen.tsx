@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGame, type RelationshipType } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
+import { supabase } from '../lib/supabase';
 import { Avatar, AvatarPicker } from '../components/AvatarPicker';
 import { X, Share2, ChevronRight, Trophy, LogOut, Heart } from 'lucide-react';
 import { sounds } from '../utils/audio';
@@ -21,6 +22,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   const { user, couple, signInWithGoogle, signOut } = useAuth();
   const [view, setView] = useState<'main' | 'edit' | 'addPartner' | 'editPartner' | 'waiting'>('main');
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
+  const [isUnlinkOpen, setIsUnlinkOpen] = useState(false);
+  const { refreshCouple } = useAuth();
 
   // Edit profile state
   const [editName, setEditName] = useState(profile?.name ?? '');
@@ -45,6 +48,28 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
     setProfile({ ...profile, name: editName.trim(), avatarId: editAvatar });
     setView('main');
     sounds.playSuccess();
+  };
+
+  const handleUnlink = async () => {
+    if (couple && user) {
+      const partnerId = couple.user1_id === user.id ? couple.user2_id : couple.user1_id;
+      
+      // Delete from Supabase
+      await supabase.from('couples').delete().eq('id', couple.id);
+      
+      // Broadcast unlink event to partner
+      supabase.channel(`partner_link_${partnerId}`).send({
+        type: 'broadcast',
+        event: 'partner_unlinked',
+        payload: {}
+      });
+      
+      await refreshCouple();
+    }
+    
+    setPartner(null);
+    sounds.playFlip();
+    setIsUnlinkOpen(false);
   };
 
 
@@ -156,11 +181,41 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
               </div>
             </div>
             <button
-              onClick={() => { setPartner(null); sounds.playFlip(); }}
+              onClick={() => setIsUnlinkOpen(true)}
               className="w-full py-2.5 rounded-xl text-xs font-bold text-red-500 border-2 border-red-200 bg-red-50 active:scale-95 transition"
             >
               {t.unlinkPartner}
             </button>
+
+            {/* Unlink Confirmation Modal */}
+            {isUnlinkOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl animate-pop-in">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 mx-auto text-red-500">
+                    <Heart className="w-6 h-6" style={{ clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' }} fill="currentColor" />
+                    <Heart className="w-6 h-6 -ml-3" style={{ clipPath: 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' }} fill="currentColor" />
+                  </div>
+                  <h3 className="text-xl font-black text-ink text-center mb-2">Unlink Partner?</h3>
+                  <p className="text-sm font-semibold text-ink-3 text-center mb-6">
+                    Are you sure you want to unlink from {partner.name}? This will instantly disconnect both of you and reset your shared couple points.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setIsUnlinkOpen(false)}
+                      className="flex-1 py-3 rounded-xl font-bold text-ink-3 border-2 border-surface-2 bg-surface hover:bg-surface-2 active:scale-95 transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleUnlink}
+                      className="flex-1 py-3 rounded-xl font-bold text-white border-2 border-red-500 bg-red-500 hover:bg-red-600 active:scale-95 transition shadow-lg shadow-red-500/30"
+                    >
+                      Unlink
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <button
