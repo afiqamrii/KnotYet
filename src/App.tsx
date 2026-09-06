@@ -28,7 +28,14 @@ const AppInner: React.FC = () => {
   const multiplayer = useMultiplayer();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('swipe');
+  const [activeTab, setActiveTabState] = useState<ActiveTab>(() => {
+    return (localStorage.getItem('knotyet_activeTab') as ActiveTab) || 'swipe';
+  });
+
+  const setActiveTab = (tab: ActiveTab) => {
+    setActiveTabState(tab);
+    localStorage.setItem('knotyet_activeTab', tab);
+  };
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>('all');
   const [cardIndex, setCardIndex] = useState(0);
   const [roundCounter, setRoundCounter] = useState(0);
