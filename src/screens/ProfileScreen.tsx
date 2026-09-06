@@ -43,7 +43,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
 
   const handleShareWhatsApp = () => {
-    const url = `https://knotyetapp.me/invite?n=${encodeURIComponent(profile.name)}&a=${profile.avatarId}&r=${partnerRel}`;
+    const url = `https://knotyetapp.me/invite?n=${encodeURIComponent(profile.name)}&a=${profile.avatarId}&r=${partnerRel}&uid=${user?.id}`;
     const text = `Let's link our KnotYet accounts! 💖 Click here to accept my invite: ${url}`;
     if (navigator.share) {
       navigator.share({ title: 'KnotYet', text }).catch(console.error);

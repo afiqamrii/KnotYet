@@ -11,6 +11,7 @@ import { SummaryModal } from './components/SummaryModal';
 import { getAvatar } from './components/AvatarPicker';
 import { GameProvider, useGame, HEART_POINTS } from './store/GameContext';
 import { useAuth } from './store/AuthContext';
+import { supabase } from './lib/supabase';
 import { MultiplayerProvider, useMultiplayer, MultiplayerMessage } from './store/MultiplayerContext';
 import { LandingPage } from './screens/LandingPage';
 import { WelcomeScreen } from './screens/WelcomeScreen';
@@ -24,7 +25,8 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 const AppInner: React.FC = () => {
   const { profile, partner, t, addHeartPoints, recordAnsweredQuestion, setPartner } = useGame();
   const multiplayer = useMultiplayer();
-  const { progress, isLoading } = useAuth();
+  const { progress, isLoading, user } = useAuth();
+  const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('swipe');
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>('all');
@@ -59,6 +61,29 @@ const AppInner: React.FC = () => {
   }, []);
 
   // Process deep links (invites & room codes)
+  React.useEffect(() => {
+    // 0. Live Sync for Partner Acceptance
+    if (user) {
+      const channelName = `partner_link_${user.id}`;
+      const channel = supabase.channel(channelName)
+        .on('broadcast', { event: 'partner_accepted' }, (payload) => {
+           const data = payload.payload;
+           setPartner({
+             name: data.name,
+             avatarId: data.avatarId,
+             relationshipType: data.relationshipType,
+             code: '1234'
+           });
+           sounds.playSuccess();
+           setPartnerAcceptedToast(data);
+           setTimeout(() => setPartnerAcceptedToast(null), 5000);
+        })
+        .subscribe();
+        
+      return () => { supabase.removeChannel(channel); }
+    }
+  }, [user, setPartner]);
+
   React.useEffect(() => {
     // 1. Process pending partner invite
     const pendingInvite = sessionStorage.getItem('pendingInvite');
@@ -397,7 +422,9 @@ const AppInner: React.FC = () => {
               
               <div className="flex flex-col items-start gap-1">
                 <div className="flex items-center gap-1.5">
-                  <p className="text-sm font-black text-white leading-none">{profile?.name || 'User'}</p>
+                  <p className="text-sm font-black text-white leading-none">
+                    {partner ? `${profile?.name} & ${partner.name}` : profile?.name || 'User'}
+                  </p>
                   {multiplayer.status === 'connected' ? (
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white text-emerald-600 uppercase tracking-wider">Online</span>
                   ) : (
@@ -679,6 +706,17 @@ const AppInner: React.FC = () => {
                   Disconnect
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Partner Accepted Live Toast */}
+        {partnerAcceptedToast && (
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-soft">
+            <div className="bg-white rounded-3xl p-4 shadow-2xl border-4 border-pink-400 flex flex-col items-center text-center">
+              <span className="text-4xl mb-2">💘</span>
+              <h3 className="text-lg font-black text-pink-500">Yay! {partnerAcceptedToast.name} accepted!</h3>
+              <p className="text-sm font-bold text-ink-3">Your accounts are now linked.</p>
             </div>
           </div>
         )}

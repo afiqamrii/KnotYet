@@ -10,16 +10,18 @@ export const InviteScreen: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  const [inviteData, setInviteData] = useState<{name: string, avatar: string, rel: string} | null>(null);
+  const [inviteData, setInviteData] = useState<{name: string, avatar: string, rel: string, uid?: string | null} | null>(null);
+  const [isAccepted, setIsAccepted] = useState(false);
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const n = searchParams.get('n');
     const a = searchParams.get('a');
     const r = searchParams.get('r');
+    const uid = searchParams.get('uid');
     
     if (n && a && r) {
-      const data = { name: n, avatar: a, rel: r };
+      const data = { name: n, avatar: a, rel: r, uid };
       setInviteData(data);
       sessionStorage.setItem('pendingInvite', JSON.stringify(data));
     } else {
@@ -32,21 +34,36 @@ export const InviteScreen: React.FC = () => {
 
   const handleAccept = async () => {
     sounds.playSuccess();
-    if (user) {
-      navigate('/play');
-    } else {
-      try {
-        await signInWithGoogle();
-      } catch (err) {
-        console.error(err);
+    setIsAccepted(true);
+    
+    setTimeout(async () => {
+      if (user) {
+        navigate('/play');
+      } else {
+        try {
+          await signInWithGoogle();
+        } catch (err) {
+          console.error(err);
+          setIsAccepted(false);
+        }
       }
-    }
+    }, 2000);
   };
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center text-white font-bold" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>Loading...</div>;
 
   if (!inviteData) {
     return <Navigate to="/" replace />;
+  }
+
+  if (isAccepted) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-white text-center" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
+        <span className="text-7xl mb-6 animate-bounce">💖</span>
+        <h1 className="text-4xl font-black mb-3">Yay!</h1>
+        <p className="text-xl font-bold text-white/90">Preparing your linked profile...</p>
+      </div>
+    );
   }
 
   const inviterAvatar = getAvatar(inviteData.avatar);

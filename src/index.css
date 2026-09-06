@@ -7,16 +7,15 @@
 /* ===== BASE ===== */
 @layer base {
   html {
-    background-color: #7C3AED;
-    overscroll-behavior-y: none;
+    background: linear-gradient(160deg, #6D28D9 0%, #7C3AED 40%, #4F46E5 100%);
+    background-attachment: fixed;
   }
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-    background: #7C3AED;
+    background: transparent;
     min-height: 100dvh;
-    overscroll-behavior-y: none;
   }
   * {
     box-sizing: border-box;
