@@ -41,22 +41,22 @@ export const AdModal: React.FC<AdModalProps> = ({ onClose, onRewardEarned, title
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in border-4 border-brand-200">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in border-4 border-purple-200">
         
         {adState === 'idle' && (
           <>
             <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-stone-100 text-stone-400 rounded-full hover:bg-stone-200 hover:text-stone-600 transition">
               <X className="w-5 h-5" />
             </button>
-            <div className="w-16 h-16 rounded-2xl bg-brand-100 flex items-center justify-center mx-auto mb-4 border-2 border-brand-200 shadow-inner">
-              <PlayCircle className="w-8 h-8 text-brand-500" />
+            <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mx-auto mb-4 border-2 border-purple-200 shadow-inner">
+              <PlayCircle className="w-8 h-8 text-purple-500" />
             </div>
             <h3 className="text-xl font-black text-ink mb-2">{title}</h3>
             <p className="text-sm font-semibold text-ink-3 mb-6">{description}</p>
             
             <button
               onClick={startAd}
-              className="w-full py-4 rounded-2xl font-black text-white text-lg bg-brand-500 hover:bg-brand-600 transition shadow-lg shadow-brand-500/30 flex items-center justify-center gap-2 active:scale-95"
+              className="w-full py-4 rounded-2xl font-black text-white text-lg bg-purple-500 hover:bg-purple-600 transition shadow-lg shadow-purple-500/30 flex items-center justify-center gap-2 active:scale-95"
             >
               <PlayCircle className="w-6 h-6" />
               Watch Ad for {rewardText}
@@ -67,7 +67,7 @@ export const AdModal: React.FC<AdModalProps> = ({ onClose, onRewardEarned, title
 
         {adState === 'loading' && (
           <div className="py-8 flex flex-col items-center">
-            <Loader2 className="w-10 h-10 text-brand-500 animate-spin mb-4" />
+            <Loader2 className="w-10 h-10 text-purple-500 animate-spin mb-4" />
             <p className="text-sm font-bold text-ink-3">Loading Ad...</p>
           </div>
         )}
@@ -78,14 +78,14 @@ export const AdModal: React.FC<AdModalProps> = ({ onClose, onRewardEarned, title
               <p className="text-stone-500 font-bold uppercase tracking-widest text-xs z-10">Simulated Ad Space</p>
               
               {/* Fake ad visual */}
-              <div className="absolute inset-0 opacity-20 bg-gradient-to-tr from-brand-500 to-cyan-400" />
+              <div className="absolute inset-0 opacity-20 bg-gradient-to-tr from-purple-500 to-cyan-400" />
               <div className="absolute top-2 right-2 px-2 py-1 bg-black/50 backdrop-blur rounded text-[10px] font-bold text-white border border-white/10">
                 Ad
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-ink-3">Reward in</span>
-              <span className="w-8 h-8 rounded-full bg-brand-100 text-brand-600 font-black flex items-center justify-center border border-brand-200">
+              <span className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 font-black flex items-center justify-center border border-purple-200">
                 {countdown}
               </span>
             </div>
