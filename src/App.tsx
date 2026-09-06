@@ -795,11 +795,7 @@ export const AppRoutes: React.FC = () => {
           <AppInner />
         </ProtectedRoute>
       } />
-      <Route path="/invite" element={
-        <PublicRoute>
-          <InviteScreen />
-        </PublicRoute>
-      } />
+      <Route path="/invite" element={<InviteScreen />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
