@@ -64,7 +64,7 @@ export const i18n = {
     quizCompatNote50: "Your vibes are pretty balanced! Still some secrets to discover over the next date.",
     quizCompatNote0: "Looks like you need more dates and deeper chats. Whoever guessed wrong buys dinner tonight!",
     // Wheel
-    wheelTitle: 'JodohWheel: Anti-Awkward',
+    wheelTitle: 'KnotWheel: Anti-Awkward',
     wheelSub: "Stuck in silence? Spin this wheel right now!",
     wheelSpin: 'Spin the Wheel',
     wheelSpinning: 'Wheel is spinning...',
@@ -105,7 +105,7 @@ export const i18n = {
     partnerProfile: "My Person",
     unlinkPartner: 'Unlink Partner',
     // Onboarding
-    onboardTitle: 'Welcome to JodohDeck!',
+    onboardTitle: 'Welcome to KnotYet!',
     onboardSub: 'Set up your profile to get started.',
     onboardNameLabel: 'What should we call you?',
     onboardNamePlaceholder: 'e.g. Afiqa',
@@ -131,7 +131,7 @@ export const i18n = {
   },
 
   my: {
-    appTagline: 'Sembang, Teka & Taaruf',
+    appTagline: 'Swipe, Teka & Connect',
     // Tabs
     tabSwipe: 'Icebreaker Cards',
     tabQuiz: 'Guess My Heart',
@@ -217,7 +217,7 @@ export const i18n = {
     myHearts: 'Mata Hati Saya',
     partnerProfile: "Orang Istimewa",
     unlinkPartner: 'Buang Pasangan',
-    onboardTitle: 'Selamat Datang ke JodohDeck!',
+    onboardTitle: 'Selamat Datang ke KnotYet!',
     onboardSub: 'Set up profil korang sebelum mula bermain.',
     onboardNameLabel: 'Nak panggil korang apa?',
     onboardNamePlaceholder: 'cth: Afiqa',
@@ -232,7 +232,7 @@ export const i18n = {
     summaryShare: 'Kongsi ke WhatsApp',
     summaryRestart: 'Ulang Deck Ini',
     summaryChangeCategory: 'Tukar Kategori',
-    footerTitle: '150+ Soalan Taaruf VIP (PDF)',
+    footerTitle: '150+ Soalan VIP (PDF)',
     footerSub: 'Duit, Mertua, Trauma & MBKP di Shopee!',
     footerBtn: 'Beli VIP',
     pointsEarned: 'Mata Hati Diperoleh!',

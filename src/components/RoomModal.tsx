@@ -30,7 +30,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
 
   const shareToWhatsApp = () => {
     sounds.playSuccess();
-    const text = encodeURIComponent(`Let's play JodohDeck together! Room Code: *#${roomCode}* → ${window.location.origin}`);
+    const text = encodeURIComponent(`Let's play KnotYet together! Room Code: *#${roomCode}* → ${window.location.origin}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 

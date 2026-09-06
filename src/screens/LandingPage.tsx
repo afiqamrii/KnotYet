@@ -72,12 +72,11 @@ export const LandingPage: React.FC = () => {
         {/* Nav */}
         <nav className="flex items-center justify-between pt-6 pb-4"
           style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(-20px)', transition: 'all 0.6s ease 0.1s' }}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)' }}>
-              <Heart className="w-5 h-5 fill-white text-white" />
-            </div>
-            <span className="text-base font-black text-ink tracking-tight">JodohDeck</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xl font-black tracking-tight">
+              <span className="text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(135deg, #FF2D9B, #7C3AED)' }}>Knot</span>
+              <span className="text-ink">Yet</span>
+            </span>
           </div>
         </nav>
 
@@ -89,7 +88,7 @@ export const LandingPage: React.FC = () => {
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 self-start"
             style={{ background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.3)' }}>
             <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-            <span className="text-xs font-bold text-violet-700 tracking-wide">Interactive Taaruf Game</span>
+            <span className="text-xs font-bold text-violet-700 tracking-wide">Interactive Couple's Game</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-black text-ink leading-[1.1] mb-4">
@@ -106,7 +105,7 @@ export const LandingPage: React.FC = () => {
           </h1>
 
           <p className="text-base text-ink-3 font-medium leading-relaxed mb-8 max-w-md">
-            Swipe cards, guess hearts, and spin the wheel — fun games designed for Muslim couples to build understanding, chemistry, and trust.
+            Swipe cards, guess hearts, and spin the wheel — fun games designed for couples to build understanding, chemistry, and trust.
           </p>
 
           {/* CTA Buttons */}
@@ -203,7 +202,7 @@ export const LandingPage: React.FC = () => {
           </div>
           
           <p className="text-center text-[10px] text-ink-3/40 font-medium mt-6">
-            Made with love for Muslim couples everywhere.
+            Made with love for couples everywhere.
           </p>
         </section>
       </div>

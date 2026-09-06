@@ -78,7 +78,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
               </span>
             </h1>
             <p className="text-sm text-ink-3 font-medium leading-relaxed">
-              Here is what you can do in JodohDeck. Have fun exploring these games with your partner.
+              Here is what you can do in KnotYet. Have fun exploring these games with your partner.
             </p>
           </div>
 
