@@ -136,7 +136,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     localProfileRef.current = profile;
     setState(s => ({ ...s, status: 'hosting', isHost: true, roomCode: code, error: null }));
 
-    const peer = new Peer(getPeerId(code));
+    const peer = new Peer(getPeerId(code), {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    });
     peerRef.current = peer;
 
     peer.on('open', () => {
@@ -159,7 +166,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     localProfileRef.current = profile;
     setState(s => ({ ...s, status: 'joining', isHost: false, roomCode: code, error: null }));
 
-    const peer = new Peer();
+    const peer = new Peer({
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      }
+    });
     peerRef.current = peer;
 
     peer.on('open', () => {

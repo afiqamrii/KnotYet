@@ -30,8 +30,12 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
 
   const shareToWhatsApp = () => {
     sounds.playSuccess();
-    const text = encodeURIComponent(`Let's play KnotYet together! Room Code: *#${roomCode}* → ${window.location.origin}`);
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+    const text = `Let's play KnotYet together! Room Code: *#${roomCode}* → ${window.location.origin}`;
+    if (navigator.share) {
+      navigator.share({ title: 'KnotYet Room', text }).catch(console.error);
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    }
   };
 
   const handleCreate = () => {

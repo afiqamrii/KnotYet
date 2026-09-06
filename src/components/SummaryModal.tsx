@@ -20,8 +20,12 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   const handleShare = () => {
     sounds.playSuccess();
-    const text = encodeURIComponent(`We just discussed ${answeredCount} questions in ${categoryLabel} on KnotYet! Do you dare test your partner's honesty? 🔥`);
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+    const text = `We just discussed ${answeredCount} questions in ${categoryLabel} on KnotYet! Do you dare test your partner's honesty? 🔥`;
+    if (navigator.share) {
+      navigator.share({ title: 'KnotYet', text }).catch(console.error);
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    }
   };
 
   return (

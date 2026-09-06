@@ -63,10 +63,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   };
 
   const handleShareWhatsApp = () => {
-    const text = encodeURIComponent(
-      `Let's play KnotYet together! Use Partner Code: *#${partnerCode}* at ${window.location.origin}`
-    );
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+    const text = `Let's play KnotYet together! Use Partner Code: *#${partnerCode}* at ${window.location.origin}`;
+    if (navigator.share) {
+      navigator.share({ title: 'KnotYet', text }).catch(console.error);
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    }
   };
 
   const relLabel = (type: RelationshipType) => {
