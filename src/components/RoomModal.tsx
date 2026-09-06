@@ -30,7 +30,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
 
   const shareToWhatsApp = () => {
     sounds.playSuccess();
-    const text = `Let's play KnotYet together! Room Code: *#${roomCode}* → ${window.location.origin}`;
+    const text = `Let's play KnotYet together! Room Code: *#${roomCode}* → https://knotyetapp.me`;
     if (navigator.share) {
       navigator.share({ title: 'KnotYet Room', text }).catch(console.error);
     } else {
@@ -92,26 +92,36 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
 
         {activeTab === 'create' ? (
           <div className="space-y-4">
-            <div className="p-4 rounded-2xl text-center space-y-2" style={{ background: '#EDE9FE', border: '2px solid #DDD6FE' }}>
-              <p className="text-[11px] font-bold text-brand uppercase tracking-wider">{t.roomCode}</p>
-              <div className="text-4xl font-black tracking-widest font-mono text-ink">#{roomCode}</div>
-              <div className="flex items-center justify-center gap-3">
-                <button onClick={handleCopy}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand">
-                  {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? t.roomCopied : t.roomCopy}
+            {status === 'hosting' ? (
+              <>
+                <div className="p-4 rounded-2xl text-center space-y-2" style={{ background: '#EDE9FE', border: '2px solid #DDD6FE' }}>
+                  <p className="text-[11px] font-bold text-brand uppercase tracking-wider">{t.roomCode}</p>
+                  <div className="text-4xl font-black tracking-widest font-mono text-ink">#{roomCode}</div>
+                  <div className="flex items-center justify-center gap-3">
+                    <button onClick={handleCopy}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-brand">
+                      {copied ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied ? t.roomCopied : t.roomCopy}
+                    </button>
+                  </div>
+                </div>
+                <button onClick={shareToWhatsApp}
+                  className="btn-chunky btn-green w-full text-xs">
+                  <Share2 className="w-4 h-4" /> {t.roomWhatsapp}
                 </button>
-              </div>
-            </div>
-            <button onClick={shareToWhatsApp}
-              className="btn-chunky btn-green w-full text-xs">
-              <Share2 className="w-4 h-4" /> {t.roomWhatsapp}
-            </button>
-            <button onClick={handleCreate} disabled={status === 'hosting'}
-              className="btn-chunky btn-white w-full text-xs disabled:opacity-70">
-              {status === 'hosting' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} 
-              {status === 'hosting' ? 'Waiting for partner...' : 'Host Room'}
-            </button>
+                <div className="text-center text-xs font-bold text-ink-3 flex items-center justify-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for partner to join...
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-center text-sm text-ink-3">Host a room to invite your partner to play together!</p>
+                <button onClick={handleCreate}
+                  className="btn-chunky btn-white w-full text-sm">
+                  <Play className="w-4 h-4" /> Host New Room
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <form onSubmit={handleJoin} className="space-y-4">

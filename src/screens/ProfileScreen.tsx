@@ -63,7 +63,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   };
 
   const handleShareWhatsApp = () => {
-    const text = `Let's play KnotYet together! Use Partner Code: *#${partnerCode}* at ${window.location.origin}`;
+    const text = `Let's play KnotYet together! Use Partner Code: *#${partnerCode}* at https://knotyetapp.me`;
     if (navigator.share) {
       navigator.share({ title: 'KnotYet', text }).catch(console.error);
     } else {
