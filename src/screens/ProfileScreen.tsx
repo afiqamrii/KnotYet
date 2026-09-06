@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGame, type RelationshipType } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
-import { Avatar, AvatarPicker, getAvatar } from '../components/AvatarPicker';
+import { Avatar, AvatarPicker } from '../components/AvatarPicker';
 import { X, Share2, ChevronRight, Trophy, LogOut, Heart } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
@@ -18,7 +18,7 @@ const RELATIONSHIP_OPTIONS: { type: RelationshipType; emoji: string }[] = [
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   const { profile, partner, setProfile, setPartner, t } = useGame();
-  const { user, signInWithGoogle, signOut } = useAuth();
+  const { user, couple, signInWithGoogle, signOut } = useAuth();
   const [view, setView] = useState<'main' | 'edit' | 'addPartner' | 'editPartner' | 'waiting'>('main');
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
 
@@ -38,7 +38,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   if (!profile) return null;
 
-  const partnerAvDef = partner ? getAvatar(partner.avatarId) : null;
+
 
   const handleSaveEdit = () => {
     if (!editName.trim()) return;
@@ -140,15 +140,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
               </div>
             </div>
             {/* Combined Heart Points Display */}
-            <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
-              <div className="text-center">
-                <p className="text-xs text-ink-3 font-bold">{profile.name.split(' ')[0]}</p>
-                <p className="text-2xl font-black text-brand">{profile.heartPoints}</p>
-              </div>
-              <div className="text-2xl">💗</div>
-              <div className="text-center">
-                <p className="text-xs text-ink-3 font-bold">{partner.name.split(' ')[0]}</p>
-                <p className="text-2xl font-black" style={{ color: partnerAvDef?.border }}>{Math.floor(profile.heartPoints * 0.85)}</p>
+            <div className="mt-4 p-4 rounded-3xl relative overflow-hidden group" style={{ background: 'linear-gradient(135deg, #FEF2F2 0%, #FCE7F3 100%)' }}>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-pink-300/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="flex items-center gap-2 mb-2">
+                  <Heart className="w-5 h-5 text-pink-500 fill-pink-500 animate-pulse" />
+                  <p className="text-sm font-black text-pink-900 uppercase tracking-widest">Couple Points</p>
+                  <Heart className="w-5 h-5 text-pink-500 fill-pink-500 animate-pulse" />
+                </div>
+                <div className="flex items-end gap-2">
+                  <p className="text-5xl font-black text-pink-600 drop-shadow-sm">{couple ? couple.couple_points : 0}</p>
+                  <p className="text-lg font-bold text-pink-400 mb-1 pb-1">pts</p>
+                </div>
+                <p className="text-xs font-bold text-pink-800/60 mt-1 text-center">Earned together by {profile.name} & {partner.name}</p>
               </div>
             </div>
             <button

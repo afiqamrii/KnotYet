@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, UserProfile, UserProgress } from '../lib/supabase';
+import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -7,10 +7,12 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   progress: UserProgress | null;
+  couple: CoupleProgress | null;
   isLoading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProgress: () => Promise<void>;
+  refreshCouple: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -18,10 +20,12 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   progress: null,
+  couple: null,
   isLoading: true,
   signInWithGoogle: async () => {},
   signOut: async () => {},
   refreshProgress: async () => {},
+  refreshCouple: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -31,6 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [progress, setProgress] = useState<UserProgress | null>(null);
+  const [couple, setCouple] = useState<CoupleProgress | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshProgress = async () => {
@@ -43,6 +48,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     if (data && !error) {
       setProgress(data);
+    }
+  };
+
+  const refreshCouple = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('couples')
+      .select('*')
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+      .single();
+      
+    if (data && !error) {
+      setCouple(data);
     }
   };
 
@@ -127,6 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Fetch Progress
       await refreshProgress();
+      await refreshCouple();
       
       if (!ignore) setIsLoading(false);
     }
@@ -153,7 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, isLoading, signInWithGoogle, signOut, refreshProgress }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple }}>
       {children}
     </AuthContext.Provider>
   );

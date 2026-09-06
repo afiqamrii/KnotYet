@@ -33,7 +33,7 @@ export const MatchGame: React.FC = () => {
       setPointsToast(null);
     } else {
       setCompleted(true);
-      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ);
+      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED'] });
     }
   }, [currentIndex, addHeartPoints]);
@@ -82,7 +82,7 @@ export const MatchGame: React.FC = () => {
       getContextualMeme(currentQuiz.question, isMatch).then((randomMeme) => {
         if (isMatch) {
           setScore((s) => s + 1);
-          addHeartPoints(15);
+          addHeartPoints(15, multiplayer.status === 'connected');
           showToast("Perfect Match! 💖", true, randomMeme);
           sounds.playSuccess();
           confetti({
@@ -90,7 +90,7 @@ export const MatchGame: React.FC = () => {
             colors: ['#FF2D9B', '#10B981']
           });
         } else {
-          addHeartPoints(5);
+          addHeartPoints(5, multiplayer.status === 'connected');
           showToast("Different Tastes! 🌟", false, randomMeme);
           sounds.playMismatch();
         }

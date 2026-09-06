@@ -59,7 +59,7 @@ export const SpinWheel: React.FC = () => {
       setSelectedSegment(landed);
       setActivePrompt(landed.prompts[promptIdx]);
       setShowModal(true);
-      addHeartPoints(HEART_POINTS.COMPLETE_WHEEL);
+      addHeartPoints(HEART_POINTS.COMPLETE_WHEEL, multiplayer.status === 'connected');
       sounds.playSuccess();
       confetti({ particleCount: 90, spread: 100, origin: { y: 0.6 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15', '#F97316'] });
     }, 4000);

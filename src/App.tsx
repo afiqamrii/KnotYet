@@ -23,9 +23,9 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
-  const { profile, partner, t, addHeartPoints, recordAnsweredQuestion, setPartner } = useGame();
+  const { profile, partner, setPartner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
+  const { user, refreshCouple, progress, isLoading } = useAuth();
   const multiplayer = useMultiplayer();
-  const { progress, isLoading, user } = useAuth();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('swipe');
@@ -74,6 +74,9 @@ const AppInner: React.FC = () => {
              relationshipType: data.relationshipType,
              code: '1234'
            });
+           
+           refreshCouple();
+           
            sounds.playSuccess();
            setPartnerAcceptedToast(data);
            setTimeout(() => setPartnerAcceptedToast(null), 5000);
@@ -82,38 +85,54 @@ const AppInner: React.FC = () => {
         
       return () => { supabase.removeChannel(channel); }
     }
-  }, [user, setPartner]);
+  }, [user, setPartner, refreshCouple]);
 
   React.useEffect(() => {
     // 1. Process pending partner invite
     const pendingInvite = sessionStorage.getItem('pendingInvite');
-    if (pendingInvite && profile) {
-      try {
-        const inviteData = JSON.parse(pendingInvite);
-        setPartner({
-          name: inviteData.name,
-          avatarId: inviteData.avatar,
-          relationshipType: inviteData.rel,
-          code: '1234', // dummy local code
-        });
-        sessionStorage.removeItem('pendingInvite');
-        sounds.playSuccess();
-        
-        // Broadcast to host that we accepted!
-        if (inviteData.uid) {
-           supabase.channel(`partner_link_${inviteData.uid}`).send({
-             type: 'broadcast',
-             event: 'partner_accepted',
-             payload: {
-               name: profile.name,
-               avatarId: profile.avatarId,
-               relationshipType: inviteData.rel
-             }
-           });
+    if (pendingInvite && profile && user) {
+      const processInvite = async () => {
+        try {
+          const inviteData = JSON.parse(pendingInvite);
+          
+          if (inviteData.uid) {
+            // INSERT into couples table
+            const { error: insertError } = await supabase.from('couples').insert({
+              user1_id: inviteData.uid,
+              user2_id: user.id,
+              relationship_type: inviteData.rel,
+              couple_points: 0
+            });
+            if (insertError) console.error("Failed to insert couple", insertError);
+            
+            // refresh Couple state in context
+            await refreshCouple();
+
+            // Broadcast to host that we accepted!
+            supabase.channel(`partner_link_${inviteData.uid}`).send({
+               type: 'broadcast',
+               event: 'partner_accepted',
+               payload: {
+                 name: profile.name,
+                 avatarId: profile.avatarId,
+                 relationshipType: inviteData.rel
+               }
+            });
+          }
+          
+          setPartner({
+            name: inviteData.name,
+            avatarId: inviteData.avatar,
+            relationshipType: inviteData.rel,
+            code: '1234', // dummy local code
+          });
+          sessionStorage.removeItem('pendingInvite');
+          sounds.playSuccess();
+        } catch (e) {
+          console.error("Failed to parse invite", e);
         }
-      } catch (e) {
-        console.error("Failed to parse invite", e);
-      }
+      };
+      processInvite();
     }
 
     // 2. Process pending multiplayer room
@@ -228,7 +247,7 @@ const AppInner: React.FC = () => {
       setCardIndex((p) => p + 1);
     } else {
       setIsSummaryOpen(true);
-      addHeartPoints(HEART_POINTS.COMPLETE_DECK);
+      addHeartPoints(HEART_POINTS.COMPLETE_DECK, multiplayer.status === 'connected');
     }
   };
 

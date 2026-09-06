@@ -27,3 +27,12 @@ export interface UserProgress {
   answered_questions: string[];
   last_played_at?: string;
 }
+
+export interface CoupleProgress {
+  id: string; // unique couple ID
+  user1_id: string; // the sender/host
+  user2_id: string; // the partner
+  couple_points: number;
+  relationship_type: string;
+  created_at?: string;
+}

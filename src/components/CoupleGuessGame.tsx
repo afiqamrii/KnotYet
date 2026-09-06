@@ -63,8 +63,8 @@ const CoupleGuessGameInner: React.FC = () => {
       setPointsToast(null);
     } else {
       setCompleted(true);
-      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ);
-      if (score === GUESS_QUIZ_LIST.length - 1) addHeartPoints(HEART_POINTS.PERFECT_QUIZ); 
+      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
+      if (score === GUESS_QUIZ_LIST.length - 1) addHeartPoints(HEART_POINTS.PERFECT_QUIZ, multiplayer.status === 'connected'); 
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15'] });
     }
   }, [currentIndex, score, addHeartPoints]);
@@ -102,7 +102,7 @@ const CoupleGuessGameInner: React.FC = () => {
 
     if (isMatch) {
       setScore((p) => p + 1);
-      addHeartPoints(EARN);
+      addHeartPoints(EARN, multiplayer.status === 'connected');
       showToast(t.earnedPoints(EARN), true, randomMeme);
       sounds.playSuccess();
       confetti({

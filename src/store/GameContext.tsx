@@ -33,10 +33,10 @@ export interface GameState {
   t: Record<string, any>;
   // Actions
   setProfile: (profile: UserProfile) => void;
-  setPartner: (partner: Partner | null) => void;
-  setLang: (lang: Lang) => void;
-  addHeartPoints: (amount: number) => void;
-  deductHeartPoints: (amount: number) => void;
+  setPartner: (p: Partner | null) => void;
+  setLang: (l: Lang) => void;
+  addHeartPoints: (amount: number, isMultiplayer?: boolean) => void;
+  deductHeartPoints: (amount: number, isMultiplayer?: boolean) => void;
   recordAnsweredQuestion: (questionId: string) => void;
 }
 
@@ -64,7 +64,7 @@ const STORAGE_KEY_PARTNER = 'jodohdeck_partner';
 const STORAGE_KEY_LANG = 'jodohdeck_lang';
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, profile: authProfile, progress, refreshProgress } = useAuth();
+  const { user, profile: authProfile, progress, couple, refreshProgress, refreshCouple } = useAuth();
   
   const [profile, setProfileState] = useState<UserProfile | null>(() => {
     try {
@@ -123,7 +123,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(STORAGE_KEY_LANG, l);
   }, []);
 
-  const addHeartPoints = useCallback((amount: number) => {
+  const addHeartPoints = useCallback((amount: number, isMultiplayer?: boolean) => {
+    if (isMultiplayer && couple) {
+      // Add to couple points
+      supabase.from('couples')
+        .update({ couple_points: couple.couple_points + amount })
+        .eq('id', couple.id)
+        .then(() => refreshCouple());
+      return;
+    }
+
     setProfileState(prev => {
       if (!prev) return prev;
       const updated = { ...prev, heartPoints: prev.heartPoints + amount };
@@ -134,9 +143,19 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user && progress) {
       supabase.from('user_progress').update({ heart_points: progress.heart_points + amount }).eq('user_id', user.id).then(() => refreshProgress());
     }
-  }, [user, progress, refreshProgress]);
+  }, [user, progress, couple, refreshProgress, refreshCouple]);
 
-  const deductHeartPoints = useCallback((amount: number) => {
+  const deductHeartPoints = useCallback((amount: number, isMultiplayer?: boolean) => {
+    if (isMultiplayer && couple) {
+      // Deduct from couple points
+      const newCouplePoints = Math.max(0, couple.couple_points - Math.abs(amount));
+      supabase.from('couples')
+        .update({ couple_points: newCouplePoints })
+        .eq('id', couple.id)
+        .then(() => refreshCouple());
+      return;
+    }
+
     setProfileState(prev => {
       if (!prev) return prev;
       const newPoints = Math.max(0, prev.heartPoints - Math.abs(amount));
@@ -149,7 +168,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newPoints = Math.max(0, progress.heart_points - Math.abs(amount));
       supabase.from('user_progress').update({ heart_points: newPoints }).eq('user_id', user.id).then(() => refreshProgress());
     }
-  }, [user, progress, refreshProgress]);
+  }, [user, progress, couple, refreshProgress, refreshCouple]);
 
   const recordAnsweredQuestion = useCallback((questionId: string) => {
     if (user && progress) {
