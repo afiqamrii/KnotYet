@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, PlayCircle, Loader2, Sparkles } from 'lucide-react';
+import { X, PlayCircle, Loader2, Sparkles, Clock } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
 interface AdModalProps {
@@ -13,6 +13,26 @@ interface AdModalProps {
 export const AdModal: React.FC<AdModalProps> = ({ onClose, onRewardEarned, title, description, rewardText }) => {
   const [adState, setAdState] = useState<'idle' | 'loading' | 'playing' | 'rewarded'>('idle');
   const [countdown, setCountdown] = useState(5);
+  const [timeUntilReset, setTimeUntilReset] = useState<string>('');
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setHours(24, 0, 0, 0);
+      const diff = tomorrow.getTime() - now.getTime();
+      
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setTimeUntilReset(`${hours}h ${minutes}m ${seconds}s`);
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const startAd = () => {
     sounds.playFlip();
@@ -52,7 +72,10 @@ export const AdModal: React.FC<AdModalProps> = ({ onClose, onRewardEarned, title
               <PlayCircle className="w-8 h-8 text-purple-500" />
             </div>
             <h3 className="text-xl font-black text-ink mb-2">{title}</h3>
-            <p className="text-sm font-semibold text-ink-3 mb-6">{description}</p>
+            <p className="text-sm font-semibold text-ink-3 mb-1">{description}</p>
+            <p className="text-[11px] font-bold text-ink-3/70 flex items-center justify-center gap-1 mb-6">
+              <Clock className="w-3 h-3" /> Resets in {timeUntilReset}
+            </p>
             
             <button
               onClick={startAd}
