@@ -24,7 +24,7 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
   const { profile, partner, setPartner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
-  const { user, refreshCouple, progress, isLoading } = useAuth();
+  const { user, couple, refreshCouple, progress, isLoading } = useAuth();
   const multiplayer = useMultiplayer();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
@@ -481,9 +481,17 @@ const AppInner: React.FC = () => {
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-white/20 text-white uppercase tracking-wider">Local</span>
                   )}
                 </div>
-                <div className="hearts-pill" style={{ padding: '2px 8px', fontSize: '0.65rem', minHeight: 0 }}>
-                  <Heart className="w-2.5 h-2.5 fill-current" />
-                  {profile?.heartPoints || 0} pts
+                <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                  <div className="flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded-full border border-white/10" style={{ fontSize: '10px' }}>
+                    <Heart className="w-2.5 h-2.5 text-white/90 fill-current" />
+                    <span className="text-white/90 font-bold">{profile?.heartPoints || 0} Solo</span>
+                  </div>
+                  {couple && (
+                    <div className="flex items-center gap-1 bg-white px-1.5 py-0.5 rounded-full shadow-sm" style={{ fontSize: '10px' }}>
+                      <Heart className="w-2.5 h-2.5 text-pink-500 fill-current" />
+                      <span className="text-pink-600 font-black">{couple.couple_points} Shared</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </button>
