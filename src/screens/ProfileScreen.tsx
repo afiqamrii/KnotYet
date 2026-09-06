@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGame, type RelationshipType } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { Avatar, AvatarPicker, getAvatar } from '../components/AvatarPicker';
-import { X, Copy, Check, RefreshCw, Share2, ChevronRight, Trophy, LogOut } from 'lucide-react';
+import { X, Share2, ChevronRight, Trophy, LogOut } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
 interface ProfileScreenProps {
@@ -27,11 +27,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   const [editAvatar, setEditAvatar] = useState(profile?.avatarId ?? 'sunny');
 
   // Add partner state
-  const [partnerName, setPartnerName] = useState('');
-  const [partnerAvatar, setPartnerAvatar] = useState('mochi');
   const [partnerRel, setPartnerRel] = useState<RelationshipType>('crush');
-  const [partnerCode, setPartnerCode] = useState(() => Math.floor(1000 + Math.random() * 9000).toString());
-  const [copied, setCopied] = useState(false);
 
   if (!profile) return null;
 
@@ -44,23 +40,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
     sounds.playSuccess();
   };
 
-  const handleSavePartner = () => {
-    if (!partnerName.trim()) return;
-    setPartner({
-      name: partnerName.trim(),
-      avatarId: partnerAvatar,
-      relationshipType: partnerRel,
-      code: partnerCode,
-    });
-    setView('main');
-    sounds.playSuccess();
-  };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(partnerCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleShareWhatsApp = () => {
     const url = `https://knotyetapp.me/invite?n=${encodeURIComponent(profile.name)}&a=${profile.avatarId}&r=${partnerRel}`;
@@ -70,13 +50,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
     } else {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
     }
-    // Also save a pending state locally just in case
-    setPartner({
-      name: 'Pending...',
-      avatarId: 'mochi', // placeholder
-      relationshipType: partnerRel,
-      code: partnerCode,
-    });
+
     setView('main');
   };
 

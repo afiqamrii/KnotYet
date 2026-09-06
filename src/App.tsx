@@ -8,7 +8,7 @@ import { SpinWheel } from './components/SpinWheel';
 import { MatchGame } from './components/MatchGame';
 import { RoomModal } from './components/RoomModal';
 import { SummaryModal } from './components/SummaryModal';
-import { Avatar } from './components/AvatarPicker';
+import { getAvatar } from './components/AvatarPicker';
 import { GameProvider, useGame, HEART_POINTS } from './store/GameContext';
 import { useAuth } from './store/AuthContext';
 import { MultiplayerProvider, useMultiplayer, MultiplayerMessage } from './store/MultiplayerContext';
@@ -22,7 +22,7 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
-  const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
+  const { profile, partner, t, addHeartPoints, recordAnsweredQuestion, setPartner } = useGame();
   const multiplayer = useMultiplayer();
   const { progress, isLoading } = useAuth();
 
@@ -65,7 +65,6 @@ const AppInner: React.FC = () => {
     if (pendingInvite && profile) {
       try {
         const inviteData = JSON.parse(pendingInvite);
-        const { setPartner } = useGame.getState(); // Safe direct access or use setPartner from hook
         setPartner({
           name: inviteData.name,
           avatarId: inviteData.avatar,
@@ -376,25 +375,27 @@ const AppInner: React.FC = () => {
           {/* Top Row: Logo + Partner strip + Mode/Room */}
           <div className="flex items-center justify-between gap-2">
             {/* Logo / Profile */}
-            <button onClick={() => { sounds.playFlip(); setIsProfileOpen(true); }}
-              className="flex items-center gap-2 active:scale-95 transition">
-              
+            <button onClick={() => { sounds.playFlip(); setIsProfileOpen(true); }} className="flex items-center gap-3 relative shrink-0 active:scale-95 transition text-left">
               {partner ? (
-                <div className="flex items-center">
-                  <div className="z-10 relative shadow-md rounded-full border-2 border-white/50">
-                    <Avatar avatarId={profile?.avatarId || 'default'} size={36} />
+                <div className="flex items-center shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center border-2 border-brand-100 z-10 relative">
+                    <span className="text-xl">{getAvatar(profile?.avatarId || 'default')?.face}</span>
                   </div>
-                  <div className="z-0 relative -ml-3 shadow-md rounded-full border-2 border-white/50 overflow-hidden bg-black/10">
-                    <Avatar avatarId={partner.avatarId} size={36} />
+                  <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center border-2 border-brand-100 -ml-4 z-0 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-black/5" />
+                    <span className="text-xl opacity-90">{getAvatar(partner.avatarId)?.face}</span>
                   </div>
-                  <div className="absolute -bottom-1 left-3.5 z-20 bg-white rounded-full p-[2px] shadow-sm">
-                    <Heart className="w-3 h-3 text-pink-500 fill-current" />
+                  <div className="absolute -bottom-1 left-3 bg-white rounded-full border border-pink-200 shadow-sm z-20" style={{ padding: '2px' }}>
+                    <Heart className="w-3 h-3 text-pink-500" fill="currentColor" />
                   </div>
                 </div>
               ) : (
-                <Avatar avatarId={profile?.avatarId || 'default'} size={38} />
+                <div className="avatar-bubble w-10 h-10 text-xl bg-white shadow-sm text-brand-500 border-2 border-brand-100 shrink-0">
+                  {getAvatar(profile?.avatarId || 'default')?.face}
+                </div>
               )}
-              <div className="flex flex-col items-start text-left gap-1">
+              
+              <div className="flex flex-col items-start gap-1">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-black text-white leading-none">{profile?.name || 'User'}</p>
                   {multiplayer.status === 'connected' ? (

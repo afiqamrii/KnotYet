@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/AuthContext';
-import { Avatar, getAvatar } from '../components/AvatarPicker';
+import { getAvatar } from '../components/AvatarPicker';
 import { Heart, Sparkles, Check, ChevronRight } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
@@ -60,8 +60,9 @@ export const InviteScreen: React.FC = () => {
 
       <div className="relative z-10 max-w-sm w-full space-y-8 animate-fade-in text-center">
         <div className="flex items-center justify-center gap-4">
-          <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center shadow-2xl animate-float border-4 border-white/20">
-            <span className="text-5xl">{inviterAvatar?.emoji || '🥰'}</span>
+          <div className="w-24 h-24 rounded-full bg-white shadow-2xl flex items-center justify-center border-4 border-white/50 relative z-10 animate-bounce-soft"
+          style={{ background: inviterAvatar?.bg }}>
+          <span className="text-5xl drop-shadow-md">{inviterAvatar?.face}</span>
           </div>
           <Heart className="w-8 h-8 text-pink-400 animate-pulse" fill="currentColor" />
           <div className="w-24 h-24 rounded-full flex items-center justify-center border-4 border-dashed border-white/30 text-white/50 bg-white/5">
