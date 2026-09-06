@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame, type RelationshipType } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { Avatar, AvatarPicker, getAvatar } from '../components/AvatarPicker';
-import { X, Share2, ChevronRight, Trophy, LogOut } from 'lucide-react';
+import { X, Share2, ChevronRight, Trophy, LogOut, Heart } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
 interface ProfileScreenProps {
@@ -19,7 +19,7 @@ const RELATIONSHIP_OPTIONS: { type: RelationshipType; emoji: string }[] = [
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   const { profile, partner, setProfile, setPartner, t } = useGame();
   const { user, signInWithGoogle, signOut } = useAuth();
-  const [view, setView] = useState<'main' | 'edit' | 'addPartner' | 'editPartner'>('main');
+  const [view, setView] = useState<'main' | 'edit' | 'addPartner' | 'editPartner' | 'waiting'>('main');
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
 
   // Edit profile state
@@ -28,6 +28,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   // Add partner state
   const [partnerRel, setPartnerRel] = useState<RelationshipType>('crush');
+
+  // Auto-close waiting state if partner is linked remotely
+  useEffect(() => {
+    if (view === 'waiting' && partner) {
+      setView('main');
+    }
+  }, [view, partner]);
 
   if (!profile) return null;
 
@@ -51,7 +58,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
     }
 
-    setView('main');
+    setView('waiting');
   };
 
   const relLabel = (type: RelationshipType) => {
@@ -298,9 +305,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
           </div>
         </div>
 
-        <button onClick={handleShareWhatsApp} className="w-full btn-chunky btn-green py-4 mt-8">
+        <button onClick={() => { handleShareWhatsApp(); setView('waiting'); }} className="w-full btn-chunky btn-green py-4 mt-8">
           <Share2 className="w-5 h-5" /> Send Invite Link
         </button>
+      </div>
+    </div>
+  );
+
+  // ---- WAITING FOR PARTNER VIEW ----
+  if (view === 'waiting') return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center text-white" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
+      <button onClick={() => setView('main')} className="absolute top-5 left-5 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 active:scale-95 transition">
+         <X className="w-5 h-5" />
+      </button>
+      <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-pulse shadow-lg">
+        <Heart className="w-12 h-12 text-pink-300" fill="currentColor" />
+      </div>
+      <h2 className="text-2xl font-black mb-2 text-center px-6">Waiting for Partner...</h2>
+      <p className="text-white/80 font-semibold text-center px-8 mb-8">Keep this screen open or explore the app. We'll pop up when they accept!</p>
+      
+      <div className="w-full max-w-[200px] h-2 bg-white/20 rounded-full overflow-hidden">
+        <div className="h-full bg-white animate-pulse" style={{ width: '100%' }} />
       </div>
     </div>
   );

@@ -98,7 +98,19 @@ const AppInner: React.FC = () => {
         });
         sessionStorage.removeItem('pendingInvite');
         sounds.playSuccess();
-        // Optional: show a toast here "Linked with [Name]"
+        
+        // Broadcast to host that we accepted!
+        if (inviteData.uid) {
+           supabase.channel(`partner_link_${inviteData.uid}`).send({
+             type: 'broadcast',
+             event: 'partner_accepted',
+             payload: {
+               name: profile.name,
+               avatarId: profile.avatarId,
+               relationshipType: inviteData.rel
+             }
+           });
+        }
       } catch (e) {
         console.error("Failed to parse invite", e);
       }
