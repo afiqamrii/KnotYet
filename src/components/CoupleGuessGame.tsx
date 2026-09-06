@@ -42,21 +42,29 @@ const CoupleGuessGameInner: React.FC = () => {
   const { t, profile, partner, addHeartPoints, deductHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [stage, setStage] = useState<'secret' | 'guess' | 'reveal'>('secret');
-  const [actualAnswer, setActualAnswer] = useState<string | null>(null);
-  const [guessedAnswer, setGuessedAnswer] = useState<string | null>(null);
-  const [score, setScore] = useState(0);
-  const [completed, setCompleted] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('guess_currentIndex')) || 0);
+  const [stage, setStage] = useState<'secret' | 'guess' | 'reveal'>(() => (sessionStorage.getItem('guess_stage') as any) || 'secret');
+  const [actualAnswer, setActualAnswer] = useState<string | null>(() => sessionStorage.getItem('guess_actualAnswer') || null);
+  const [guessedAnswer, setGuessedAnswer] = useState<string | null>(() => sessionStorage.getItem('guess_guessedAnswer') || null);
+  const [score, setScore] = useState(() => Number(sessionStorage.getItem('guess_score')) || 0);
+  const [completed, setCompleted] = useState(() => sessionStorage.getItem('guess_completed') === 'true');
   const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean; imgUrl: string } | null>(null);
-  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+  
   const multiplayer = useMultiplayer();
+
+  useEffect(() => {
+    sessionStorage.setItem('guess_currentIndex', currentIndex.toString());
+    sessionStorage.setItem('guess_stage', stage);
+    if (actualAnswer) sessionStorage.setItem('guess_actualAnswer', actualAnswer); else sessionStorage.removeItem('guess_actualAnswer');
+    if (guessedAnswer) sessionStorage.setItem('guess_guessedAnswer', guessedAnswer); else sessionStorage.removeItem('guess_guessedAnswer');
+    sessionStorage.setItem('guess_score', score.toString());
+    sessionStorage.setItem('guess_completed', completed.toString());
+  }, [currentIndex, stage, actualAnswer, guessedAnswer, score, completed]);
 
   const currentQuiz = GUESS_QUIZ_LIST[currentIndex];
   const isBoyTarget = currentQuiz.targetRole === 'Lelaki';
 
   const executeNext = useCallback(() => {
-    setAutoNextCountdown(null);
     if (currentIndex + 1 < GUESS_QUIZ_LIST.length) {
       setCurrentIndex((p) => p + 1);
       setStage('secret');
@@ -87,7 +95,6 @@ const CoupleGuessGameInner: React.FC = () => {
     setScore(0); 
     setCompleted(false);
     setPointsToast(null);
-    setAutoNextCountdown(null);
     
     if (broadcast && multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'QUIZ_RESTART' });
@@ -118,7 +125,6 @@ const CoupleGuessGameInner: React.FC = () => {
       sounds.playMismatch();
     }
     setStage('reveal');
-    setAutoNextCountdown(6);
   }, [actualAnswer, currentQuiz.question, t, addHeartPoints, deductHeartPoints]);
 
   useEffect(() => {
@@ -153,17 +159,8 @@ const CoupleGuessGameInner: React.FC = () => {
   };
 
   useEffect(() => {
-    let timer: any;
-    if (autoNextCountdown !== null && autoNextCountdown > 0) {
-      timer = setTimeout(() => setAutoNextCountdown(c => c! - 1), 1000);
-    } else if (autoNextCountdown === 0) {
-      setAutoNextCountdown(null);
-      if (multiplayer.status !== 'connected' || multiplayer.isHost) {
-        handleNext();
-      }
-    }
-    return () => clearTimeout(timer);
-  }, [autoNextCountdown, multiplayer.status, multiplayer.isHost]);
+    // If we need any cleanup for timer etc, we do it here. But auto countdown is removed.
+  }, [multiplayer.status, multiplayer.isHost]);
 
   const handleSelectGuess = (option: string) => {
     if (multiplayer.status === 'connected') {
@@ -272,19 +269,16 @@ const CoupleGuessGameInner: React.FC = () => {
               <img src={pointsToast.imgUrl} alt="Reaction" className="w-full h-48 object-cover" />
             </div>
 
-            {autoNextCountdown !== null && (
-              <div className="flex items-center justify-between mt-2">
-                <p className="text-sm font-black text-brand animate-pulse">Next question in {autoNextCountdown}...</p>
-                <button 
-                  onClick={() => {
-                    handleNext();
-                  }}
-                  className="px-4 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-black transition-colors"
-                >
-                  Skip <span className="ml-1">→</span>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-between mt-2">
+              <button 
+                onClick={() => {
+                  handleNext();
+                }}
+                className="w-full mt-2 py-3 rounded-2xl font-black text-white text-lg transition shadow-lg shadow-brand-500/30 flex items-center justify-center bg-brand hover:bg-brand-dark active:scale-95"
+              >
+                Next Question <span className="ml-2">→</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
