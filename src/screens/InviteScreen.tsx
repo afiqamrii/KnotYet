@@ -43,7 +43,7 @@ export const InviteScreen: React.FC = () => {
     }
   };
 
-  if (isLoading) return <div className="min-h-screen bg-brand-900 flex items-center justify-center text-white font-bold">Loading...</div>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-white font-bold" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>Loading...</div>;
 
   if (!inviteData) {
     return <Navigate to="/" replace />;
@@ -52,7 +52,7 @@ export const InviteScreen: React.FC = () => {
   const inviterAvatar = getAvatar(inviteData.avatar);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-brand-900 text-white relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-white relative overflow-hidden" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-pink-500/20 blur-[100px] rounded-full mix-blend-screen animate-pulse" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-500/20 blur-[100px] rounded-full mix-blend-screen animate-pulse" style={{ animationDelay: '1s' }} />

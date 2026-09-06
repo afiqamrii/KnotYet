@@ -285,7 +285,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   // ---- ADD PARTNER VIEW ----
   if (view === 'addPartner') return (
-    <div className="fixed inset-0 z-50 bg-brand-900 flex flex-col items-center p-6 text-center animate-fade-in">
+    <div className="fixed inset-0 z-50 flex flex-col items-center p-6 text-center animate-fade-in" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
       <div className="w-full flex items-center justify-between mb-8">
         <button onClick={() => setView('main')} className="text-white/70 hover:text-white flex items-center gap-1 font-bold">
           &larr; Back
