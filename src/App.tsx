@@ -49,7 +49,11 @@ const AppInner: React.FC = () => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpenState] = useState(() => sessionStorage.getItem('knotyet_isProfileOpen') === 'true');
+  const setIsProfileOpen = (val: boolean) => {
+    setIsProfileOpenState(val);
+    sessionStorage.setItem('knotyet_isProfileOpen', String(val));
+  };
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [countdownNumber, setCountdownNumber] = useState<number | null>(null);
   const [isMusicMenuOpen, setIsMusicMenuOpen] = useState(false);
