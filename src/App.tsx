@@ -60,6 +60,7 @@ const AppInner: React.FC = () => {
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
   const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const sessionRestoredRef = React.useRef(false);
 
   const previousTab = React.useRef<ActiveTab | 'lobby'>('lobby');
 
@@ -154,14 +155,35 @@ const AppInner: React.FC = () => {
       processInvite();
     }
 
-    // 2. Process pending multiplayer room
+    // 2. Process pending multiplayer room (from URL invite)
     const pendingRoom = sessionStorage.getItem('pendingRoomCode');
-    if (pendingRoom && profile) {
+    if (pendingRoom && profile && multiplayer.status === 'disconnected') {
       sessionStorage.removeItem('pendingRoomCode');
       multiplayer.joinRoom(pendingRoom, profile);
       setIsRoomModalOpen(true);
+      return; // prevent falling through to restore
     }
-  }, [profile, multiplayer.joinRoom]);
+
+    // 3. Process session restoration (auto-reconnect on refresh)
+    if (sessionRestoredRef.current) return;
+    
+    const savedRoomCode = sessionStorage.getItem('mp_roomCode');
+    const savedIsHost = sessionStorage.getItem('mp_isHost');
+    const savedActiveGame = sessionStorage.getItem('mp_activeGame');
+    
+    if (savedRoomCode && profile && multiplayer.status === 'disconnected') {
+      sessionRestoredRef.current = true;
+      if (savedIsHost === 'true') {
+        multiplayer.hostRoom(savedRoomCode, profile);
+      } else {
+        multiplayer.joinRoom(savedRoomCode, profile);
+      }
+      setIsRoomModalOpen(true);
+      if (savedActiveGame) {
+        setActiveTab(savedActiveGame as any);
+      }
+    }
+  }, [profile, multiplayer.joinRoom, multiplayer.hostRoom, multiplayer.status]);
 
   const formatTime = (totalSeconds: number) => {
     const m = Math.floor(totalSeconds / 60);

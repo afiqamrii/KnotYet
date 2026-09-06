@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
 
@@ -60,6 +60,18 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     activeGame: 'lobby',
     error: null,
   });
+
+  useEffect(() => {
+    if (state.status === 'hosting' || state.status === 'joining' || state.status === 'connected') {
+      sessionStorage.setItem('mp_roomCode', state.roomCode || '');
+      sessionStorage.setItem('mp_isHost', state.isHost.toString());
+      sessionStorage.setItem('mp_activeGame', state.activeGame);
+    } else if (state.status === 'disconnected') {
+      sessionStorage.removeItem('mp_roomCode');
+      sessionStorage.removeItem('mp_isHost');
+      sessionStorage.removeItem('mp_activeGame');
+    }
+  }, [state.status, state.roomCode, state.isHost, state.activeGame]);
 
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);

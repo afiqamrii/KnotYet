@@ -12,19 +12,26 @@ export const MatchGame: React.FC = () => {
   const { profile, partner, addHeartPoints } = useGame();
   const multiplayer = useMultiplayer();
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [stage, setStage] = useState<'vote' | 'reveal'>('vote');
-  const [myAnswer, setMyAnswer] = useState<string | null>(null);
-  const [partnerAnswer, setPartnerAnswer] = useState<string | null>(null);
-  const [score, setScore] = useState(0);
-  const [completed, setCompleted] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('match_currentIndex')) || 0);
+  const [stage, setStage] = useState<'vote' | 'reveal'>(() => (sessionStorage.getItem('match_stage') as any) || 'vote');
+  const [myAnswer, setMyAnswer] = useState<string | null>(() => sessionStorage.getItem('match_myAnswer') || null);
+  const [partnerAnswer, setPartnerAnswer] = useState<string | null>(() => sessionStorage.getItem('match_partnerAnswer') || null);
+  const [score, setScore] = useState(() => Number(sessionStorage.getItem('match_score')) || 0);
+  const [completed, setCompleted] = useState(() => sessionStorage.getItem('match_completed') === 'true');
   const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean; imgUrl: string } | null>(null);
-  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    sessionStorage.setItem('match_currentIndex', currentIndex.toString());
+    sessionStorage.setItem('match_stage', stage);
+    if (myAnswer) sessionStorage.setItem('match_myAnswer', myAnswer); else sessionStorage.removeItem('match_myAnswer');
+    if (partnerAnswer) sessionStorage.setItem('match_partnerAnswer', partnerAnswer); else sessionStorage.removeItem('match_partnerAnswer');
+    sessionStorage.setItem('match_score', score.toString());
+    sessionStorage.setItem('match_completed', completed.toString());
+  }, [currentIndex, stage, myAnswer, partnerAnswer, score, completed]);
 
   const currentQuiz = MATCH_QUESTIONS[currentIndex];
 
   const executeNext = useCallback(() => {
-    setAutoNextCountdown(null);
     if (currentIndex + 1 < MATCH_QUESTIONS.length) {
       setCurrentIndex((p) => p + 1);
       setStage('vote');
@@ -46,7 +53,6 @@ export const MatchGame: React.FC = () => {
     setScore(0); 
     setCompleted(false);
     setPointsToast(null);
-    setAutoNextCountdown(null);
     
     if (broadcast && multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'MATCH_RESTART' });
@@ -94,24 +100,13 @@ export const MatchGame: React.FC = () => {
           showToast("Different Tastes! 🌟", false, randomMeme);
           sounds.playMismatch();
         }
-
-        setAutoNextCountdown(6);
       });
     }
   }, [myAnswer, partnerAnswer, stage, addHeartPoints, currentQuiz.question]);
 
   useEffect(() => {
-    let timer: any;
-    if (autoNextCountdown !== null && autoNextCountdown > 0) {
-      timer = setTimeout(() => setAutoNextCountdown(c => c! - 1), 1000);
-    } else if (autoNextCountdown === 0) {
-      setAutoNextCountdown(null);
-      if (multiplayer.status !== 'connected' || multiplayer.isHost) {
-        handleNext();
-      }
-    }
-    return () => clearTimeout(timer);
-  }, [autoNextCountdown, multiplayer.status, multiplayer.isHost]);
+    // Timer removed, manual next button will handle progression
+  }, [multiplayer.status, multiplayer.isHost]);
 
   const showToast = (text: string, positive: boolean, imgUrl: string) => {
     setPointsToast({ text, positive, imgUrl });
@@ -203,19 +198,16 @@ export const MatchGame: React.FC = () => {
               <img src={pointsToast.imgUrl} alt="Reaction" className="w-full h-48 object-cover" />
             </div>
 
-            {autoNextCountdown !== null && (
-              <div className="flex items-center justify-between mt-2">
-                <p className="text-sm font-black text-brand animate-pulse">Next question in {autoNextCountdown}...</p>
-                <button 
-                  onClick={() => {
-                    handleNext();
-                  }}
-                  className="px-4 py-1.5 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-black transition-colors"
-                >
-                  Skip <span className="ml-1">→</span>
-                </button>
-              </div>
-            )}
+            <div className="flex items-center justify-between mt-2">
+              <button 
+                onClick={() => {
+                  handleNext();
+                }}
+                className="w-full mt-2 py-3 rounded-2xl font-black text-white text-lg transition shadow-lg shadow-brand-500/30 flex items-center justify-center bg-brand hover:bg-brand-dark active:scale-95"
+              >
+                Next Question <span className="ml-2">→</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
