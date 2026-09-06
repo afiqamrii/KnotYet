@@ -15,6 +15,7 @@ import { MultiplayerProvider, useMultiplayer, MultiplayerMessage } from './store
 import { LandingPage } from './screens/LandingPage';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { InviteScreen } from './screens/InviteScreen';
 import { sounds } from './utils/audio';
 
 type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
@@ -56,6 +57,37 @@ const AppInner: React.FC = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Process deep links (invites & room codes)
+  React.useEffect(() => {
+    // 1. Process pending partner invite
+    const pendingInvite = sessionStorage.getItem('pendingInvite');
+    if (pendingInvite && profile) {
+      try {
+        const inviteData = JSON.parse(pendingInvite);
+        const { setPartner } = useGame.getState(); // Safe direct access or use setPartner from hook
+        setPartner({
+          name: inviteData.name,
+          avatarId: inviteData.avatar,
+          relationshipType: inviteData.rel,
+          code: '1234', // dummy local code
+        });
+        sessionStorage.removeItem('pendingInvite');
+        sounds.playSuccess();
+        // Optional: show a toast here "Linked with [Name]"
+      } catch (e) {
+        console.error("Failed to parse invite", e);
+      }
+    }
+
+    // 2. Process pending multiplayer room
+    const pendingRoom = sessionStorage.getItem('pendingRoomCode');
+    if (pendingRoom && profile) {
+      sessionStorage.removeItem('pendingRoomCode');
+      multiplayer.joinRoom(pendingRoom, profile);
+      setIsRoomModalOpen(true);
+    }
+  }, [profile, multiplayer.joinRoom]);
 
   const formatTime = (totalSeconds: number) => {
     const m = Math.floor(totalSeconds / 60);
@@ -346,7 +378,22 @@ const AppInner: React.FC = () => {
             {/* Logo / Profile */}
             <button onClick={() => { sounds.playFlip(); setIsProfileOpen(true); }}
               className="flex items-center gap-2 active:scale-95 transition">
-              <Avatar avatarId={profile?.avatarId || 'default'} size={38} />
+              
+              {partner ? (
+                <div className="flex items-center">
+                  <div className="z-10 relative shadow-md rounded-full border-2 border-white/50">
+                    <Avatar avatarId={profile?.avatarId || 'default'} size={36} />
+                  </div>
+                  <div className="z-0 relative -ml-3 shadow-md rounded-full border-2 border-white/50 overflow-hidden bg-black/10">
+                    <Avatar avatarId={partner.avatarId} size={36} />
+                  </div>
+                  <div className="absolute -bottom-1 left-3.5 z-20 bg-white rounded-full p-[2px] shadow-sm">
+                    <Heart className="w-3 h-3 text-pink-500 fill-current" />
+                  </div>
+                </div>
+              ) : (
+                <Avatar avatarId={profile?.avatarId || 'default'} size={38} />
+              )}
               <div className="flex flex-col items-start text-left gap-1">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-black text-white leading-none">{profile?.name || 'User'}</p>
@@ -363,15 +410,7 @@ const AppInner: React.FC = () => {
               </div>
             </button>
 
-            {/* Partner middle strip */}
-            {partner && (
-              <div className="flex items-center gap-2 px-2 py-1 rounded-full"
-                style={{ background: 'rgba(255,255,255,0.15)' }}>
-                <Avatar avatarId={partner.avatarId} size={26} />
-                <div className="text-[10px] font-bold text-white/80 hidden xs:block max-w-[60px] truncate">{partner.name}</div>
-                <span className="text-base">💗</span>
-              </div>
-            )}
+            {/* Partner middle strip (hidden because we combined it above, but keeping it for multiplayer text maybe? No, let's just remove the duplicated strip) */}
 
             {/* Middle: Timer */}
             <div className="hidden xs:flex flex-col items-center">
@@ -718,6 +757,27 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const AppRoutes: React.FC = () => {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    
+    const roomCode = searchParams.get('room');
+    if (roomCode) {
+      sessionStorage.setItem('pendingRoomCode', roomCode);
+    }
+
+    const isInvite = searchParams.get('invite');
+    if (isInvite) {
+      const inviteData = {
+        name: searchParams.get('n'),
+        avatar: searchParams.get('a'),
+        rel: searchParams.get('r')
+      };
+      sessionStorage.setItem('pendingInvite', JSON.stringify(inviteData));
+    }
+  }, [location.search]);
+
   return (
     <Routes>
       <Route path="/" element={
@@ -734,6 +794,11 @@ export const AppRoutes: React.FC = () => {
         <ProtectedRoute requireProfile={true}>
           <AppInner />
         </ProtectedRoute>
+      } />
+      <Route path="/invite" element={
+        <PublicRoute>
+          <InviteScreen />
+        </PublicRoute>
       } />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

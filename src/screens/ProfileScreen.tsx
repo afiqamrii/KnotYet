@@ -63,12 +63,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   };
 
   const handleShareWhatsApp = () => {
-    const text = `Let's play KnotYet together! Use Partner Code: *#${partnerCode}* at https://knotyetapp.me`;
+    const url = `https://knotyetapp.me/invite?n=${encodeURIComponent(profile.name)}&a=${profile.avatarId}&r=${partnerRel}`;
+    const text = `Let's link our KnotYet accounts! 💖 Click here to accept my invite: ${url}`;
     if (navigator.share) {
       navigator.share({ title: 'KnotYet', text }).catch(console.error);
     } else {
       window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
     }
+    // Also save a pending state locally just in case
+    setPartner({
+      name: 'Pending...',
+      avatarId: 'mochi', // placeholder
+      relationshipType: partnerRel,
+      code: partnerCode,
+    });
+    setView('main');
   };
 
   const relLabel = (type: RelationshipType) => {
@@ -276,70 +285,47 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   // ---- ADD PARTNER VIEW ----
   if (view === 'addPartner') return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white">
-      <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-stone-100">
-        <button onClick={() => setView('main')} className="text-sm font-bold text-ink-3">← Back</button>
-        <span className="font-black text-ink flex-1">{t.addPartner}</span>
+    <div className="fixed inset-0 z-50 bg-brand-900 flex flex-col items-center p-6 text-center animate-fade-in">
+      <div className="w-full flex items-center justify-between mb-8">
+        <button onClick={() => setView('main')} className="text-white/70 hover:text-white flex items-center gap-1 font-bold">
+          &larr; Back
+        </button>
+        <h2 className="text-xl font-black text-white">Invite Partner</h2>
+        <div className="w-16"></div>
       </div>
-      <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar">
-        {/* Partner Code Share */}
-        <div className="p-4 rounded-2xl space-y-2" style={{ background: '#EDE9FE' }}>
-          <p className="text-xs font-bold text-brand">{t.partnerCode}</p>
-          <div className="text-4xl font-black tracking-widest text-brand font-mono">#{partnerCode}</div>
-          <div className="flex gap-2">
-            <button onClick={handleCopyCode}
-              className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-white text-brand">
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? t.roomCopied : t.roomCopy}
-            </button>
-            <button onClick={() => setPartnerCode(Math.floor(1000 + Math.random() * 9000).toString())}
-              className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-white text-ink-3">
-              <RefreshCw className="w-3 h-3" /> New
-            </button>
-            <button onClick={handleShareWhatsApp}
-              className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-lg bg-green-600 text-white ml-auto">
-              <Share2 className="w-3.5 h-3.5" /> WhatsApp
-            </button>
-          </div>
-        </div>
 
-        {/* Relationship type */}
-        <div className="space-y-2">
-          <p className="text-sm font-black text-ink">{t.relationshipType}</p>
-          <div className="grid grid-cols-2 gap-2">
-            {RELATIONSHIP_OPTIONS.map(({ type, emoji }) => (
-              <button key={type} onClick={() => setPartnerRel(type)}
-                className="p-3 rounded-2xl text-left transition active:scale-95"
-                style={{
-                  border: `3px solid ${partnerRel === type ? '#7C3AED' : '#E5E7EB'}`,
-                  background: partnerRel === type ? '#EDE9FE' : 'white',
-                }}>
-                <div className="text-xl mb-1">{emoji}</div>
-                <p className="text-xs font-black text-ink leading-tight">{relLabel(type)}</p>
+      <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center shadow-2xl mb-6">
+        <span className="text-5xl">💌</span>
+      </div>
+
+      <h3 className="text-2xl font-black text-white mb-2">Send an Invite</h3>
+      <p className="text-white/80 font-medium mb-8">
+        Send a magical link to your partner. When they click it, your accounts will be linked instantly!
+      </p>
+
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-left">
+          <label className="block text-sm font-bold text-white/90 mb-3">What are you two?</label>
+          <div className="grid grid-cols-2 gap-3">
+            {RELATIONSHIP_OPTIONS.map(opt => (
+              <button
+                key={opt.type}
+                onClick={() => setPartnerRel(opt.type)}
+                className={`p-3 rounded-2xl border-2 flex items-center gap-2 font-bold transition-all ${
+                  partnerRel === opt.type 
+                    ? 'border-pink-400 bg-pink-500/20 text-pink-300' 
+                    : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                }`}
+              >
+                <span className="text-xl">{opt.emoji}</span>
+                <span className="text-sm capitalize">{relLabel(opt.type)}</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Partner name */}
-        <div className="space-y-2">
-          <label className="text-sm font-black text-ink">Their nickname:</label>
-          <input type="text" maxLength={20} value={partnerName}
-            onChange={e => setPartnerName(e.target.value)}
-            placeholder="e.g. Zaim"
-            className="w-full px-4 py-3 rounded-2xl border-[3px] outline-none text-base font-bold text-ink"
-            style={{ borderColor: partnerName ? '#7C3AED' : '#E5E7EB', background: '#FAFAFA' }} />
-        </div>
-
-        {/* Partner avatar */}
-        <div className="space-y-2">
-          <p className="text-sm font-black text-ink">Pick their character:</p>
-          <AvatarPicker selected={partnerAvatar} onChange={setPartnerAvatar} />
-        </div>
-
-        <button onClick={handleSavePartner} disabled={!partnerName.trim()}
-          className={`btn-chunky w-full text-sm ${partnerName.trim() ? 'btn-pink' : 'btn-white opacity-50'}`}>
-          💗 Link {partnerName || 'Partner'}
+        <button onClick={handleShareWhatsApp} className="w-full btn-chunky btn-green py-4 mt-8">
+          <Share2 className="w-5 h-5" /> Send Invite Link
         </button>
       </div>
     </div>

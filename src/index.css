@@ -8,6 +8,7 @@
 @layer base {
   html {
     background-color: #7C3AED;
+    overscroll-behavior-y: none;
   }
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -15,6 +16,7 @@
     -webkit-tap-highlight-color: transparent;
     background: #7C3AED;
     min-height: 100dvh;
+    overscroll-behavior-y: none;
   }
   * {
     box-sizing: border-box;
