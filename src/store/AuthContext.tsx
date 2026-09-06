@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import { AdModal } from '../components/AdModal';
+
+const MULTIPLAYER_DAILY_LIMIT = 3;
+const SOLO_DAILY_LIMIT = 5;
 
 interface AuthContextType {
   session: Session | null;
@@ -15,6 +19,7 @@ interface AuthContextType {
   refreshCouple: () => Promise<void>;
   incrementPlayCount: (type: 'solo' | 'multiplayer') => Promise<void>;
   awardBonusPlay: (type: 'solo' | 'multiplayer') => Promise<void>;
+  checkLimit: (type: 'solo' | 'multiplayer') => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -30,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   refreshCouple: async () => {},
   incrementPlayCount: async () => {},
   awardBonusPlay: async () => {},
+  checkLimit: () => true,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -41,6 +47,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [couple, setCouple] = useState<CoupleProgress | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
+  const [adLimitType, setAdLimitType] = useState<'solo' | 'multiplayer' | null>(null);
+
+  const checkLimit = (type: 'solo' | 'multiplayer') => {
+    const limit = type === 'solo' ? SOLO_DAILY_LIMIT : MULTIPLAYER_DAILY_LIMIT;
+    const count = type === 'solo' ? progress?.solo_play_count : progress?.play_together_count;
+    if (!progress?.is_premium && (count || 0) >= limit) {
+      setAdLimitType(type);
+      setIsAdModalOpen(true);
+      return false;
+    }
+    return true;
+  };
 
   const refreshProgress = async () => {
     if (!user) return;
@@ -226,8 +246,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay, checkLimit }}>
       {children}
+      {isAdModalOpen && adLimitType && (
+        <AdModal 
+          title={adLimitType === 'multiplayer' ? "Multiplayer Limit Reached" : "Daily Limit Reached"}
+          description={adLimitType === 'multiplayer' 
+            ? `You've used your ${MULTIPLAYER_DAILY_LIMIT} free multiplayer sessions for today.`
+            : `You've completed ${SOLO_DAILY_LIMIT} solo games today!`}
+          rewardText={adLimitType === 'multiplayer' ? "1 Multiplayer Session" : "1 Solo Game"}
+          onClose={() => setIsAdModalOpen(false)}
+          onRewardEarned={() => {
+            awardBonusPlay(adLimitType);
+            setIsAdModalOpen(false);
+          }}
+        />
+      )}
     </AuthContext.Provider>
   );
 };

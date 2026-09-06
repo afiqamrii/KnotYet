@@ -4,10 +4,12 @@ import { Sparkles, Dices, RotateCcw, X } from 'lucide-react';
 import { WHEEL_SEGMENTS, WheelSegment } from '../data/questions';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
+import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 
 export const SpinWheel: React.FC = () => {
   const { t, addHeartPoints } = useGame();
+  const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
@@ -59,6 +61,9 @@ export const SpinWheel: React.FC = () => {
       setSelectedSegment(landed);
       setActivePrompt(landed.prompts[promptIdx]);
       setShowModal(true);
+      if (multiplayer.status !== 'connected') {
+        incrementPlayCount('solo');
+      }
       addHeartPoints(HEART_POINTS.COMPLETE_WHEEL, multiplayer.status === 'connected');
       sounds.playSuccess();
       confetti({ particleCount: 90, spread: 100, origin: { y: 0.6 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15', '#F97316'] });
@@ -67,6 +72,10 @@ export const SpinWheel: React.FC = () => {
 
   const spinTheWheel = () => {
     if (spinning) return;
+    
+    if (multiplayer.status !== 'connected' && !checkLimit('solo')) {
+      return;
+    }
     
     const extraRotations = 360 * (5 + Math.floor(Math.random() * 4));
     const randomSegmentIndex = Math.floor(Math.random() * numSegments);

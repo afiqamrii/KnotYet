@@ -4,6 +4,7 @@ import { Heart, Sparkles, RefreshCw, Trophy } from 'lucide-react';
 import { GUESS_QUIZ_LIST } from '../data/questions';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
+import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 import { Avatar } from './AvatarPicker';
 import { getContextualMeme } from '../utils/memes';
@@ -39,6 +40,7 @@ class CoupleGuessErrorBoundary extends Component<{children: React.ReactNode}, {h
 
 const CoupleGuessGameInner: React.FC = () => {
   const { t, profile, partner, addHeartPoints, deductHeartPoints } = useGame();
+  const { checkLimit, incrementPlayCount } = useAuth();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [stage, setStage] = useState<'secret' | 'guess' | 'reveal'>('secret');
@@ -63,6 +65,7 @@ const CoupleGuessGameInner: React.FC = () => {
       setPointsToast(null);
     } else {
       setCompleted(true);
+      if (multiplayer.status !== 'connected') incrementPlayCount('solo');
       addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
       if (score === GUESS_QUIZ_LIST.length - 1) addHeartPoints(HEART_POINTS.PERFECT_QUIZ, multiplayer.status === 'connected'); 
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15'] });
@@ -137,6 +140,10 @@ const CoupleGuessGameInner: React.FC = () => {
   }, [multiplayer.status, multiplayer.messageListener, executeNext, handleRestart, receiveGuess]);
 
   const handleSelectActual = (option: string) => {
+    if (currentIndex === 0 && multiplayer.status !== 'connected' && !checkLimit('solo')) {
+      return;
+    }
+
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'QUIZ_ACTUAL', payload: option });
     }

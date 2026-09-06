@@ -8,7 +8,6 @@ import { SpinWheel } from './components/SpinWheel';
 import { MatchGame } from './components/MatchGame';
 import { RoomModal } from './components/RoomModal';
 import { SummaryModal } from './components/SummaryModal';
-import { AdModal } from './components/AdModal';
 import { getAvatar } from './components/AvatarPicker';
 import { GameProvider, useGame, HEART_POINTS } from './store/GameContext';
 import { useAuth } from './store/AuthContext';
@@ -25,7 +24,7 @@ type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
   const { profile, partner, setPartner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
-  const { user, couple, refreshCouple, progress, isLoading, awardBonusPlay, incrementPlayCount } = useAuth();
+  const { user, couple, refreshCouple, progress, isLoading, checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
@@ -61,11 +60,6 @@ const AppInner: React.FC = () => {
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
   const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
-  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
-  const [adLimitType, setAdLimitType] = useState<'solo' | 'multiplayer' | null>(null);
-  
-  const MULTIPLAYER_DAILY_LIMIT = 3;
-  const SOLO_DAILY_LIMIT = 5;
 
   const previousTab = React.useRef<ActiveTab | 'lobby'>('lobby');
 
@@ -279,9 +273,7 @@ const AppInner: React.FC = () => {
   };
 
   const handleSwipe = (direction: 'left' | 'right') => {
-    if (multiplayer.status !== 'connected' && !progress?.is_premium && (progress?.solo_play_count || 0) >= SOLO_DAILY_LIMIT) {
-      setAdLimitType('solo');
-      setIsAdModalOpen(true);
+    if (multiplayer.status !== 'connected' && !checkLimit('solo')) {
       return;
     }
 
@@ -564,11 +556,7 @@ const AppInner: React.FC = () => {
                   if (multiplayer.status === 'connected') {
                     setIsDisconnectModalOpen(true);
                   } else {
-                    if (!progress?.is_premium && (progress?.play_together_count || 0) >= MULTIPLAYER_DAILY_LIMIT) {
-                      setAdLimitType('multiplayer');
-                      setIsAdModalOpen(true);
-                      return;
-                    }
+                    if (!checkLimit('multiplayer')) return;
                     setIsRoomModalOpen(true);
                   }
                 }}
@@ -827,19 +815,19 @@ const AppInner: React.FC = () => {
             )}
           </div>
         )}
-        {isAdModalOpen && adLimitType && (
-          <AdModal 
-            title={adLimitType === 'multiplayer' ? "Multiplayer Limit Reached" : "Daily Limit Reached"}
-            description={adLimitType === 'multiplayer' 
-              ? `You've used your ${MULTIPLAYER_DAILY_LIMIT} free multiplayer sessions for today.`
-              : `You've completed ${SOLO_DAILY_LIMIT} solo games today!`}
-            rewardText={adLimitType === 'multiplayer' ? "1 Multiplayer Session" : "1 Solo Game"}
-            onClose={() => setIsAdModalOpen(false)}
-            onRewardEarned={() => {
-              awardBonusPlay(adLimitType);
-              setIsAdModalOpen(false);
-            }}
-          />
+        {/* Partner Accepted Live Toast */}
+        {partnerAcceptedToast && (
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-soft">
+            <div className={`bg-white rounded-3xl p-4 shadow-2xl border-4 flex flex-col items-center text-center ${partnerAcceptedToast.relationshipType === 'unlinked' ? 'border-red-400' : 'border-pink-400'}`}>
+              <span className="text-4xl mb-2">{partnerAcceptedToast.relationshipType === 'unlinked' ? '💔' : '💘'}</span>
+              <h3 className={`text-lg font-black ${partnerAcceptedToast.relationshipType === 'unlinked' ? 'text-red-500' : 'text-pink-500'}`}>
+                {partnerAcceptedToast.relationshipType === 'unlinked' ? 'Partner Unlinked' : `Yay! ${partnerAcceptedToast.name} accepted!`}
+              </h3>
+              <p className="text-sm font-bold text-ink-3">
+                {partnerAcceptedToast.relationshipType === 'unlinked' ? 'Your accounts are no longer connected.' : 'Your accounts are now linked.'}
+              </p>
+            </div>
+          </div>
         )}
       </div>
     </div>
