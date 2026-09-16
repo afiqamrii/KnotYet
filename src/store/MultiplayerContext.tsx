@@ -15,16 +15,20 @@ export type MultiplayerMessage =
   | { type: 'QUIZ_NEXT' }
   | { type: 'SPIN_WHEEL'; payload: { rotation: number, segmentIndex: number, promptIndex: number } }
   | { type: 'WHEEL_SUBMIT'; payload: string }
+  | { type: 'SYNC_QUESTION_IDS'; payload: { game: GameMode; questionIds: string[] } }
   | { type: 'MATCH_SELECT'; payload: string }
   | { type: 'MATCH_NEXT' }
-  | { type: 'MATCH_RESTART' }
-  | { type: 'QUIZ_RESTART' }
+  | { type: 'MATCH_RESTART'; payload?: { questionIds?: string[] } }
+  | { type: 'QUIZ_RESTART'; payload?: { questionIds?: string[] } }
   | { type: 'NUM_SET_SECRET'; payload: number }
   | { type: 'NUM_GUESS'; payload: { val: number; name?: string } | number }
   | { type: 'NUM_NEXT' }
   | { type: 'LETTER_START'; payload: string }
   | { type: 'LETTER_WORD_SUBMIT'; payload: string }
   | { type: 'LETTER_NEXT' }
+  | { type: 'START_GAME'; payload: { game: GameMode; questionIds?: string[] } }
+  | { type: 'START_COUNTDOWN'; payload: { game: GameMode } }
+  | { type: 'END_GAME' }
   | { type: 'LEAVE_ROOM' };
 
 interface MultiplayerState {
@@ -134,6 +138,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setState(s => ({ ...s, remoteProfile: msg.payload }));
       } else if (msg.type === 'SET_GAME') {
         setState(s => ({ ...s, activeGame: msg.payload }));
+        if (messageListener.current) {
+          messageListener.current(msg);
+        }
+      } else if (msg.type === 'END_GAME') {
+        setState(s => ({ ...s, activeGame: 'lobby' }));
+        if (messageListener.current) {
+          messageListener.current(msg);
+        }
       } else if (msg.type === 'LEAVE_ROOM') {
         handlePartnerLeft();
       } else {

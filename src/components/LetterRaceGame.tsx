@@ -36,6 +36,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { profile, partner, addHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
+  const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
 
   const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => (sessionStorage.getItem('letter_stage') as any) || 'wait');
   const [letter, setLetter] = useState<string | null>(() => sessionStorage.getItem('letter_char') || null);
@@ -154,16 +155,14 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (onEndGame) {
       onEndGame();
     } else {
-      if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
-        sessionStorage.removeItem('letter_stage');
-        sessionStorage.removeItem('letter_letter');
-        
-        const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
-        stored.letter = false;
-        sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
-        
-        window.location.reload();
-      }
+      sessionStorage.removeItem('letter_stage');
+      sessionStorage.removeItem('letter_letter');
+      
+      const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+      stored.letter = false;
+      sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+      
+      window.location.reload();
     }
   };
 
@@ -192,38 +191,38 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
       </div>
 
       {/* Game card fills remaining space */}
-      <div className="game-card flex-1 flex flex-col relative overflow-hidden bg-white p-5 animate-pop-in">
+      <div className="game-card flex-1 flex flex-col relative overflow-hidden bg-white p-3.5 sm:p-5 animate-pop-in">
         
         {stage === 'wait' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-6 animate-pop-in z-10">
-            <div className="w-20 h-20 rounded-3xl bg-white shadow-xl flex items-center justify-center animate-float"
+          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 space-y-4 sm:space-y-6 animate-pop-in z-10">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-white shadow-xl flex items-center justify-center animate-float shrink-0"
               style={{ border: '4px solid #FDF4FF' }}>
-              <Zap className="w-10 h-10 text-fuchsia-500" />
+              <Zap className="w-8 h-8 sm:w-10 sm:h-10 text-fuchsia-500" />
             </div>
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-black text-ink">Ready to Race?</h3>
-              <p className="text-sm text-ink-3 font-medium">
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg sm:text-xl font-black text-ink">Ready to Race?</h3>
+              <p className="text-xs sm:text-sm text-ink-3 font-medium max-w-xs">
                 {isMultiplayer 
                   ? "A random letter will appear. Be the first to type a word starting with it!" 
-                  : "Put the phone between you. When the letter appears, shout a word and be the first to tap your side!"}
+                  : "Put phone between you. When the letter appears, shout a word and be the first to tap your side!"}
               </p>
             </div>
             
             {(!isMultiplayer || multiplayer.isHost) ? (
               <button
                 onClick={startRace}
-                className="btn-chunky w-full py-4 mt-2"
+                className="btn-chunky w-full py-3 sm:py-3.5 mt-2 text-sm sm:text-base"
                 style={{
                   background: 'linear-gradient(135deg, #D946EF, #A855F7)',
                   color: 'white',
-                  boxShadow: '0 6px 0 #C026D3, 0 8px 24px rgba(217,70,239,0.4)'
+                  boxShadow: '0 5px 0 #C026D3, 0 8px 20px rgba(217,70,239,0.35)'
                 }}
               >
                 Start Race!
               </button>
             ) : (
-              <div className="py-4 text-fuchsia-600 font-bold animate-pulse">
-                Waiting for host to start...
+              <div className="py-3 text-fuchsia-600 font-bold animate-pulse text-sm">
+                Waiting for {partnerName} to start the race...
               </div>
             )}
           </div>
@@ -231,12 +230,12 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
 
         {stage === 'countdown' && (
           <div className="flex-1 flex flex-col items-center justify-center animate-pop-in z-10">
-            <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center shadow-2xl border-4 border-fuchsia-200">
-              <span className="text-6xl font-black text-fuchsia-600 drop-shadow-md animate-countdown-pop" key={countdown}>
+            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-white flex items-center justify-center shadow-2xl border-4 border-fuchsia-200">
+              <span className="text-5xl sm:text-6xl font-black text-fuchsia-600 drop-shadow-md animate-countdown-pop" key={countdown}>
                 {countdown}
               </span>
             </div>
-            <p className="mt-6 text-fuchsia-500 font-bold text-lg animate-pulse">Get ready...</p>
+            <p className="mt-4 sm:mt-6 text-fuchsia-500 font-bold text-base sm:text-lg animate-pulse">Get ready...</p>
           </div>
         )}
 
@@ -249,41 +248,41 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="rotate-180 text-white text-center">
-                <span className="block text-4xl font-black drop-shadow-lg mb-2">{letter}</span>
-                <span className="block text-xl font-bold bg-black/20 px-6 py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">TAP IF YOU GOT IT!</span>
+                <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
+                <span className="block text-sm sm:text-lg font-bold bg-black/20 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">TAP IF YOU GOT IT!</span>
               </div>
             </button>
             
             {/* Divider */}
-            <div className="h-2 bg-slate-900 w-full z-20 shadow-[0_0_15px_rgba(0,0,0,0.5)]"></div>
+            <div className="h-1.5 bg-slate-900 w-full z-20 shadow-[0_0_15px_rgba(0,0,0,0.5)]"></div>
             
             {/* Bottom Half - Local User */}
             <button 
               onClick={() => handleFaceToFaceTap('bottom')}
               className="flex-1 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 transition-colors flex items-center justify-center relative overflow-hidden group"
             >
-               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
+              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="text-white text-center">
-                <span className="block text-4xl font-black drop-shadow-lg mb-2">{letter}</span>
-                <span className="block text-xl font-bold bg-black/20 px-6 py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">TAP IF YOU GOT IT!</span>
+                <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
+                <span className="block text-sm sm:text-lg font-bold bg-black/20 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">TAP IF YOU GOT IT!</span>
               </div>
             </button>
           </div>
         )}
 
         {stage === 'race' && isMultiplayer && (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-8 animate-pop-in z-10">
+          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 space-y-4 sm:space-y-6 animate-pop-in z-10">
             <div className="text-center">
-              <h2 className="text-8xl font-black text-fuchsia-600 drop-shadow-xl mb-2">{letter}</h2>
-              <p className="text-fuchsia-500 font-bold">Type a word starting with '{letter}'!</p>
+              <h2 className="text-6xl sm:text-8xl font-black text-fuchsia-600 drop-shadow-xl mb-1">{letter}</h2>
+              <p className="text-fuchsia-500 font-bold text-xs sm:text-sm">Type a word starting with '{letter}'!</p>
             </div>
             
-            <form onSubmit={handleWordSubmit} className="w-full space-y-4">
+            <form onSubmit={handleWordSubmit} className="w-full space-y-3">
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value.toUpperCase())}
-                className={`w-full text-center text-3xl font-black text-fuchsia-600 bg-white border-4 rounded-2xl py-4 focus:outline-none transition-colors ${
+                className={`w-full text-center text-2xl sm:text-3xl font-black text-fuchsia-600 bg-white border-3 rounded-2xl py-3 focus:outline-none transition-colors ${
                   inputValue && !inputValue.startsWith(letter!) ? 'border-red-400 focus:border-red-500' : 'border-fuchsia-200 focus:border-fuchsia-400'
                 }`}
                 placeholder={`${letter}...`}
@@ -292,11 +291,11 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
               <button
                 type="submit"
                 disabled={!inputValue || !inputValue.startsWith(letter!)}
-                className="btn-chunky w-full py-4 disabled:opacity-50"
+                className="btn-chunky w-full py-3 sm:py-3.5 text-sm sm:text-base disabled:opacity-50"
                 style={{
                   background: 'linear-gradient(135deg, #10B981, #059669)',
                   color: 'white',
-                  boxShadow: '0 6px 0 #047857, 0 8px 24px rgba(16,185,129,0.4)'
+                  boxShadow: '0 5px 0 #047857, 0 6px 18px rgba(16,185,129,0.35)'
                 }}
               >
                 Submit!
@@ -306,39 +305,39 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'winner' && winner && (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-pop-in z-10">
+          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 text-center animate-pop-in z-10">
             {winGif ? (
-              <div className="w-32 h-32 rounded-2xl overflow-hidden shadow-lg mx-auto mb-6" style={{ border: '4px solid #FDE047' }}>
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-lg mx-auto mb-3 sm:mb-4 shrink-0" style={{ border: '4px solid #FDE047' }}>
                 <img src={winGif} alt="Winner" className="w-full h-full object-cover" />
               </div>
             ) : (
-              <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center animate-bounce-soft mb-6 border-4 border-yellow-200">
-                <Trophy className="w-12 h-12 text-yellow-500" />
+              <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center animate-bounce-soft mb-3 sm:mb-4 border-4 border-yellow-200 shrink-0">
+                <Trophy className="w-10 h-10 text-yellow-500" />
               </div>
             )}
             
-            <h3 className="text-3xl font-black text-ink mb-2">{winner.name} Wins!</h3>
+            <h3 className="text-xl sm:text-2xl font-black text-ink mb-1.5">{winner.name} Wins!</h3>
             
-            <div className="bg-white px-6 py-4 rounded-2xl shadow-sm border-2 border-fuchsia-100 mb-8 inline-block">
-              <p className="text-sm text-ink-3 font-semibold mb-1">Winning word for '{letter}':</p>
-              <p className="text-2xl font-black text-fuchsia-600">{winner.word}</p>
+            <div className="bg-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-2xl shadow-sm border-2 border-fuchsia-100 mb-4 sm:mb-6 inline-block">
+              <p className="text-xs text-ink-3 font-semibold mb-0.5">Winning word for '{letter}':</p>
+              <p className="text-xl sm:text-2xl font-black text-fuchsia-600">{winner.word}</p>
             </div>
             
             {(!isMultiplayer || multiplayer.isHost) ? (
               <button
                 onClick={handleNextRound}
-                className="btn-chunky w-full py-4"
+                className="btn-chunky w-full py-3 sm:py-3.5 text-sm sm:text-base"
                 style={{
                   background: 'linear-gradient(135deg, #D946EF, #A855F7)',
                   color: 'white',
-                  boxShadow: '0 6px 0 #C026D3, 0 8px 24px rgba(217,70,239,0.4)'
+                  boxShadow: '0 5px 0 #C026D3, 0 6px 18px rgba(217,70,239,0.35)'
                 }}
               >
                 Play Next Round
               </button>
             ) : (
-              <div className="py-4 text-fuchsia-600 font-bold animate-pulse">
-                Waiting for host to restart...
+              <div className="py-3 text-fuchsia-600 font-bold animate-pulse text-sm">
+                Waiting for {partnerName} to start the next round...
               </div>
             )}
           </div>

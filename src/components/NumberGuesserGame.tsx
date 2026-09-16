@@ -37,6 +37,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { profile, partner, addHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
+  const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
 
   const [stage, setStage] = useState<'setup' | 'guess' | 'reveal'>(() => {
     if (multiplayer.status === 'connected') return 'guess';
@@ -44,7 +45,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     return (s === 'reveal' || s === 'guess') ? s as 'reveal' | 'guess' : 'setup';
   });
   const [secretNumber, setSecretNumber] = useState<number | null>(() => Number(sessionStorage.getItem('num_secret')) || null);
-  const [guesses, setGuesses] = useState<{ value: number; hint: 'higher' | 'lower' }[]>(() => {
+  const [guesses, setGuesses] = useState<{ value: number; hint: 'higher' | 'lower'; guesser?: string }[]>(() => {
     try {
       return JSON.parse(sessionStorage.getItem('num_guesses') || '[]');
     } catch { return []; }
@@ -106,7 +107,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
       setWinGif(gif);
     } else {
       const hint = val < secretNumber ? 'higher' : 'lower';
-      setGuesses(prev => [{ value: val, hint }, ...prev]);
+      setGuesses(prev => [{ value: val, hint, guesser }, ...prev]);
       sounds.playMismatch();
       
       const { getHintMeme } = await import('../utils/memes');
@@ -175,19 +176,6 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const handleEndGame = () => {
     if (onEndGame) {
       onEndGame();
-    } else {
-      if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
-        sessionStorage.removeItem('num_stage');
-        sessionStorage.removeItem('num_secret');
-        sessionStorage.removeItem('num_guesses');
-        sessionStorage.removeItem('num_round');
-        
-        const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
-        stored.number = false;
-        sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
-        
-        window.location.reload();
-      }
     }
   };
 
@@ -205,7 +193,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
               <span>Round {round}</span>
               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-indigo-500/80 text-white text-[9px] font-black">
-                {currentTurnName}'s Turn
+                {multiplayer.status === 'connected' ? (isMyTurn ? 'Your Turn' : `${partnerName}'s Turn`) : `${currentTurnName}'s Turn`}
               </span>
             </div>
           </div>
@@ -218,31 +206,31 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         </button>
       </div>
 
-      <div className="game-card w-full flex-1 flex flex-col justify-between p-5 overflow-y-auto no-scrollbar relative animate-pop-in">
+      <div className="game-card w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
         {stage === 'setup' && (
-          <div className="w-full flex-1 flex flex-col justify-between items-center animate-slide-up py-2">
-            <div className="text-center space-y-2 shrink-0">
-              <h3 className="text-2xl font-black text-ink">Who is playing?</h3>
-              <p className="text-sm text-ink-3">Enter names for Player 1 and Player 2.</p>
+          <div className="w-full flex-1 flex flex-col justify-between items-center animate-slide-up py-1">
+            <div className="text-center space-y-1 shrink-0">
+              <h3 className="text-xl font-black text-ink">Who is playing?</h3>
+              <p className="text-xs text-ink-3">Enter names for Player 1 and Player 2.</p>
             </div>
-            <div className="w-full space-y-4 my-auto py-4">
+            <div className="w-full space-y-2.5 my-auto py-2">
               <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-indigo-700 mb-1">Player 1</label>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-indigo-700 mb-1">Player 1</label>
                 <input
                   type="text"
                   value={localP1Name}
                   onChange={(e) => setLocalP1Name(e.target.value)}
-                  className="w-full text-center text-xl font-bold text-indigo-600 bg-indigo-50 border-4 border-indigo-100 rounded-2xl py-3.5 focus:outline-none focus:border-indigo-300 shadow-sm"
+                  className="w-full text-center text-lg font-bold text-indigo-600 bg-indigo-50 border-3 border-indigo-100 rounded-xl py-2.5 focus:outline-none focus:border-indigo-300 shadow-sm"
                   placeholder="Player 1 Name"
                 />
               </div>
               <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-pink-700 mb-1">Player 2</label>
+                <label className="block text-[11px] font-black uppercase tracking-wider text-pink-700 mb-1">Player 2</label>
                 <input
                   type="text"
                   value={localP2Name}
                   onChange={(e) => setLocalP2Name(e.target.value)}
-                  className="w-full text-center text-xl font-bold text-pink-600 bg-pink-50 border-4 border-pink-100 rounded-2xl py-3.5 focus:outline-none focus:border-pink-300 shadow-sm"
+                  className="w-full text-center text-lg font-bold text-pink-600 bg-pink-50 border-3 border-pink-100 rounded-xl py-2.5 focus:outline-none focus:border-pink-300 shadow-sm"
                   placeholder="Player 2 Name"
                 />
               </div>
@@ -251,7 +239,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
               <button
                 onClick={() => setStage('guess')}
                 disabled={!localP1Name.trim() || !localP2Name.trim()}
-                className="btn-chunky w-full py-4 disabled:opacity-50"
+                className="btn-chunky w-full py-3 text-sm disabled:opacity-50"
                 style={{
                   background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
                   color: 'white',
@@ -265,67 +253,82 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'guess' && (
-          <div className="w-full flex-1 flex flex-col justify-between animate-slide-up py-2">
-            <div className="text-center shrink-0 space-y-1">
-              <h3 className="text-2xl font-black text-ink">
+          <div className="w-full flex-1 flex flex-col justify-between animate-slide-up py-1">
+            <div className="text-center shrink-0 space-y-0.5">
+              <h3 className="text-lg sm:text-xl font-black text-ink">
                 {currentTurnName}'s Turn
               </h3>
-              <p className="text-xs font-semibold text-ink-3">Guess the secret number between {MIN_NUM} and {MAX_NUM}.</p>
+              <p className="text-[11px] font-semibold text-ink-3">Guess the number between {MIN_NUM} and {MAX_NUM}.</p>
             </div>
 
             {/* Guess History */}
             {guesses.length > 0 && (
-              <div className="bg-slate-50 rounded-2xl p-3 max-h-36 overflow-y-auto space-y-2 no-scrollbar border-2 border-slate-100 my-2">
+              <div className="bg-slate-50 rounded-xl p-2 max-h-24 overflow-y-auto space-y-1.5 no-scrollbar border-2 border-slate-100 my-1 shrink-0">
                 {guesses.map((g, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2 bg-white rounded-xl shadow-sm border border-slate-100">
-                    <span className="font-bold text-sm text-slate-700">Guessed: {g.value}</span>
-                    <span className={`font-black text-xs flex items-center gap-1 ${g.hint === 'higher' ? 'text-indigo-500' : 'text-pink-500'}`}>
-                      {g.hint === 'higher' ? <><ArrowUp className="w-4 h-4"/> Higher</> : <><ArrowDown className="w-4 h-4"/> Lower</>}
+                  <div key={i} className="flex items-center justify-between px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100">
+                    <span className="font-bold text-xs text-slate-700">
+                      <span className="font-black text-ink-3 mr-1">{g.guesser || 'Guessed'}:</span>
+                      {g.value}
+                    </span>
+                    <span className={`font-black text-[11px] flex items-center gap-1 ${g.hint === 'higher' ? 'text-indigo-500' : 'text-pink-500'}`}>
+                      {g.hint === 'higher' ? <><ArrowUp className="w-3.5 h-3.5"/> Higher</> : <><ArrowDown className="w-3.5 h-3.5"/> Lower</>}
                     </span>
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="my-auto py-2 flex flex-col items-center justify-center w-full">
+            <div className="my-auto py-1 flex flex-col items-center justify-center w-full">
               {hintPopup ? (
-                <div className="flex flex-col items-center justify-center p-2 animate-pop-in space-y-3">
-                  <h4 className={`text-3xl font-black ${hintPopup.hint === 'higher' ? 'text-indigo-600' : 'text-pink-600'}`}>
+                <div className="flex flex-col items-center justify-center p-1 animate-pop-in space-y-2">
+                  <h4 className={`text-2xl font-black ${hintPopup.hint === 'higher' ? 'text-indigo-600' : 'text-pink-600'}`}>
                     {hintPopup.hint.toUpperCase()}!
                   </h4>
-                  <div className="w-40 h-40 rounded-2xl overflow-hidden shadow-lg" style={{ border: `4px solid ${hintPopup.hint === 'higher' ? '#6366F1' : '#EC4899'}` }}>
+                  <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-2xl overflow-hidden shadow-lg" style={{ border: `3px solid ${hintPopup.hint === 'higher' ? '#6366F1' : '#EC4899'}` }}>
                     <img src={hintPopup.gif} alt={hintPopup.hint} className="w-full h-full object-cover" />
                   </div>
                 </div>
               ) : (
                 isMyTurn ? (
-                  <form onSubmit={handleGuess} className="w-full space-y-4 animate-fade-in">
+                  <form onSubmit={handleGuess} className="w-full space-y-2.5 animate-fade-in">
+                    {multiplayer.status === 'connected' && (
+                      <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center animate-bounce-soft mb-1">
+                        <p className="text-xs font-black text-emerald-800 flex items-center justify-center gap-1.5">
+                          <span>🎯</span> Your Turn! {partnerName} is waiting for your guess...
+                        </p>
+                      </div>
+                    )}
                     <input
                       type="number"
                       min={MIN_NUM}
                       max={MAX_NUM}
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
-                      className="w-full text-center text-4xl font-black text-indigo-600 bg-indigo-50 border-4 border-indigo-100 rounded-2xl py-4 focus:outline-none focus:border-indigo-300 shadow-inner"
+                      className="w-full text-center text-3xl font-black text-indigo-600 bg-indigo-50 border-3 border-indigo-100 rounded-xl py-2.5 focus:outline-none focus:border-indigo-300 shadow-inner"
                       placeholder="?"
                       autoFocus
                     />
                     <button
                       type="submit"
                       disabled={!inputValue || parseInt(inputValue) < MIN_NUM || parseInt(inputValue) > MAX_NUM}
-                      className="btn-chunky w-full py-4 disabled:opacity-50"
+                      className="btn-chunky w-full py-3 text-sm disabled:opacity-50"
                       style={{
                         background: 'linear-gradient(135deg, #10B981, #059669)',
                         color: 'white',
-                        boxShadow: '0 6px 0 #047857, 0 8px 24px rgba(16,185,129,0.4)'
+                        boxShadow: '0 4px 0 #047857, 0 6px 16px rgba(16,185,129,0.35)'
                       }}
                     >
                       Submit Guess!
                     </button>
                   </form>
                 ) : (
-                   <div className="py-6 text-center animate-pulse text-indigo-500 font-bold">
-                     Waiting for {currentTurnName} to guess...
+                   <div className="py-4 text-center animate-slide-up space-y-2 bg-indigo-50/80 border-2 border-indigo-200 rounded-2xl p-4 w-full">
+                     <p className="text-xs sm:text-sm font-black text-indigo-700 flex items-center justify-center gap-1.5">
+                       <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+                       Waiting for {partnerName} to make a guess...
+                     </p>
+                     <p className="text-[10px] font-semibold text-ink-3">Pay attention to the higher / lower clues!</p>
+                     <div className="w-6 h-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mx-auto" />
                    </div>
                 )
               )}

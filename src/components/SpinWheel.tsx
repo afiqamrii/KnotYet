@@ -6,15 +6,17 @@ import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
+import { getRandomUnseenWheelPromptIndex } from '../utils/questionManager';
 
 export interface Props {
   onEndGame?: () => void;
 }
 
 export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
-  const { t, addHeartPoints } = useGame();
+  const { t, partner, addHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
+  const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [selectedSegment, setSelectedSegment] = useState<WheelSegment | null>(null);
@@ -87,7 +89,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
     const newRotation = rotation + extraRotations + (targetDegree - (rotation % 360));
     
     const landed = WHEEL_SEGMENTS[randomSegmentIndex];
-    const promptIndex = Math.floor(Math.random() * landed.prompts.length);
+    const promptIndex = getRandomUnseenWheelPromptIndex(landed.id, landed.prompts.length);
 
     if (multiplayer.status === 'connected') {
       setMyAnswer(null);
@@ -104,18 +106,6 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   const handleEndGame = () => {
     if (onEndGame) {
       onEndGame();
-    } else {
-      if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
-        sessionStorage.removeItem('wheel_spin_state');
-        sessionStorage.removeItem('wheel_rotation');
-        sessionStorage.removeItem('wheel_selectedIdea');
-        
-        const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
-        stored.wheel = false;
-        sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
-        
-        window.location.reload();
-      }
     }
   };
 
@@ -144,19 +134,19 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
       </div>
 
       {/* Main Game Card - Full Height Flexible */}
-      <div className="game-card w-full flex-1 flex flex-col items-center justify-between p-5 overflow-y-auto no-scrollbar relative animate-pop-in">
+      <div className="game-card w-full flex-1 flex flex-col items-center justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
         {/* Header inside Card */}
-        <div className="text-center space-y-1 shrink-0">
-          <h3 className="text-xl font-black text-ink">{t.wheelTitle}</h3>
-          <p className="text-[11px] text-ink-3 font-medium">{t.wheelSub}</p>
+        <div className="text-center space-y-0.5 shrink-0">
+          <h3 className="text-base sm:text-xl font-black text-ink">{t.wheelTitle}</h3>
+          <p className="text-[10px] sm:text-[11px] text-ink-3 font-medium">{t.wheelSub}</p>
         </div>
 
         {/* Wheel */}
-        <div className="relative my-auto py-2 shrink-0" style={{ width: 270, height: 270 }}>
+        <div className="relative my-auto py-1 shrink-0 w-[220px] h-[220px] sm:w-[260px] sm:h-[260px]">
         {/* Pointer */}
         <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
           <div className="w-0 h-0"
-            style={{ borderLeft: '14px solid transparent', borderRight: '14px solid transparent', borderTop: '22px solid #FF2D9B', filter: 'drop-shadow(0 2px 4px rgba(255,45,155,0.5))' }} />
+            style={{ borderLeft: '12px solid transparent', borderRight: '12px solid transparent', borderTop: '20px solid #FF2D9B', filter: 'drop-shadow(0 2px 4px rgba(255,45,155,0.5))' }} />
         </div>
 
         {/* Outer ring */}
@@ -253,10 +243,22 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
             {multiplayer.status === 'connected' ? (
               <div className="space-y-3 mt-4">
                 {partnerAnswer && !myAnswer && (
-                  <p className="text-xs text-brand font-bold animate-pulse">Partner is ready! Waiting for you...</p>
+                  <div className="p-2.5 rounded-xl bg-amber-50 border-2 border-amber-200 text-center animate-bounce-soft">
+                    <p className="text-xs text-amber-800 font-black flex items-center justify-center gap-1.5">
+                      <span>⚡</span> {partnerName} has already answered! Waiting for your reaction...
+                    </p>
+                  </div>
                 )}
                 {!partnerAnswer && myAnswer && (
-                  <p className="text-xs text-brand font-bold animate-pulse">Waiting for partner...</p>
+                  <div className="p-3 rounded-xl bg-purple-50 border-2 border-purple-200 text-center space-y-1.5 animate-slide-up">
+                    <p className="text-[10px] font-bold text-purple-600">
+                      ✓ You submitted: <span className="font-black text-ink">"{myAnswer}"</span>
+                    </p>
+                    <p className="text-xs text-brand font-black animate-pulse flex items-center justify-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand animate-ping" />
+                      Waiting for {partnerName} to submit...
+                    </p>
+                  </div>
                 )}
                 
                 {partnerAnswer && myAnswer ? (
@@ -267,7 +269,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
                          <p className="text-sm font-bold text-ink break-words">{myAnswer}</p>
                        </div>
                        <div className="bg-pink-50 p-2.5 rounded-xl border border-pink-100">
-                         <p className="text-[10px] uppercase font-black text-pink-400 mb-1">{multiplayer.remoteProfile?.name}</p>
+                         <p className="text-[10px] uppercase font-black text-pink-400 mb-1">{partnerName}</p>
                          <p className="text-sm font-bold text-ink break-words">{partnerAnswer}</p>
                        </div>
                     </div>

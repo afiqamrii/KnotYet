@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { sounds } from '../utils/audio';
+import { useMultiplayer } from '../store/MultiplayerContext';
 
 type GameType = 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
 
@@ -154,14 +155,17 @@ function useStableParticles(count: number) {
 interface GameIntroProps {
   gameType: GameType;
   onStart: () => void;
+  countdownTrigger?: boolean;
 }
 
-export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
+export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart, countdownTrigger }) => {
   const config = GAME_CONFIGS[gameType];
+  const multiplayer = useMultiplayer();
   const [phase, setPhase] = useState<'intro' | 'countdown' | 'go'>('intro');
   const [countdownNum, setCountdownNum] = useState(3);
   const [stepsVisible, setStepsVisible] = useState<number[]>([]);
   const particles = useStableParticles(10);
+  const isMultiplayer = multiplayer.status === 'connected';
 
   // Stagger step reveal on mount
   useEffect(() => {
@@ -169,20 +173,56 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
     config.steps.forEach((_, i) => {
       timers.push(setTimeout(() => {
         setStepsVisible(prev => [...prev, i]);
-      }, 250 + i * 220));
+      }, 150 + i * 150));
     });
     return () => timers.forEach(clearTimeout);
   }, [gameType]); // reset when game type changes
 
-  const startCountdown = useCallback(() => {
+  const startCountdown = useCallback((broadcast = true) => {
     setPhase('countdown');
     setCountdownNum(3);
     sounds.playFlip();
+
+    if (broadcast && isMultiplayer) {
+      multiplayer.sendMessage({ type: 'START_COUNTDOWN', payload: { game: gameType } });
+    }
+
     setTimeout(() => { setCountdownNum(2); sounds.playFlip(); }, 1000);
     setTimeout(() => { setCountdownNum(1); sounds.playFlip(); }, 2000);
     setTimeout(() => { setPhase('go'); sounds.playSuccess(); }, 3000);
-    setTimeout(() => { onStart(); }, 3700);
-  }, [onStart]);
+    setTimeout(() => { 
+      if (broadcast && isMultiplayer) {
+        multiplayer.sendMessage({ type: 'START_GAME', payload: { game: gameType } });
+      }
+      onStart(); 
+    }, 3700);
+  }, [isMultiplayer, multiplayer, gameType, onStart]);
+
+  // Handle external countdown trigger
+  useEffect(() => {
+    if (countdownTrigger && phase === 'intro') {
+      startCountdown(false);
+    }
+  }, [countdownTrigger, phase, startCountdown]);
+
+  // Listen for multiplayer sync
+  useEffect(() => {
+    if (isMultiplayer) {
+      const prevListener = multiplayer.messageListener.current;
+      multiplayer.messageListener.current = (msg) => {
+        if (msg.type === 'START_COUNTDOWN') {
+          startCountdown(false);
+        } else if (msg.type === 'START_GAME') {
+          onStart();
+        } else if (prevListener) {
+          prevListener(msg);
+        }
+      };
+      return () => {
+        multiplayer.messageListener.current = prevListener;
+      };
+    }
+  }, [isMultiplayer, multiplayer, startCountdown, onStart]);
 
   // ── Countdown / GO screen ──────────────────────────────────────
   if (phase === 'countdown' || phase === 'go') {
@@ -204,30 +244,30 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
           ))}
         </div>
 
-        <div className="relative z-10 flex flex-col items-center gap-4">
+        <div className="relative z-10 flex flex-col items-center gap-3">
           {phase === 'go' ? (
             <div className="animate-countdown-pop flex flex-col items-center gap-3">
-              <img src={config.gifSrc} alt="" className="w-24 h-24 rounded-3xl shadow-2xl"
+              <img src={config.gifSrc} alt="" className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl shadow-2xl"
                 style={{ border: '4px solid rgba(255,255,255,0.7)' }} />
-              <div className="text-7xl font-black text-white drop-shadow-lg tracking-tighter">
+              <div className="text-6xl sm:text-7xl font-black text-white drop-shadow-lg tracking-tighter">
                 GO!
               </div>
-              <div className="text-lg font-bold text-white/90 text-center">
+              <div className="text-base sm:text-lg font-bold text-white/90 text-center px-4">
                 {config.title}
               </div>
             </div>
           ) : (
-            <div key={countdownNum} className="animate-countdown-pop flex flex-col items-center gap-4">
-              <div className="w-36 h-36 rounded-full flex items-center justify-center"
+            <div key={countdownNum} className="animate-countdown-pop flex flex-col items-center gap-3">
+              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full flex items-center justify-center"
                 style={{
                   background: 'rgba(255,255,255,0.22)',
                   backdropFilter: 'blur(12px)',
                   border: '4px solid rgba(255,255,255,0.5)',
                   boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
                 }}>
-                <span className="text-8xl font-black text-white drop-shadow-xl">{countdownNum}</span>
+                <span className="text-7xl sm:text-8xl font-black text-white drop-shadow-xl">{countdownNum}</span>
               </div>
-              <p className="text-base font-bold text-white/80 animate-pulse">Get ready...</p>
+              <p className="text-sm sm:text-base font-bold text-white/80 animate-pulse">Get ready...</p>
             </div>
           )}
         </div>
@@ -237,10 +277,10 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
 
   // ── Intro screen ───────────────────────────────────────────────
   return (
-    <div className="game-card w-full max-w-sm mx-auto flex-1 flex flex-col justify-between overflow-y-auto no-scrollbar animate-pop-in shadow-xl my-0.5">
+    <div className="game-card w-full max-w-sm mx-auto flex-1 flex flex-col justify-between overflow-hidden animate-pop-in shadow-xl my-0.5">
 
       {/* ── Header ── */}
-      <div className="relative px-5 pt-5 pb-4 flex flex-col items-center shrink-0" style={{ background: config.gradient }}>
+      <div className="relative px-4 pt-4 pb-3 flex flex-col items-center shrink-0" style={{ background: config.gradient }}>
         <div className="absolute inset-0 dotted-pattern opacity-20" />
 
         {/* Particles */}
@@ -258,54 +298,62 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
 
         {/* Animated GIF icon */}
         <div
-          className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl animate-float mb-2 sm:mb-3"
+          className="relative z-10 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-xl animate-float mb-1.5"
           style={{
-            border: '3px solid rgba(255,255,255,0.65)',
-            boxShadow: `0 12px 36px ${config.glowColor}, 0 4px 12px rgba(0,0,0,0.12)`,
+            border: '2.5px solid rgba(255,255,255,0.7)',
+            boxShadow: `0 8px 24px ${config.glowColor}, 0 2px 8px rgba(0,0,0,0.12)`,
           }}
         >
           <img src={config.gifSrc} alt={config.title} className="w-full h-full object-cover" />
         </div>
 
-        <h2 className="relative z-10 text-xl sm:text-2xl font-black text-white text-center tracking-tight drop-shadow leading-tight">
+        <h2 className="relative z-10 text-lg sm:text-xl font-black text-white text-center tracking-tight drop-shadow leading-tight">
           {config.title}
         </h2>
-        <p className="relative z-10 text-xs font-semibold text-white/85 text-center mt-0.5 leading-snug">
-          {config.subtitle}
-        </p>
+        
+        {isMultiplayer ? (
+          <div className="relative z-10 mt-1 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-[10px] sm:text-[11px] font-bold text-white flex items-center gap-1.5 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Playing with <strong>{multiplayer.remoteProfile?.name || 'Partner'}</strong></span>
+          </div>
+        ) : (
+          <p className="relative z-10 text-[11px] sm:text-xs font-semibold text-white/85 text-center mt-0.5 leading-snug">
+            {config.subtitle}
+          </p>
+        )}
       </div>
 
       {/* ── Steps ── */}
-      <div className="flex-1 px-5 pt-3 pb-1 relative my-auto flex flex-col justify-center">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">
+      <div className="flex-1 px-4 py-2.5 relative my-auto flex flex-col justify-center">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
           How to Play
         </p>
 
         {/* Connecting Line */}
         <div 
-          className="absolute left-[33px] top-[48px] bottom-[28px] w-px border-l-2 border-dashed border-slate-200"
+          className="absolute left-[29px] top-[40px] bottom-[24px] w-px border-l-2 border-dashed border-slate-200"
           style={{ zIndex: 0 }}
         />
 
-        <div className="space-y-2.5 sm:space-y-3.5 relative z-10">
+        <div className="space-y-2 sm:space-y-2.5 relative z-10">
           {config.steps.map((step, i) => (
             <div
               key={i}
-              className="flex items-start gap-3.5"
+              className="flex items-start gap-2.5"
               style={{
                 opacity: stepsVisible.includes(i) ? 1 : 0,
-                transform: stepsVisible.includes(i) ? 'translateY(0)' : 'translateY(16px)',
-                transition: 'all 0.5s cubic-bezier(0.34,1.2,0.64,1)',
+                transform: stepsVisible.includes(i) ? 'translateY(0)' : 'translateY(12px)',
+                transition: 'all 0.4s cubic-bezier(0.34,1.2,0.64,1)',
               }}
             >
               {/* Step number badge */}
               <div
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 transition-all duration-300"
+                className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[11px] sm:text-xs font-black flex-shrink-0 transition-all duration-300"
                 style={{ 
                   background: 'white',
                   color: stepsVisible.includes(i) ? config.accentColor : '#94A3B8',
                   border: `2px solid ${stepsVisible.includes(i) ? config.accentColor : '#E2E8F0'}`,
-                  boxShadow: stepsVisible.includes(i) ? `0 0 0 3px ${config.glowColor}` : 'none',
+                  boxShadow: stepsVisible.includes(i) ? `0 0 0 2px ${config.glowColor}` : 'none',
                 }}
               >
                 {i + 1}
@@ -313,8 +361,8 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
 
               {/* Text */}
               <div className="flex-1 pt-0.5">
-                <h4 className="text-xs sm:text-sm font-black text-slate-800 leading-none mb-1">{step.title}</h4>
-                <p className="text-[11px] sm:text-xs font-medium text-slate-500 leading-snug">{step.description}</p>
+                <h4 className="text-xs sm:text-sm font-black text-slate-800 leading-tight mb-0.5">{step.title}</h4>
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 leading-snug">{step.description}</p>
               </div>
             </div>
           ))}
@@ -322,20 +370,20 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
       </div>
 
       {/* ── Footer ── */}
-      <div className="px-4 pb-4 pt-1.5 space-y-2.5 shrink-0">
+      <div className="px-3.5 pb-3.5 pt-1 space-y-2 shrink-0">
         {/* Tip pill */}
         <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl"
           style={{ background: '#FEF9EE', border: '1.5px solid #FDE68A' }}
         >
-          <span className="text-sm flex-shrink-0">💡</span>
-          <p className="text-[10px] sm:text-[11px] font-bold text-amber-800 leading-snug">{config.tipText}</p>
+          <span className="text-xs flex-shrink-0">💡</span>
+          <p className="text-[10px] font-bold text-amber-800 leading-snug">{config.tipText}</p>
         </div>
 
         {/* Start button */}
         <button
-          onClick={startCountdown}
-          className="w-full py-3.5 rounded-2xl text-white font-black text-sm sm:text-base tracking-tight flex items-center justify-center gap-2 transition-all active:scale-95 shrink-0 shadow-lg"
+          onClick={() => startCountdown(true)}
+          className="w-full py-3 sm:py-3.5 rounded-2xl text-white font-black text-sm sm:text-base tracking-tight flex items-center justify-center gap-2 transition-all active:scale-95 shrink-0 shadow-lg"
           style={{
             background: config.buttonGradient,
             boxShadow: config.buttonShadow,
@@ -344,8 +392,8 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart }) => {
           onMouseUp={e => (e.currentTarget.style.boxShadow = config.buttonShadow)}
           onMouseLeave={e => (e.currentTarget.style.boxShadow = config.buttonShadow)}
         >
-          <img src={config.gifSrc} alt="" className="w-6 h-6 rounded-lg object-cover flex-shrink-0" />
-          {config.buttonText}
+          <img src={config.gifSrc} alt="" className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg object-cover flex-shrink-0" />
+          {isMultiplayer ? "Let's Play Together! 🚀" : config.buttonText}
         </button>
       </div>
     </div>

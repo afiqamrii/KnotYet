@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layers, Dices, Heart, Users, Sparkles, RotateCw, HeartHandshake, Music, Volume2, VolumeX, Check, Hash, TextCursor } from 'lucide-react';
+import { Layers, Dices, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, Hash, TextCursor } from 'lucide-react';
 import { SWIPE_CARDS, CardCategory } from './data/questions';
+import { getShuffledSwipeCards, getSwipeCardsByIds, markQuestionAsSeen } from './utils/questionManager';
 import { SwipeCard } from './components/SwipeCard';
 import { CoupleGuessGame } from './components/CoupleGuessGame';
 import { SpinWheel } from './components/SpinWheel';
@@ -21,13 +22,15 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { InviteScreen } from './screens/InviteScreen';
 import { sounds } from './utils/audio';
 import { GameIntro } from './components/GameIntro';
+import { EndGameModal } from './components/EndGameModal';
+import { MultiplayerLobby } from './components/MultiplayerLobby';
 
 type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
 
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
   const { profile, partner, setPartner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
-  const { user, couple, refreshCouple, progress, isLoading, checkLimit, incrementPlayCount } = useAuth();
+  const { user, couple, refreshCouple, isLoading, checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
 
@@ -47,6 +50,7 @@ const AppInner: React.FC = () => {
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [myCardAnswer, setMyCardAnswer] = useState<string | null>(null);
   const [partnerCardAnswer, setPartnerCardAnswer] = useState<string | null>(null);
+  const [syncedSwipeCardIds, setSyncedSwipeCardIds] = useState<string[] | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -57,8 +61,6 @@ const AppInner: React.FC = () => {
     setIsProfileOpenState(val);
     sessionStorage.setItem('knotyet_isProfileOpen', String(val));
   };
-  const [isCountingDown, setIsCountingDown] = useState(false);
-  const [countdownNumber, setCountdownNumber] = useState<number | null>(null);
   const [isMusicMenuOpen, setIsMusicMenuOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(sounds.isMuted);
   const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
@@ -73,35 +75,72 @@ const AppInner: React.FC = () => {
     } catch { return {}; }
   });
 
-  const markIntroShown = (tab: string) => {
+  const markIntroShown = (tab: string, broadcast = true) => {
     setIntroShown(prev => {
       const next = { ...prev, [tab]: true };
       sessionStorage.setItem('knotyet_introShown', JSON.stringify(next));
       return next;
     });
-  };
-
-  const handleEndGame = () => {
-    if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
-      const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
-      stored[activeTab] = false;
-      sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
-      
-      if (activeTab === 'number') {
-        sessionStorage.removeItem('num_stage');
-        sessionStorage.removeItem('num_secret');
-        sessionStorage.removeItem('num_guesses');
-        sessionStorage.removeItem('num_round');
-      } else if (activeTab === 'letter') {
-        sessionStorage.removeItem('letter_stage');
-        sessionStorage.removeItem('letter_letter');
-      }
-      
-      setIntroShown(stored);
+    if (broadcast && multiplayer.status === 'connected') {
+      multiplayer.sendMessage({ type: 'START_GAME', payload: { game: tab as any } });
     }
   };
 
-  const isPlayingGame = introShown[activeTab] === true;
+  const markIntroNotShown = (tab: string) => {
+    setIntroShown(prev => {
+      const next = { ...prev, [tab]: false };
+      sessionStorage.setItem('knotyet_introShown', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const [isEndGameModalOpen, setIsEndGameModalOpen] = useState(false);
+
+  const handleEndGame = () => {
+    setIsEndGameModalOpen(true);
+  };
+
+  const confirmEndGame = () => {
+    const currentTabToReset = multiplayer.status === 'connected' ? (multiplayer.activeGame as ActiveTab) : activeTab;
+    const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+    stored[currentTabToReset] = false;
+    stored[activeTab] = false;
+    sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+    
+    // Clear all game-specific session states
+    sessionStorage.removeItem('num_stage');
+    sessionStorage.removeItem('num_secret');
+    sessionStorage.removeItem('num_guesses');
+    sessionStorage.removeItem('num_round');
+    sessionStorage.removeItem('letter_stage');
+    sessionStorage.removeItem('letter_letter');
+    sessionStorage.removeItem('guess_stage');
+    sessionStorage.removeItem('guess_currentIndex');
+    sessionStorage.removeItem('guess_actualAnswer');
+    sessionStorage.removeItem('guess_guessedAnswer');
+    sessionStorage.removeItem('guess_score');
+    sessionStorage.removeItem('guess_completed');
+    sessionStorage.removeItem('wheel_spin_state');
+    sessionStorage.removeItem('wheel_rotation');
+    sessionStorage.removeItem('wheel_selectedIdea');
+    sessionStorage.removeItem('match_currentIndex');
+    sessionStorage.removeItem('match_stage');
+    sessionStorage.removeItem('match_myAnswer');
+    sessionStorage.removeItem('match_partnerAnswer');
+    sessionStorage.removeItem('match_score');
+    sessionStorage.removeItem('match_completed');
+    
+    setIntroShown(stored);
+
+    if (multiplayer.status === 'connected') {
+      multiplayer.sendMessage({ type: 'END_GAME' });
+      multiplayer.setGame('lobby');
+    }
+  };
+
+  const isPlayingGame = multiplayer.status === 'connected'
+    ? (multiplayer.activeGame !== 'lobby')
+    : (introShown[activeTab] === true);
 
   const previousTab = React.useRef<ActiveTab | 'lobby'>('lobby');
 
@@ -232,29 +271,26 @@ const AppInner: React.FC = () => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // ---- Filtered Cards (must be before any early return!) ----
+  // Sync tab with multiplayer game
+  const currentTab = multiplayer.status === 'connected' ? (multiplayer.activeGame as ActiveTab) : activeTab;
+
+  // ---- Filtered Cards (Dynamic Shuffle & Non-Repeating) ----
   const filteredCards = useMemo(() => {
-    // 1. Get answered set
-    const answeredIds = new Set(progress?.answered_questions || []);
-    if (!progress) {
-      try {
-        const stored = localStorage.getItem('jodohdeck_answered');
-        if (stored) JSON.parse(stored).forEach((id: string) => answeredIds.add(id));
-      } catch {}
+    if (multiplayer.status === 'connected' && !multiplayer.isHost && syncedSwipeCardIds && syncedSwipeCardIds.length > 0) {
+      return getSwipeCardsByIds(syncedSwipeCardIds);
     }
-    
-    // 2. Filter by category & exclude answered
-    let available = SWIPE_CARDS.filter(c => {
-       if (selectedCategory !== 'all' && c.category !== selectedCategory) return false;
-       return !answeredIds.has(c.id);
-    });
+    return getShuffledSwipeCards(selectedCategory, 15);
+  }, [selectedCategory, roundCounter, multiplayer.status, multiplayer.isHost, syncedSwipeCardIds]);
 
-    // 3. Shuffle
-    available.sort(() => Math.random() - 0.5);
-
-    // 4. Return top 15 cards per round
-    return available.slice(0, 15);
-  }, [selectedCategory, roundCounter]); // Re-compute only on category change or explicit new round
+  // Host broadcasts the card deck to guest for synchronized cards
+  React.useEffect(() => {
+    if (multiplayer.status === 'connected' && multiplayer.isHost && currentTab === 'swipe' && filteredCards.length > 0) {
+      multiplayer.sendMessage({
+        type: 'SYNC_QUESTION_IDS',
+        payload: { game: 'swipe', questionIds: filteredCards.map(c => c.id) }
+      });
+    }
+  }, [multiplayer.status, multiplayer.isHost, currentTab, selectedCategory, roundCounter, filteredCards]);
 
   // Auto-close partner left modal after 5 seconds
   React.useEffect(() => {
@@ -265,16 +301,16 @@ const AppInner: React.FC = () => {
   }, [multiplayer.status, multiplayer]);
 
 
-  // Monitor game start for countdown
+  // Monitor game start in multiplayer
   React.useEffect(() => {
     if (multiplayer.status === 'connected') {
       setIsRoomModalOpen(false);
       sounds.playBGM();
       
-      // Trigger countdown when transitioning from lobby to a game
+      // Ensure intro screen is shown when transitioning from lobby to a game
       if (multiplayer.activeGame !== 'lobby' && previousTab.current === 'lobby') {
         incrementPlayCount('multiplayer');
-        startCountdown();
+        markIntroNotShown(multiplayer.activeGame);
       }
     } else {
       sounds.stopBGM();
@@ -288,27 +324,13 @@ const AppInner: React.FC = () => {
     previousTab.current = multiplayer.status === 'connected' ? multiplayer.activeGame : 'lobby';
   }, [multiplayer.status, multiplayer.activeGame, activeTab, incrementPlayCount]);
 
-  const startCountdown = () => {
-    setIsCountingDown(true);
-    setCountdownNumber(3);
-    sounds.playFlip(); // Ticks
-    
-    setTimeout(() => { setCountdownNumber(2); sounds.playFlip(); }, 1000);
-    setTimeout(() => { setCountdownNumber(1); sounds.playFlip(); }, 2000);
-    setTimeout(() => { setCountdownNumber(0); sounds.playSuccess(); }, 3000); // 0 means 'GO!'
-    setTimeout(() => {
-      setIsCountingDown(false);
-      setCountdownNumber(null);
-    }, 4000);
-  };
 
-  // Sync tab with multiplayer game
-  const currentTab = multiplayer.status === 'connected' ? (multiplayer.activeGame as ActiveTab) : activeTab;
 
   const handleTabClick = (tab: ActiveTab) => {
     sounds.playFlip();
     setActiveTab(tab);
     if (multiplayer.status === 'connected') {
+      markIntroNotShown(tab);
       multiplayer.setGame(tab);
     }
   };
@@ -324,6 +346,7 @@ const AppInner: React.FC = () => {
     const currentCard = filteredCards[cardIndex];
     if (currentCard) {
       recordAnsweredQuestion(currentCard.id);
+      markQuestionAsSeen(currentCard.id);
     }
 
     if (cardIndex + 1 < filteredCards.length) {
@@ -347,24 +370,37 @@ const AppInner: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (multiplayer.status === 'connected' && currentTab === 'swipe') {
+    if (multiplayer.status === 'connected') {
+      const prevListener = multiplayer.messageListener.current;
       multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
-        if (msg.type === 'SWIPE_ACTION') {
+        if (msg.type === 'START_GAME') {
+          markIntroShown(msg.payload.game, false);
+        } else if (msg.type === 'END_GAME') {
+          const currentTabToReset = (multiplayer.activeGame as ActiveTab) || activeTab;
+          const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+          stored[currentTabToReset] = false;
+          sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+          setIntroShown(stored);
+        } else if (msg.type === 'SWIPE_ACTION' && currentTab === 'swipe') {
           executeSwipe(msg.payload.direction);
-        } else if (msg.type === 'SWIPE_FLIP') {
+        } else if (msg.type === 'SWIPE_FLIP' && currentTab === 'swipe') {
           setIsCardFlipped(msg.payload);
-        } else if (msg.type === 'CARD_SUBMIT') {
+        } else if (msg.type === 'CARD_SUBMIT' && currentTab === 'swipe') {
           setPartnerCardAnswer(msg.payload);
+        } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'swipe') {
+          setSyncedSwipeCardIds(msg.payload.questionIds);
+        } else if (prevListener) {
+          prevListener(msg);
         }
       };
     }
-  }, [multiplayer.status, currentTab, multiplayer.messageListener, cardIndex, filteredCards.length]);
+  }, [multiplayer.status, currentTab, multiplayer.messageListener, cardIndex, filteredCards.length, activeTab, multiplayer.activeGame]);
 
   // Routes handle redirects; just show loading if AppInner rendered while loading
   if (isLoading) return <LoadingSpinner />;
 
-  // ---- Multiplayer Lobby Overlay ----
-  if (multiplayer.status === 'hosting' || multiplayer.status === 'joining' || (multiplayer.status === 'connected' && multiplayer.activeGame === 'lobby')) {
+  // ---- Multiplayer Waiting / Connecting Overlay ----
+  if (multiplayer.status === 'hosting' || multiplayer.status === 'joining') {
     return (
       <div className="min-h-[100dvh] p-4 sm:p-6 md:p-8 flex items-center justify-center relative overflow-hidden" style={{ background: '#7C3AED' }}>
         <div className="bg-blob w-96 h-96 -top-20 -left-20 bg-pink-500 opacity-20" />
@@ -377,11 +413,8 @@ const AppInner: React.FC = () => {
           </div>
           <div>
             <h2 className="text-2xl font-black text-ink">
-              {multiplayer.status === 'hosting' ? 'Hosting Room' : multiplayer.status === 'joining' ? 'Joining Room' : 'Room Connected!'}
+              {multiplayer.status === 'hosting' ? 'Hosting Room' : 'Joining Room'}
             </h2>
-            {multiplayer.status === 'connected' && (
-              <p className="text-sm text-ink-3 mt-1">You are playing with <strong>{multiplayer.remoteProfile?.name}</strong></p>
-            )}
           </div>
 
           <div className="p-4 rounded-2xl bg-indigo-50 border-2 border-indigo-100 space-y-3">
@@ -402,52 +435,12 @@ const AppInner: React.FC = () => {
                 <p className="text-sm font-bold text-teal-600 mt-4">Connecting to room...</p>
               </div>
             )}
-
-            {multiplayer.status === 'connected' && multiplayer.isHost && (
-              <>
-                <p className="text-xs font-bold text-brand uppercase tracking-wider">Choose a Game</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => multiplayer.setGame('swipe')} className="btn-chunky btn-pink w-full text-[11px] px-1 py-3">Icebreaker Cards</button>
-                  <button onClick={() => multiplayer.setGame('quiz')} className="btn-chunky btn-teal w-full text-[11px] px-1 py-3">Guess My Heart</button>
-                  <button onClick={() => multiplayer.setGame('wheel')} className="btn-chunky btn-amber w-full text-[11px] px-1 py-3">Spin Wheel</button>
-                  <button onClick={() => multiplayer.setGame('match')} className="btn-chunky w-full text-[11px] px-1 py-3 text-white" style={{ background: 'linear-gradient(135deg, #7C3AED, #9333EA)', boxShadow: '0 6px 0 #5B21B6' }}>Couple Match</button>
-                </div>
-              </>
-            )}
-            
-            {multiplayer.status === 'connected' && !multiplayer.isHost && (
-              <div className="py-4 space-y-3">
-                <div className="w-8 h-8 rounded-full border-4 border-brand border-t-transparent animate-spin mx-auto" />
-                <p className="text-sm font-bold text-brand mt-4">Waiting for Host to pick a game...</p>
-              </div>
-            )}
           </div>
           
-          <button onClick={() => setIsDisconnectModalOpen(true)} className="text-xs font-bold text-red-500 hover:text-red-600 transition">
-            Leave Room
+          <button onClick={() => multiplayer.leaveRoom()} className="text-xs font-bold text-red-500 hover:text-red-600 transition">
+            Cancel
           </button>
         </div>
-
-        {/* Custom Disconnect Modal for Lobby */}
-        {isDisconnectModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in">
-              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-red-500" />
-              </div>
-              <h3 className="text-xl font-black text-ink mb-2">Disconnect?</h3>
-              <p className="text-sm text-ink-3 mb-6">Are you sure you want to leave the room? The game will end for both of you.</p>
-              <div className="flex gap-3">
-                <button onClick={() => setIsDisconnectModalOpen(false)} className="flex-1 py-3 rounded-2xl font-bold text-ink-3 bg-stone-100 hover:bg-stone-200 transition">
-                  Cancel
-                </button>
-                <button onClick={() => { setIsDisconnectModalOpen(false); multiplayer.leaveRoom(); }} className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/30">
-                  Disconnect
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -488,7 +481,7 @@ const AppInner: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen flex justify-center items-center sm:py-4"
+    <div className="h-[100dvh] min-h-[100dvh] w-full flex justify-center items-center sm:py-4 overflow-hidden"
       style={{ background: 'linear-gradient(160deg, #6D28D9 0%, #7C3AED 40%, #4F46E5 100%)' }}
     >
       {/* Decorative background shapes */}
@@ -507,7 +500,7 @@ const AppInner: React.FC = () => {
       </div>
 
       {/* Phone container */}
-      <div className="w-full max-w-md h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[94vh] sm:rounded-[44px] flex flex-col overflow-hidden relative shadow-2xl"
+      <div className="w-full max-w-md h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[94vh] sm:rounded-[44px] flex flex-col overflow-hidden relative shadow-2xl safe-pt"
         style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(0px)' }}
       >
         {/* ====== HEADER ====== */}
@@ -643,249 +636,247 @@ const AppInner: React.FC = () => {
             </div>
           </div>
 
-          {/* Game Mode Tabs */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 p-1.5 rounded-2xl"
-            style={{ background: 'rgba(0,0,0,0.2)' }}>
-            {/* Swipe tab */}
-            <button
-              onClick={() => handleTabClick('swipe')}
-              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
-              style={currentTab === 'swipe' ? {
-                background: '#FF2D9B',
-                color: 'white',
-                boxShadow: '0 4px 0 #C41D77, 0 6px 16px rgba(255,45,155,0.4)',
-              } : { color: 'rgba(255,255,255,0.6)' }}
-            >
-              <Layers className="w-5 h-5 mb-0.5" />
-              <span>{t.tabSwipe}</span>
-            </button>
-
-            {/* Quiz tab */}
-            <button
-              onClick={() => handleTabClick('quiz')}
-              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
-              style={currentTab === 'quiz' ? {
-                background: '#06B6D4',
-                color: 'white',
-                boxShadow: '0 4px 0 #0E7490, 0 6px 16px rgba(6,182,212,0.4)',
-              } : { color: 'rgba(255,255,255,0.6)' }}
-            >
-              <Heart className="w-5 h-5 mb-0.5" />
-              <span>{t.tabQuiz}</span>
-            </button>
-
-            {/* Wheel tab */}
-            <button
-              onClick={() => handleTabClick('wheel')}
-              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
-              style={currentTab === 'wheel' ? {
-                background: '#F59E0B',
-                color: 'white',
-                boxShadow: '0 4px 0 #B45309, 0 6px 16px rgba(245,158,11,0.4)',
-              } : { color: 'rgba(255,255,255,0.6)' }}
-            >
-              <Dices className="w-5 h-5 mb-0.5" />
-              <span>{t.tabWheel}</span>
-            </button>
-            
-            {/* Match tab (Online Only) */}
-            {multiplayer.status === 'connected' && (
+          {/* Game Mode Tabs - only visible in solo / local mode */}
+          {multiplayer.status !== 'connected' && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 p-1.5 rounded-2xl"
+              style={{ background: 'rgba(0,0,0,0.2)' }}>
+              {/* Swipe tab */}
               <button
-                onClick={() => handleTabClick('match')}
+                onClick={() => handleTabClick('swipe')}
                 className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
-                style={currentTab === 'match' ? {
-                  background: '#7C3AED',
+                style={currentTab === 'swipe' ? {
+                  background: '#FF2D9B',
                   color: 'white',
-                  boxShadow: '0 4px 0 #5B21B6, 0 6px 16px rgba(124,58,237,0.4)',
+                  boxShadow: '0 4px 0 #C41D77, 0 6px 16px rgba(255,45,155,0.4)',
                 } : { color: 'rgba(255,255,255,0.6)' }}
               >
-                <HeartHandshake className="w-5 h-5 mb-0.5" />
-                <span>{t.tabMatch}</span>
+                <Layers className="w-5 h-5 mb-0.5" />
+                <span>{t.tabSwipe}</span>
               </button>
-            )}
 
-            {/* Number tab */}
-            <button
-              onClick={() => handleTabClick('number')}
-              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
-              style={currentTab === 'number' ? {
-                background: '#6366F1',
-                color: 'white',
-                boxShadow: '0 4px 0 #4338CA, 0 6px 16px rgba(99,102,241,0.4)',
-              } : { color: 'rgba(255,255,255,0.6)' }}
-            >
-              <Hash className="w-5 h-5 mb-0.5" />
-              <span>{t.tabNumber || 'Number'}</span>
-            </button>
+              {/* Quiz tab */}
+              <button
+                onClick={() => handleTabClick('quiz')}
+                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                style={currentTab === 'quiz' ? {
+                  background: '#06B6D4',
+                  color: 'white',
+                  boxShadow: '0 4px 0 #0E7490, 0 6px 16px rgba(6,182,212,0.4)',
+                } : { color: 'rgba(255,255,255,0.6)' }}
+              >
+                <Heart className="w-5 h-5 mb-0.5" />
+                <span>{t.tabQuiz}</span>
+              </button>
 
-            {/* Letter tab */}
-            <button
-              onClick={() => handleTabClick('letter')}
-              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
-              style={currentTab === 'letter' ? {
-                background: '#D946EF',
-                color: 'white',
-                boxShadow: '0 4px 0 #A21CAF, 0 6px 16px rgba(217,70,239,0.4)',
-              } : { color: 'rgba(255,255,255,0.6)' }}
-            >
-              <TextCursor className="w-5 h-5 mb-0.5" />
-              <span>{t.tabLetter || 'Letter'}</span>
-            </button>
-          </div>
+              {/* Wheel tab */}
+              <button
+                onClick={() => handleTabClick('wheel')}
+                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                style={currentTab === 'wheel' ? {
+                  background: '#F59E0B',
+                  color: 'white',
+                  boxShadow: '0 4px 0 #B45309, 0 6px 16px rgba(245,158,11,0.4)',
+                } : { color: 'rgba(255,255,255,0.6)' }}
+              >
+                <Dices className="w-5 h-5 mb-0.5" />
+                <span>{t.tabWheel}</span>
+              </button>
+
+              {/* Number tab */}
+              <button
+                onClick={() => handleTabClick('number')}
+                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                style={currentTab === 'number' ? {
+                  background: '#6366F1',
+                  color: 'white',
+                  boxShadow: '0 4px 0 #4338CA, 0 6px 16px rgba(99,102,241,0.4)',
+                } : { color: 'rgba(255,255,255,0.6)' }}
+              >
+                <Hash className="w-5 h-5 mb-0.5" />
+                <span>{t.tabNumber || 'Number'}</span>
+              </button>
+
+              {/* Letter tab */}
+              <button
+                onClick={() => handleTabClick('letter')}
+                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                style={currentTab === 'letter' ? {
+                  background: '#D946EF',
+                  color: 'white',
+                  boxShadow: '0 4px 0 #A21CAF, 0 6px 16px rgba(217,70,239,0.4)',
+                } : { color: 'rgba(255,255,255,0.6)' }}
+              >
+                <TextCursor className="w-5 h-5 mb-0.5" />
+                <span>{t.tabLetter || 'Letter'}</span>
+              </button>
+            </div>
+          )}
         </header>
         )}
 
         <main className={`flex-1 flex flex-col items-center justify-between relative overflow-hidden w-full h-full p-2 sm:p-3`}>
-          {currentTab === 'swipe' && (
-            introShown['swipe'] ? (
-              <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full space-y-2 animate-fade-in">
-                {/* Standardized Game Header */}
-                <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
-                      style={{ background: 'linear-gradient(135deg, #FF2D9B, #EC4899)' }}>
-                      <Layers className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Icebreaker Cards</h2>
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
-                        <span>{t.cardCount(cardIndex + 1, filteredCards.length)}</span>
-                        <span className="flex items-center gap-1.5 ml-1">
-                          <span className="font-black px-1.5 py-0.2 rounded-full text-white text-[9px] bg-emerald-500">✓ {answeredCount}</span>
-                          <span className="font-black px-1.5 py-0.2 rounded-full text-white text-[9px] bg-pink-500">✕ {skippedCount}</span>
-                        </span>
+          {multiplayer.status === 'connected' && multiplayer.activeGame === 'lobby' ? (
+            <MultiplayerLobby 
+              onSelectGame={(game) => {
+                markIntroNotShown(game);
+                multiplayer.setGame(game);
+              }}
+              onDisconnect={() => setIsDisconnectModalOpen(true)}
+            />
+          ) : (
+            <>
+              {currentTab === 'swipe' && (
+                introShown['swipe'] ? (
+                  <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full space-y-2 animate-fade-in">
+                    {/* Standardized Game Header */}
+                    <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+                          style={{ background: 'linear-gradient(135deg, #FF2D9B, #EC4899)' }}>
+                          <Layers className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Icebreaker Cards</h2>
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
+                            <span>{t.cardCount(cardIndex + 1, filteredCards.length)}</span>
+                            <span className="flex items-center gap-1.5 ml-1">
+                              <span className="font-black px-1.5 py-0.2 rounded-full text-white text-[9px] bg-emerald-500">✓ {answeredCount}</span>
+                              <span className="font-black px-1.5 py-0.2 rounded-full text-white text-[9px] bg-pink-500">✕ {skippedCount}</span>
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
-                    End Game
-                  </button>
-                </div>
-                
-                {/* Category Selector Pills */}
-                <div className="w-full flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar shrink-0">
-                  {categories.map(cat => (
-                    <button
-                      key={cat.key}
-                      onClick={() => handleCategoryChange(cat.key as CardCategory | 'all')}
-                      className="px-3 py-1 rounded-full whitespace-nowrap text-xs font-black transition active:scale-95 flex-shrink-0"
-                      style={selectedCategory === cat.key ? {
-                        background: cat.color,
-                        color: 'white',
-                        boxShadow: `0 4px 12px ${cat.color}50`,
-                      } : {
-                        background: 'rgba(255,255,255,0.9)',
-                        color: cat.color,
-                        border: `1.5px solid ${cat.color}30`,
-                      }}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Card Stack Area - Full Height Elastic */}
-                <div className="relative w-full flex-1 min-h-[320px] select-none my-auto flex items-center justify-center py-1">
-                  {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
-                  {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
-                  {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
-                  {nextCard && <SwipeCard key={nextCard.id} card={nextCard} cardIndex={cardIndex + 1} stackDepth={1} onSwipe={handleSwipe} isTop={false} />}
-                  {currentCard ? (
-                    <SwipeCard 
-                      key={currentCard.id} 
-                      card={currentCard} 
-                      cardIndex={cardIndex}
-                      stackDepth={0}
-                      onSwipe={handleSwipe} 
-                      isTop={true} 
-                      isFlipped={isCardFlipped}
-                      onToggleFlip={(flipped) => {
-                        setIsCardFlipped(flipped);
-                        if (multiplayer.status === 'connected') {
-                          multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: flipped });
-                        }
-                      }}
-                      myAnswer={myCardAnswer}
-                      partnerAnswer={partnerCardAnswer}
-                      onSubmitAnswer={(ans) => {
-                        setMyCardAnswer(ans);
-                        if (multiplayer.status === 'connected') {
-                          multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: ans });
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="game-card w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-                      <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl animate-float"
-                        style={{ background: 'linear-gradient(135deg, #FACC15, #F97316)' }}>
-                        <Sparkles className="w-8 h-8 text-white" />
-                      </div>
-                      <h3 className="font-black text-ink text-xl">{t.allCardsTitle}</h3>
-                      <p className="text-sm text-ink-3">{t.allCardsSub}</p>
-                      <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
-                        <RotateCw className="w-4 h-4" /> {t.playAgain}
+                      <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+                        End Game
                       </button>
                     </div>
-                  )}
-                </div>
+                    
+                    {/* Category Selector Pills */}
+                    <div className="w-full flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar shrink-0">
+                      {categories.map(cat => (
+                        <button
+                          key={cat.key}
+                          onClick={() => handleCategoryChange(cat.key as CardCategory | 'all')}
+                          className="px-3 py-1 rounded-full whitespace-nowrap text-xs font-black transition active:scale-95 flex-shrink-0"
+                          style={selectedCategory === cat.key ? {
+                            background: cat.color,
+                            color: 'white',
+                            boxShadow: `0 4px 12px ${cat.color}50`,
+                          } : {
+                            background: 'rgba(255,255,255,0.9)',
+                            color: cat.color,
+                            border: `1.5px solid ${cat.color}30`,
+                          }}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
 
-                {/* Next Button */}
-                <div className="w-full shrink-0 pt-1">
-                  <button onClick={() => handleManualAction('right')} disabled={!currentCard}
-                    className="btn-chunky w-full text-sm py-3.5 flex items-center justify-center gap-2"
-                    style={{
-                      background: 'white',
-                      color: '#10B981',
-                      boxShadow: '0 4px 0 #E5E7EB, 0 6px 20px rgba(0,0,0,0.08)',
-                      borderRadius: '18px'
-                    }}>
-                    <Check className="w-4 h-4 stroke-[3]" /> Next Question
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <GameIntro gameType="swipe" onStart={() => markIntroShown('swipe')} />
-            )
-          )}
+                    {/* Card Stack Area - Full Height Elastic */}
+                    <div className="relative w-full flex-1 min-h-[320px] select-none my-auto flex items-center justify-center py-1">
+                      {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
+                      {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
+                      {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
+                      {nextCard && <SwipeCard key={nextCard.id} card={nextCard} cardIndex={cardIndex + 1} stackDepth={1} onSwipe={handleSwipe} isTop={false} />}
+                      {currentCard ? (
+                        <SwipeCard 
+                          key={currentCard.id} 
+                          card={currentCard} 
+                          cardIndex={cardIndex}
+                          stackDepth={0}
+                          onSwipe={handleSwipe} 
+                          isTop={true} 
+                          isFlipped={isCardFlipped}
+                          onToggleFlip={(flipped) => {
+                            setIsCardFlipped(flipped);
+                            if (multiplayer.status === 'connected') {
+                              multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: flipped });
+                            }
+                          }}
+                          myAnswer={myCardAnswer}
+                          partnerAnswer={partnerCardAnswer}
+                          onSubmitAnswer={(ans) => {
+                            setMyCardAnswer(ans);
+                            if (multiplayer.status === 'connected') {
+                              multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: ans });
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="game-card w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
+                          <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl animate-float"
+                            style={{ background: 'linear-gradient(135deg, #FACC15, #F97316)' }}>
+                            <Sparkles className="w-8 h-8 text-white" />
+                          </div>
+                          <h3 className="font-black text-ink text-xl">{t.allCardsTitle}</h3>
+                          <p className="text-sm text-ink-3">{t.allCardsSub}</p>
+                          <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
+                            <RotateCw className="w-4 h-4" /> {t.playAgain}
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
-          {currentTab === 'quiz' && (
-            introShown['quiz']
-              ? <CoupleGuessGame onEndGame={handleEndGame} />
-              : <GameIntro gameType="quiz" onStart={() => markIntroShown('quiz')} />
-          )}
-          {currentTab === 'wheel' && (
-            introShown['wheel']
-              ? <SpinWheel onEndGame={handleEndGame} />
-              : <GameIntro gameType="wheel" onStart={() => markIntroShown('wheel')} />
-          )}
-          {currentTab === 'match' && (
-            introShown['match']
-              ? <MatchGame onEndGame={handleEndGame} />
-              : <GameIntro gameType="match" onStart={() => markIntroShown('match')} />
-          )}
-          {currentTab === 'number' && (
-            introShown['number']
-              ? <NumberGuesserGame onEndGame={handleEndGame} />
-              : <GameIntro gameType="number" onStart={() => markIntroShown('number')} />
-          )}
-          {currentTab === 'letter' && (
-            introShown['letter']
-              ? <LetterRaceGame onEndGame={handleEndGame} />
-              : <GameIntro gameType="letter" onStart={() => markIntroShown('letter')} />
+                    {/* Next Button */}
+                    <div className="w-full shrink-0 pt-1">
+                      <button onClick={() => handleManualAction('right')} disabled={!currentCard}
+                        className="btn-chunky w-full text-sm py-3.5 flex items-center justify-center gap-2"
+                        style={{
+                          background: 'white',
+                          color: '#10B981',
+                          boxShadow: '0 4px 0 #E5E7EB, 0 6px 20px rgba(0,0,0,0.08)',
+                          borderRadius: '18px'
+                        }}>
+                        <Check className="w-4 h-4 stroke-[3]" /> Next Question
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <GameIntro gameType="swipe" onStart={() => markIntroShown('swipe')} />
+                )
+              )}
+
+              {currentTab === 'quiz' && (
+                introShown['quiz']
+                  ? <CoupleGuessGame onEndGame={handleEndGame} />
+                  : <GameIntro gameType="quiz" onStart={() => markIntroShown('quiz')} />
+              )}
+              {currentTab === 'wheel' && (
+                introShown['wheel']
+                  ? <SpinWheel onEndGame={handleEndGame} />
+                  : <GameIntro gameType="wheel" onStart={() => markIntroShown('wheel')} />
+              )}
+              {currentTab === 'match' && (
+                introShown['match']
+                  ? <MatchGame onEndGame={handleEndGame} />
+                  : <GameIntro gameType="match" onStart={() => markIntroShown('match')} />
+              )}
+              {currentTab === 'number' && (
+                introShown['number']
+                  ? <NumberGuesserGame onEndGame={handleEndGame} />
+                  : <GameIntro gameType="number" onStart={() => markIntroShown('number')} />
+              )}
+              {currentTab === 'letter' && (
+                introShown['letter']
+                  ? <LetterRaceGame onEndGame={handleEndGame} />
+                  : <GameIntro gameType="letter" onStart={() => markIntroShown('letter')} />
+              )}
+            </>
           )}
         </main>
 
         {/* Dedicated Bottom Ad Banner Slot */}
-        <div className="w-full px-3 pb-3 pt-1 shrink-0 z-20">
-          <div className="w-full h-14 rounded-2xl border-2 border-dashed border-white/20 bg-black/15 backdrop-blur-md flex items-center justify-between px-4 text-white/70 shadow-sm">
+        <div className="w-full px-3 pt-1 safe-pb shrink-0 z-20">
+          <div className="w-full h-11 sm:h-12 rounded-2xl border-2 border-dashed border-white/20 bg-black/15 backdrop-blur-md flex items-center justify-between px-3.5 text-white/70 shadow-sm">
             <div className="flex items-center gap-2">
-              <span className="text-base">📢</span>
+              <span className="text-sm">📢</span>
               <div className="text-left">
-                <p className="text-[9px] font-black uppercase tracking-widest text-white/50 leading-none">Sponsored</p>
-                <p className="text-xs font-bold text-white/80 leading-tight">Ad Banner Space Reserved</p>
+                <p className="text-[8px] font-black uppercase tracking-widest text-white/50 leading-none">Sponsored</p>
+                <p className="text-[11px] font-bold text-white/80 leading-tight">Ad Banner Space Reserved</p>
               </div>
             </div>
-            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/10 text-white/60 border border-white/15 uppercase">
+            <span className="text-[8px] font-black px-2 py-0.5 rounded-full bg-white/10 text-white/60 border border-white/15 uppercase">
               Ad Space
             </span>
           </div>
@@ -906,6 +897,22 @@ const AppInner: React.FC = () => {
         />
 
         {isProfileOpen && <ProfileScreen onClose={() => setIsProfileOpen(false)} />}
+
+        {/* In-App End Game Confirmation Modal */}
+        <EndGameModal
+          isOpen={isEndGameModalOpen}
+          onClose={() => setIsEndGameModalOpen(false)}
+          onConfirm={confirmEndGame}
+          isMultiplayer={multiplayer.status === 'connected'}
+          gameTitle={
+            currentTab === 'swipe' ? 'Icebreaker Cards' :
+            currentTab === 'quiz' ? 'Guess My Heart' :
+            currentTab === 'wheel' ? 'Anti-Awkward Wheel' :
+            currentTab === 'match' ? 'Couple Match' :
+            currentTab === 'number' ? 'Number Guesser' :
+            currentTab === 'letter' ? 'Letter Race' : 'Game'
+          }
+        />
         
         {/* Custom Disconnect Modal for Main App */}
         {isDisconnectModalOpen && multiplayer.status === 'connected' && (
@@ -957,31 +964,7 @@ const AppInner: React.FC = () => {
           </div>
         )}
 
-        {isCountingDown && (
-          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="text-9xl font-black text-transparent bg-clip-text bg-gradient-to-br from-pink-400 to-purple-500 animate-bounce-soft"
-                 style={{ WebkitTextStroke: '4px white' }}>
-              {countdownNumber === 0 ? 'GO!' : countdownNumber}
-            </div>
-            {countdownNumber === 0 && (
-              <p className="text-2xl font-bold text-white mt-8 animate-pulse">Have Fun!</p>
-            )}
-          </div>
-        )}
-        {/* Partner Accepted Live Toast */}
-        {partnerAcceptedToast && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-soft">
-            <div className={`bg-white rounded-3xl p-4 shadow-2xl border-4 flex flex-col items-center text-center ${partnerAcceptedToast.relationshipType === 'unlinked' ? 'border-red-400' : 'border-pink-400'}`}>
-              <span className="text-4xl mb-2">{partnerAcceptedToast.relationshipType === 'unlinked' ? '💔' : '💘'}</span>
-              <h3 className={`text-lg font-black ${partnerAcceptedToast.relationshipType === 'unlinked' ? 'text-red-500' : 'text-pink-500'}`}>
-                {partnerAcceptedToast.relationshipType === 'unlinked' ? 'Partner Unlinked' : `Yay! ${partnerAcceptedToast.name} accepted!`}
-              </h3>
-              <p className="text-sm font-bold text-ink-3">
-                {partnerAcceptedToast.relationshipType === 'unlinked' ? 'Your accounts are no longer connected.' : 'Your accounts are now linked.'}
-              </p>
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   );
