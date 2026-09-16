@@ -481,7 +481,7 @@ const AppInner: React.FC = () => {
   ];
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] w-full flex justify-center items-center sm:py-4 overflow-hidden"
+    <div className="min-h-[100dvh] min-h-screen w-full flex justify-center items-stretch sm:items-center sm:py-4 overflow-x-hidden"
       style={{ background: 'linear-gradient(160deg, #6D28D9 0%, #7C3AED 40%, #4F46E5 100%)' }}
     >
       {/* Decorative background shapes */}
@@ -500,7 +500,7 @@ const AppInner: React.FC = () => {
       </div>
 
       {/* Phone container */}
-      <div className="w-full max-w-md h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[94vh] sm:rounded-[44px] flex flex-col overflow-hidden relative shadow-2xl safe-pt"
+      <div className="w-full max-w-md min-h-[100dvh] sm:h-[844px] sm:max-h-[94vh] sm:rounded-[44px] flex flex-col relative shadow-2xl safe-pt flex-1 sm:flex-initial sm:overflow-hidden"
         style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(0px)' }}
       >
         {/* ====== HEADER ====== */}
@@ -714,7 +714,7 @@ const AppInner: React.FC = () => {
         </header>
         )}
 
-        <main className={`flex-1 flex flex-col items-center justify-between relative overflow-hidden w-full h-full p-2 sm:p-3`}>
+        <main className={`flex-1 flex flex-col items-center justify-between relative overflow-y-auto sm:overflow-hidden w-full p-2 sm:p-3`}>
           {multiplayer.status === 'connected' && multiplayer.activeGame === 'lobby' ? (
             <MultiplayerLobby 
               onSelectGame={(game) => {
