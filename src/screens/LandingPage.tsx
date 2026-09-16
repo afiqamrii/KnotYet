@@ -34,7 +34,7 @@ const FEATURES = [
 ];
 
 export const LandingPage: React.FC = () => {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInAsGuest } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
   const [activeFeature, setActiveFeature] = useState(0);
 
@@ -123,8 +123,17 @@ export const LandingPage: React.FC = () => {
               Continue with Google
               <ArrowRight className="w-5 h-5 ml-auto" />
             </button>
+
+            <button
+              onClick={() => signInAsGuest()}
+              className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-white text-ink-2 hover:text-ink border-2 border-slate-200 hover:border-slate-300 transition active:scale-[0.97] shadow-sm"
+            >
+              <span>✨</span>
+              <span>Play as Guest / Quick Play</span>
+              <ArrowRight className="w-4 h-4 ml-auto text-ink-3" />
+            </button>
             
-            <p className="text-center text-xs text-ink-3/70 font-medium flex items-center justify-center gap-1.5">
+            <p className="text-center text-xs text-ink-3/70 font-medium flex items-center justify-center gap-1.5 pt-1">
               <Shield className="w-3 h-3" /> Your data stays private. We only save your game progress.
             </p>
           </div>

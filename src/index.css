@@ -22,6 +22,13 @@
   }
 }
 
+/* ===== TWEMOJI ===== */
+.twemoji-icon img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+}
+
 /* ===== LANDING PAGE ANIMATIONS ===== */
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
@@ -462,4 +469,71 @@
 .dotted-pattern {
   background-image: radial-gradient(circle, rgba(255,255,255,0.15) 1.5px, transparent 1.5px);
   background-size: 20px 20px;
+}
+
+/* ===== GAME INTRO ANIMATIONS ===== */
+@keyframes countdown-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.15); opacity: 1; }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-countdown-pop {
+  animation: countdown-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes float-particle {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  25% { transform: translateY(-8px) translateX(4px); }
+  50% { transform: translateY(-14px) translateX(-2px); }
+  75% { transform: translateY(-6px) translateX(-5px); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes slide-up-fade {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+  animation: slide-up-fade 0.4s ease-out forwards;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-pop-in {
+  animation: pop-in 0.3s ease-out forwards;
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+@keyframes bounce-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-bounce-soft {
+  animation: bounce-soft 2s ease-in-out infinite;
+}
+
+/* ===== PASS-THE-PHONE HANDOVER ===== */
+@keyframes handover-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.animate-handover-pulse {
+  animation: handover-pulse 1.5s ease-in-out infinite;
 }

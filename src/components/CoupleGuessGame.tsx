@@ -38,12 +38,16 @@ class CoupleGuessErrorBoundary extends Component<{children: React.ReactNode}, {h
   }
 }
 
-const CoupleGuessGameInner: React.FC = () => {
+interface Props {
+  onEndGame?: () => void;
+}
+
+const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { t, profile, partner, addHeartPoints, deductHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
 
   const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('guess_currentIndex')) || 0);
-  const [stage, setStage] = useState<'secret' | 'guess' | 'reveal'>(() => (sessionStorage.getItem('guess_stage') as any) || 'secret');
+  const [stage, setStage] = useState<'secret' | 'handover' | 'guess' | 'reveal'>(() => (sessionStorage.getItem('guess_stage') as any) || 'secret');
   const [actualAnswer, setActualAnswer] = useState<string | null>(() => sessionStorage.getItem('guess_actualAnswer') || null);
   const [guessedAnswer, setGuessedAnswer] = useState<string | null>(() => sessionStorage.getItem('guess_guessedAnswer') || null);
   const [score, setScore] = useState(() => Number(sessionStorage.getItem('guess_score')) || 0);
@@ -152,8 +156,18 @@ const CoupleGuessGameInner: React.FC = () => {
 
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'QUIZ_ACTUAL', payload: option });
+      setActualAnswer(option);
+      sounds.playFlip();
+      setStage('guess');
+    } else {
+      // Single player: go to handover screen so guesser can't see highlighted selection
+      setActualAnswer(option);
+      sounds.playFlip();
+      setStage('handover');
     }
-    setActualAnswer(option);
+  };
+
+  const handleHandoverReady = () => {
     sounds.playFlip();
     setStage('guess');
   };
@@ -161,6 +175,27 @@ const CoupleGuessGameInner: React.FC = () => {
   useEffect(() => {
     // If we need any cleanup for timer etc, we do it here. But auto countdown is removed.
   }, [multiplayer.status, multiplayer.isHost]);
+
+  const handleEndGame = () => {
+    if (onEndGame) {
+      onEndGame();
+    } else {
+      if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
+        sessionStorage.removeItem('guess_stage');
+        sessionStorage.removeItem('guess_currentIndex');
+        sessionStorage.removeItem('guess_actualAnswer');
+        sessionStorage.removeItem('guess_guessedAnswer');
+        sessionStorage.removeItem('guess_score');
+        sessionStorage.removeItem('guess_completed');
+        
+        const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+        stored.quiz = false;
+        sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+        
+        window.location.reload();
+      }
+    }
+  };
 
   const handleSelectGuess = (option: string) => {
     if (multiplayer.status === 'connected') {
@@ -185,126 +220,163 @@ const CoupleGuessGameInner: React.FC = () => {
   if (completed) {
     const compatNote = percentage >= 80 ? t.quizCompatNote80 : percentage >= 50 ? t.quizCompatNote50 : t.quizCompatNote0;
     return (
-      <div className="game-card w-full max-w-sm mx-auto p-6 text-center space-y-5 animate-pop-in">
-        <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto shadow-btn-pink animate-float"
-          style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)', boxShadow: '0 8px 24px rgba(255,45,155,0.4)' }}>
-          <Trophy className="w-10 h-10 text-white" />
-        </div>
-        <div>
-          <span className="tag" style={{ background: '#FCE7F3', color: '#FF2D9B', border: '2px solid #FBCFE8' }}>
-            {t.quizSummaryTitle}
-          </span>
-          <h2 className="text-4xl font-black text-ink mt-2">{percentage}%</h2>
-          <p className="text-sm text-ink-3 font-semibold">Green Flag!</p>
-          <p className="text-xs text-ink-3 mt-1">{t.quizSummaryScore(score, GUESS_QUIZ_LIST.length)}</p>
-        </div>
-        <div className="p-4 rounded-2xl text-left text-xs text-ink-2 leading-relaxed space-y-2"
-          style={{ background: '#F5F3FF', border: '2px solid #DDD6FE' }}>
-          <div className="font-black text-brand flex items-center gap-1.5">
-            <Heart className="w-4 h-4 fill-brand text-brand" /> Compatibility Note:
-          </div>
-          <p className="font-semibold">{compatNote}</p>
-        </div>
-
-        {/* Partners display */}
-        {profile && partner && (
-          <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
-            <div className="text-center">
-              <Avatar avatarId={profile.avatarId} size={40} />
-              <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
+      <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in">
+        {/* Standardized Game Header */}
+        <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm mb-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+              style={{ background: 'linear-gradient(135deg, #06B6D4, #3B82F6)' }}>
+              <Heart className="w-4 h-4 fill-white" />
             </div>
-            <div className="text-2xl">💗</div>
-            <div className="text-center">
-              <Avatar avatarId={partner.avatarId} size={40} />
-              <p className="text-[10px] font-black text-ink-3 mt-1">{partner.name}</p>
+            <div>
+              <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Guess My Heart</h2>
+              <p className="text-[10px] font-bold text-white/80">Completed!</p>
             </div>
           </div>
-        )}
-        
-        <div className="rounded-3xl overflow-hidden shadow-xl border-4 border-white mt-4">
-          <img 
-            src={percentage >= 50 ? "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif" : "https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif"} 
-            alt="Final Score Meme" 
-            className="w-full h-40 object-cover" 
-          />
+          <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+            End Game
+          </button>
         </div>
 
-        <button onClick={() => handleRestart(true)} className="btn-chunky btn-pink w-full text-sm">
-          <RefreshCw className="w-4 h-4" /> {t.quizRestart}
-        </button>
+        <div className="game-card w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
+          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto shadow-btn-pink animate-float mt-2"
+            style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)', boxShadow: '0 8px 24px rgba(255,45,155,0.4)' }}>
+            <Trophy className="w-10 h-10 text-white" />
+          </div>
+          <div>
+            <span className="tag" style={{ background: '#FCE7F3', color: '#FF2D9B', border: '2px solid #FBCFE8' }}>
+              {t.quizSummaryTitle}
+            </span>
+            <h2 className="text-4xl font-black text-ink mt-2">{percentage}%</h2>
+            <p className="text-sm text-ink-3 font-semibold">Green Flag!</p>
+            <p className="text-xs text-ink-3 mt-1">{t.quizSummaryScore(score, GUESS_QUIZ_LIST.length)}</p>
+          </div>
+          <div className="p-4 rounded-2xl text-left text-xs text-ink-2 leading-relaxed space-y-2"
+            style={{ background: '#F5F3FF', border: '2px solid #DDD6FE' }}>
+            <div className="font-black text-brand flex items-center gap-1.5">
+              <Heart className="w-4 h-4 fill-brand text-brand" /> Compatibility Note:
+            </div>
+            <p className="font-semibold">{compatNote}</p>
+          </div>
+
+          {/* Partners display */}
+          {profile && partner && (
+            <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
+              <div className="text-center">
+                <Avatar avatarId={profile.avatarId} size={40} />
+                <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
+              </div>
+              <div className="text-2xl">💗</div>
+              <div className="text-center">
+                <Avatar avatarId={partner.avatarId} size={40} />
+                <p className="text-[10px] font-black text-ink-3 mt-1">{partner.name}</p>
+              </div>
+            </div>
+          )}
+          
+          <div className="rounded-3xl overflow-hidden shadow-xl border-4 border-white mt-2">
+            <img 
+              src={percentage >= 50 ? "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif" : "https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif"} 
+              alt="Final Score Meme" 
+              className="w-full h-36 object-cover" 
+            />
+          </div>
+
+          <button onClick={() => handleRestart(true)} className="btn-chunky btn-pink w-full text-sm py-3.5">
+            <RefreshCw className="w-4 h-4" /> {t.quizRestart}
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="game-card w-full max-w-sm mx-auto p-5 space-y-4 flex flex-col justify-between min-h-[510px] relative">
-      {/* Full screen meme modal */}
-      {pointsToast && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-sm text-center shadow-2xl animate-pop-in flex flex-col gap-4">
-            <h3 className={`text-3xl font-black ${pointsToast.positive ? 'text-green-500' : 'text-red-500'}`}>
-              {actualAnswer === guessedAnswer ? t.quizMatchTitle : t.quizMissTitle}
-            </h3>
-            
-            <p className={`text-lg font-black ${pointsToast.positive ? 'text-green-600' : 'text-red-600'}`}>
-              {pointsToast.text}
-            </p>
-            
-            {/* The answers! */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-center gap-3">
-                <div className="flex-1 p-3 rounded-2xl bg-stone-50 border border-stone-200">
-                  <span className="text-[10px] font-black text-ink-3 uppercase block mb-1">Target Answer</span>
-                  <span className="text-sm font-bold text-ink leading-tight">{actualAnswer}</span>
-                </div>
-                <div className="flex-1 p-3 rounded-2xl bg-stone-50 border border-stone-200">
-                  <span className="text-[10px] font-black text-ink-3 uppercase block mb-1">Guessed</span>
-                  <span className="text-sm font-bold text-ink leading-tight">{guessedAnswer}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* The Meme */}
-            <div className="rounded-2xl overflow-hidden bg-stone-100 border-4 border-stone-100 shadow-inner">
-              <img src={pointsToast.imgUrl} alt="Reaction" className="w-full h-48 object-cover" />
-            </div>
-
-            <div className="flex items-center justify-between mt-2">
-              <button 
-                onClick={() => {
-                  handleNext();
-                }}
-                className="w-full mt-2 py-3 rounded-2xl font-black text-white text-lg transition shadow-lg shadow-brand-500/30 flex items-center justify-center bg-brand hover:bg-brand-dark active:scale-95"
-              >
-                Next Question <span className="ml-2">→</span>
-              </button>
+    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+      {/* Standardized Game Header Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+            style={{ background: 'linear-gradient(135deg, #06B6D4, #3B82F6)' }}>
+            <Heart className="w-4 h-4 fill-white" />
+          </div>
+          <div>
+            <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Guess My Heart</h2>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
+              <span>Question {currentIndex + 1} / {GUESS_QUIZ_LIST.length}</span>
+              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-pink-500/80 text-white text-[9px] font-black">
+                💖 {profile?.heartPoints ?? 0} pts
+              </span>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Header */}
-      <div>
-        <div className="flex items-center justify-between text-xs font-bold mb-2">
-          <span className="text-ink-3">Question {currentIndex + 1} / {GUESS_QUIZ_LIST.length}</span>
-          <span className="hearts-pill">
-            <Heart className="w-3 h-3 fill-current" /> {profile?.heartPoints ?? 0} pts
-          </span>
-        </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${((currentIndex + 1) / GUESS_QUIZ_LIST.length) * 100}%` }} />
-        </div>
+        <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+          End Game
+        </button>
       </div>
 
-      {/* Question */}
-      <div className="text-center space-y-2">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black text-white"
-          style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316)', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
-          🎯 {t.quizHeader(currentQuiz.targetRole)}
+      {/* Main Game Card - Full Height Flexible */}
+      <div className="game-card w-full flex-1 flex flex-col justify-between p-5 overflow-y-auto no-scrollbar relative animate-pop-in">
+        {/* Full screen meme modal */}
+        {pointsToast && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white p-6 rounded-3xl w-full max-w-sm text-center shadow-2xl animate-pop-in flex flex-col gap-4">
+              <h3 className={`text-3xl font-black ${pointsToast.positive ? 'text-green-500' : 'text-red-500'}`}>
+                {actualAnswer === guessedAnswer ? t.quizMatchTitle : t.quizMissTitle}
+              </h3>
+              
+              <p className={`text-lg font-black ${pointsToast.positive ? 'text-green-600' : 'text-red-600'}`}>
+                {pointsToast.text}
+              </p>
+              
+              {/* The answers! */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="flex-1 p-3 rounded-2xl bg-stone-50 border border-stone-200">
+                    <span className="text-[10px] font-black text-ink-3 uppercase block mb-1">Target Answer</span>
+                    <span className="text-sm font-bold text-ink leading-tight">{actualAnswer}</span>
+                  </div>
+                  <div className="flex-1 p-3 rounded-2xl bg-stone-50 border border-stone-200">
+                    <span className="text-[10px] font-black text-ink-3 uppercase block mb-1">Guessed</span>
+                    <span className="text-sm font-bold text-ink leading-tight">{guessedAnswer}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* The Meme */}
+              <div className="rounded-2xl overflow-hidden bg-stone-100 border-4 border-stone-100 shadow-inner">
+                <img src={pointsToast.imgUrl} alt="Reaction" className="w-full h-48 object-cover" />
+              </div>
+
+              <div className="flex items-center justify-between mt-2">
+                <button 
+                  onClick={() => {
+                    handleNext();
+                  }}
+                  className="w-full mt-2 py-3 rounded-2xl font-black text-white text-lg transition shadow-lg shadow-brand-500/30 flex items-center justify-center bg-brand hover:bg-brand-dark active:scale-95"
+                >
+                  Next Question <span className="ml-2">→</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Top Progress Bar inside Card */}
+        <div className="w-full shrink-0 mb-2">
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${((currentIndex + 1) / GUESS_QUIZ_LIST.length) * 100}%` }} />
+          </div>
         </div>
-        <h3 className="text-lg font-black text-ink leading-snug">{currentQuiz.question}</h3>
-        <p className="text-[11px] text-ink-3 italic">{currentQuiz.vibeText}</p>
-      </div>
+
+        {/* Question Area */}
+        <div className="text-center space-y-1.5 shrink-0 my-auto py-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black text-white"
+            style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316)', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
+            🎯 {t.quizHeader(currentQuiz.targetRole)}
+          </div>
+          <h3 className="text-base sm:text-lg font-black text-ink leading-snug">{currentQuiz.question}</h3>
+          <p className="text-[11px] text-ink-3 italic">{currentQuiz.vibeText}</p>
+        </div>
 
       {/* STAGE 1: Secret pick */}
       {stage === 'secret' && (
@@ -333,6 +405,34 @@ const CoupleGuessGameInner: React.FC = () => {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* STAGE 1.5: Pass the phone handover (single player only) */}
+      {stage === 'handover' && (
+        <div className="flex-1 flex flex-col items-center justify-center space-y-5 animate-pop-in px-2">
+          <div className="w-32 h-32 rounded-3xl overflow-hidden shadow-xl animate-handover-pulse"
+            style={{ border: '4px solid rgba(124,58,237,0.3)', boxShadow: '0 12px 40px rgba(124,58,237,0.2)' }}>
+            <img src="/icons/pass-phone.jpg" alt="Pass phone" className="w-full h-full object-cover" />
+          </div>
+          <div className="text-center space-y-2">
+            <h3 className="text-xl font-black text-ink">
+              Chosen! No peeking
+            </h3>
+            <p className="text-sm text-ink-3 font-semibold leading-relaxed">
+              Now hand the phone to <span className="text-brand font-black">{isBoyTarget ? 'the Girl' : 'the Boy'}</span> to guess the answer!
+            </p>
+          </div>
+          <button
+            onClick={handleHandoverReady}
+            className="w-full py-4 rounded-2xl text-white font-black text-base tracking-tight transition active:scale-95 flex items-center justify-center gap-2"
+            style={{
+              background: 'linear-gradient(135deg, #7C3AED, #A855F7)',
+              boxShadow: '0 6px 0 #5B21B6, 0 8px 20px rgba(124,58,237,0.4)',
+            }}
+          >
+            I'm Ready to Guess!
+          </button>
         </div>
       )}
 
@@ -374,15 +474,16 @@ const CoupleGuessGameInner: React.FC = () => {
       )}
 
       {/* Tip */}
-      <div className="text-center text-[10px] text-ink-3 flex items-center justify-center gap-1 font-semibold">
+      <div className="text-center text-[10px] text-ink-3 flex items-center justify-center gap-1 font-semibold shrink-0 pt-2">
         <Sparkles className="w-3.5 h-3.5 text-amber-500" /> {t.quizTip}
       </div>
     </div>
+  </div>
   );
 };
 
-export const CoupleGuessGame: React.FC = () => (
+export const CoupleGuessGame: React.FC<Props> = (props) => (
   <CoupleGuessErrorBoundary>
-    <CoupleGuessGameInner />
+    <CoupleGuessGameInner {...props} />
   </CoupleGuessErrorBoundary>
 );

@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layers, Dices, Heart, Users, Sparkles, RotateCw, HeartHandshake, Music, Volume2, VolumeX, Check } from 'lucide-react';
+import { Layers, Dices, Heart, Users, Sparkles, RotateCw, HeartHandshake, Music, Volume2, VolumeX, Check, Hash, TextCursor } from 'lucide-react';
 import { SWIPE_CARDS, CardCategory } from './data/questions';
 import { SwipeCard } from './components/SwipeCard';
 import { CoupleGuessGame } from './components/CoupleGuessGame';
 import { SpinWheel } from './components/SpinWheel';
 import { MatchGame } from './components/MatchGame';
+import { NumberGuesserGame } from './components/NumberGuesserGame';
+import { LetterRaceGame } from './components/LetterRaceGame';
 import { RoomModal } from './components/RoomModal';
 import { SummaryModal } from './components/SummaryModal';
 import { getAvatar } from './components/AvatarPicker';
@@ -18,8 +20,9 @@ import { WelcomeScreen } from './screens/WelcomeScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { InviteScreen } from './screens/InviteScreen';
 import { sounds } from './utils/audio';
+import { GameIntro } from './components/GameIntro';
 
-type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match';
+type ActiveTab = 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
 
 // ---- Inner App (has access to GameContext) ----
 const AppInner: React.FC = () => {
@@ -61,6 +64,44 @@ const AppInner: React.FC = () => {
   const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
   const sessionRestoredRef = React.useRef(false);
+
+  // Track which game intros have been shown this session (so it only shows once per game per session)
+  const [introShown, setIntroShown] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = sessionStorage.getItem('knotyet_introShown');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+
+  const markIntroShown = (tab: string) => {
+    setIntroShown(prev => {
+      const next = { ...prev, [tab]: true };
+      sessionStorage.setItem('knotyet_introShown', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleEndGame = () => {
+    if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
+      const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+      stored[activeTab] = false;
+      sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+      
+      if (activeTab === 'number') {
+        sessionStorage.removeItem('num_stage');
+        sessionStorage.removeItem('num_secret');
+        sessionStorage.removeItem('num_guesses');
+        sessionStorage.removeItem('num_round');
+      } else if (activeTab === 'letter') {
+        sessionStorage.removeItem('letter_stage');
+        sessionStorage.removeItem('letter_letter');
+      }
+      
+      setIntroShown(stored);
+    }
+  };
+
+  const isPlayingGame = introShown[activeTab] === true;
 
   const previousTab = React.useRef<ActiveTab | 'lobby'>('lobby');
 
@@ -447,7 +488,7 @@ const AppInner: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen flex justify-center items-start"
+    <div className="min-h-screen flex justify-center items-center sm:py-4"
       style={{ background: 'linear-gradient(160deg, #6D28D9 0%, #7C3AED 40%, #4F46E5 100%)' }}
     >
       {/* Decorative background shapes */}
@@ -466,15 +507,16 @@ const AppInner: React.FC = () => {
       </div>
 
       {/* Phone container */}
-      <div className="w-full max-w-md min-h-screen sm:min-h-[900px] sm:rounded-[44px] flex flex-col overflow-hidden relative"
+      <div className="w-full max-w-md h-[100dvh] max-h-[100dvh] sm:h-[844px] sm:max-h-[94vh] sm:rounded-[44px] flex flex-col overflow-hidden relative shadow-2xl"
         style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(0px)' }}
       >
         {/* ====== HEADER ====== */}
-        <header className="px-4 pt-4 pb-3 sticky top-0 z-30"
-          style={multiplayer.status === 'connected' 
-            ? { background: 'linear-gradient(180deg, rgba(16,185,129,0.95) 0%, rgba(5,150,105,0.90) 100%)', backdropFilter: 'blur(10px)' }
-            : { background: 'linear-gradient(180deg, rgba(109,40,217,0.98) 0%, rgba(109,40,217,0.92) 100%)', backdropFilter: 'blur(10px)' }}
-        >
+        {!isPlayingGame && (
+          <header className="px-4 pt-4 pb-3 sticky top-0 z-30"
+            style={multiplayer.status === 'connected' 
+              ? { background: 'linear-gradient(180deg, rgba(16,185,129,0.95) 0%, rgba(5,150,105,0.90) 100%)', backdropFilter: 'blur(10px)' }
+              : { background: 'linear-gradient(180deg, rgba(109,40,217,0.98) 0%, rgba(109,40,217,0.92) 100%)', backdropFilter: 'blur(10px)' }}
+          >
           {/* Top Row: Logo + Partner strip + Mode/Room */}
           <div className="flex items-center justify-between gap-2">
             {/* Logo / Profile */}
@@ -602,12 +644,12 @@ const AppInner: React.FC = () => {
           </div>
 
           {/* Game Mode Tabs */}
-          <div className={`grid ${multiplayer.status === 'connected' ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 mt-3 p-1.5 rounded-2xl`}
+          <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 p-1.5 rounded-2xl"
             style={{ background: 'rgba(0,0,0,0.2)' }}>
             {/* Swipe tab */}
             <button
               onClick={() => handleTabClick('swipe')}
-              className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
               style={currentTab === 'swipe' ? {
                 background: '#FF2D9B',
                 color: 'white',
@@ -621,7 +663,7 @@ const AppInner: React.FC = () => {
             {/* Quiz tab */}
             <button
               onClick={() => handleTabClick('quiz')}
-              className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
               style={currentTab === 'quiz' ? {
                 background: '#06B6D4',
                 color: 'white',
@@ -635,7 +677,7 @@ const AppInner: React.FC = () => {
             {/* Wheel tab */}
             <button
               onClick={() => handleTabClick('wheel')}
-              className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
               style={currentTab === 'wheel' ? {
                 background: '#F59E0B',
                 color: 'white',
@@ -650,7 +692,7 @@ const AppInner: React.FC = () => {
             {multiplayer.status === 'connected' && (
               <button
                 onClick={() => handleTabClick('match')}
-                className="py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
                 style={currentTab === 'match' ? {
                   background: '#7C3AED',
                   color: 'white',
@@ -661,104 +703,193 @@ const AppInner: React.FC = () => {
                 <span>{t.tabMatch}</span>
               </button>
             )}
+
+            {/* Number tab */}
+            <button
+              onClick={() => handleTabClick('number')}
+              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              style={currentTab === 'number' ? {
+                background: '#6366F1',
+                color: 'white',
+                boxShadow: '0 4px 0 #4338CA, 0 6px 16px rgba(99,102,241,0.4)',
+              } : { color: 'rgba(255,255,255,0.6)' }}
+            >
+              <Hash className="w-5 h-5 mb-0.5" />
+              <span>{t.tabNumber || 'Number'}</span>
+            </button>
+
+            {/* Letter tab */}
+            <button
+              onClick={() => handleTabClick('letter')}
+              className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+              style={currentTab === 'letter' ? {
+                background: '#D946EF',
+                color: 'white',
+                boxShadow: '0 4px 0 #A21CAF, 0 6px 16px rgba(217,70,239,0.4)',
+              } : { color: 'rgba(255,255,255,0.6)' }}
+            >
+              <TextCursor className="w-5 h-5 mb-0.5" />
+              <span>{t.tabLetter || 'Letter'}</span>
+            </button>
           </div>
         </header>
+        )}
 
-        <main className="flex-1 p-4 flex flex-col items-center relative overflow-hidden">
+        <main className={`flex-1 flex flex-col items-center justify-between relative overflow-hidden w-full h-full p-2 sm:p-3`}>
           {currentTab === 'swipe' && (
-            <div className="w-full max-w-sm flex flex-col items-center space-y-3">
-              <div className="w-full flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {categories.map(cat => (
-                  <button
-                    key={cat.key}
-                    onClick={() => handleCategoryChange(cat.key as CardCategory | 'all')}
-                    className="px-3.5 py-1.5 rounded-full whitespace-nowrap text-xs font-black transition active:scale-95 flex-shrink-0"
-                    style={selectedCategory === cat.key ? {
-                      background: cat.color,
-                      color: 'white',
-                      boxShadow: `0 4px 12px ${cat.color}50`,
-                    } : {
-                      background: 'rgba(255,255,255,0.9)',
-                      color: cat.color,
-                      border: `2px solid ${cat.color}30`,
-                    }}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="w-full flex items-center justify-between text-xs px-1">
-                <span className="text-white/70 font-bold">{t.cardCount(cardIndex + 1, filteredCards.length)}</span>
-                <span className="flex items-center gap-2">
-                  <span className="font-black px-2 py-0.5 rounded-full text-white text-[11px]"
-                    style={{ background: '#10B981' }}>✓ {answeredCount}</span>
-                  <span className="font-black px-2 py-0.5 rounded-full text-white text-[11px]"
-                    style={{ background: '#FF2D9B' }}>✕ {skippedCount}</span>
-                </span>
-              </div>
-
-              <div className="relative w-full h-[400px] select-none">
-                {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
-                {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
-                {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
-                {nextCard && <SwipeCard key={nextCard.id} card={nextCard} cardIndex={cardIndex + 1} stackDepth={1} onSwipe={handleSwipe} isTop={false} />}
-                {currentCard ? (
-                  <SwipeCard 
-                    key={currentCard.id} 
-                    card={currentCard} 
-                    cardIndex={cardIndex}
-                    stackDepth={0}
-                    onSwipe={handleSwipe} 
-                    isTop={true} 
-                    isFlipped={isCardFlipped}
-                    onToggleFlip={(flipped) => {
-                      setIsCardFlipped(flipped);
-                      if (multiplayer.status === 'connected') {
-                        multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: flipped });
-                      }
-                    }}
-                    myAnswer={myCardAnswer}
-                    partnerAnswer={partnerCardAnswer}
-                    onSubmitAnswer={(ans) => {
-                      setMyCardAnswer(ans);
-                      if (multiplayer.status === 'connected') {
-                        multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: ans });
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="game-card w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl animate-float"
-                      style={{ background: 'linear-gradient(135deg, #FACC15, #F97316)' }}>
-                      <Sparkles className="w-8 h-8 text-white" />
+            introShown['swipe'] ? (
+              <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full space-y-2 animate-fade-in">
+                {/* Standardized Game Header */}
+                <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+                      style={{ background: 'linear-gradient(135deg, #FF2D9B, #EC4899)' }}>
+                      <Layers className="w-4 h-4" />
                     </div>
-                    <h3 className="font-black text-ink text-xl">{t.allCardsTitle}</h3>
-                    <p className="text-sm text-ink-3">{t.allCardsSub}</p>
-                    <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
-                      <RotateCw className="w-4 h-4" /> {t.playAgain}
-                    </button>
+                    <div>
+                      <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Icebreaker Cards</h2>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
+                        <span>{t.cardCount(cardIndex + 1, filteredCards.length)}</span>
+                        <span className="flex items-center gap-1.5 ml-1">
+                          <span className="font-black px-1.5 py-0.2 rounded-full text-white text-[9px] bg-emerald-500">✓ {answeredCount}</span>
+                          <span className="font-black px-1.5 py-0.2 rounded-full text-white text-[9px] bg-pink-500">✕ {skippedCount}</span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                  <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+                    End Game
+                  </button>
+                </div>
+                
+                {/* Category Selector Pills */}
+                <div className="w-full flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar shrink-0">
+                  {categories.map(cat => (
+                    <button
+                      key={cat.key}
+                      onClick={() => handleCategoryChange(cat.key as CardCategory | 'all')}
+                      className="px-3 py-1 rounded-full whitespace-nowrap text-xs font-black transition active:scale-95 flex-shrink-0"
+                      style={selectedCategory === cat.key ? {
+                        background: cat.color,
+                        color: 'white',
+                        boxShadow: `0 4px 12px ${cat.color}50`,
+                      } : {
+                        background: 'rgba(255,255,255,0.9)',
+                        color: cat.color,
+                        border: `1.5px solid ${cat.color}30`,
+                      }}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
 
-              <div className="flex items-center justify-center pt-2">
-                <button onClick={() => handleManualAction('right')} disabled={!currentCard}
-                  className="btn-chunky btn-white text-xs px-6 py-3"
-                  style={{ borderRadius: '16px', color: '#10B981', boxShadow: '0 4px 0 #E5E7EB, 0 4px 12px rgba(0,0,0,0.05)' }}>
-                  Next Question
-                </button>
+                {/* Card Stack Area - Full Height Elastic */}
+                <div className="relative w-full flex-1 min-h-[320px] select-none my-auto flex items-center justify-center py-1">
+                  {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
+                  {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
+                  {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
+                  {nextCard && <SwipeCard key={nextCard.id} card={nextCard} cardIndex={cardIndex + 1} stackDepth={1} onSwipe={handleSwipe} isTop={false} />}
+                  {currentCard ? (
+                    <SwipeCard 
+                      key={currentCard.id} 
+                      card={currentCard} 
+                      cardIndex={cardIndex}
+                      stackDepth={0}
+                      onSwipe={handleSwipe} 
+                      isTop={true} 
+                      isFlipped={isCardFlipped}
+                      onToggleFlip={(flipped) => {
+                        setIsCardFlipped(flipped);
+                        if (multiplayer.status === 'connected') {
+                          multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: flipped });
+                        }
+                      }}
+                      myAnswer={myCardAnswer}
+                      partnerAnswer={partnerCardAnswer}
+                      onSubmitAnswer={(ans) => {
+                        setMyCardAnswer(ans);
+                        if (multiplayer.status === 'connected') {
+                          multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: ans });
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="game-card w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl animate-float"
+                        style={{ background: 'linear-gradient(135deg, #FACC15, #F97316)' }}>
+                        <Sparkles className="w-8 h-8 text-white" />
+                      </div>
+                      <h3 className="font-black text-ink text-xl">{t.allCardsTitle}</h3>
+                      <p className="text-sm text-ink-3">{t.allCardsSub}</p>
+                      <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
+                        <RotateCw className="w-4 h-4" /> {t.playAgain}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Next Button */}
+                <div className="w-full shrink-0 pt-1">
+                  <button onClick={() => handleManualAction('right')} disabled={!currentCard}
+                    className="btn-chunky w-full text-sm py-3.5 flex items-center justify-center gap-2"
+                    style={{
+                      background: 'white',
+                      color: '#10B981',
+                      boxShadow: '0 4px 0 #E5E7EB, 0 6px 20px rgba(0,0,0,0.08)',
+                      borderRadius: '18px'
+                    }}>
+                    <Check className="w-4 h-4 stroke-[3]" /> Next Question
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <GameIntro gameType="swipe" onStart={() => markIntroShown('swipe')} />
+            )
           )}
 
-          {currentTab === 'quiz' && <CoupleGuessGame />}
-          {currentTab === 'wheel' && <SpinWheel />}
-          {currentTab === 'match' && <MatchGame />}
+          {currentTab === 'quiz' && (
+            introShown['quiz']
+              ? <CoupleGuessGame onEndGame={handleEndGame} />
+              : <GameIntro gameType="quiz" onStart={() => markIntroShown('quiz')} />
+          )}
+          {currentTab === 'wheel' && (
+            introShown['wheel']
+              ? <SpinWheel onEndGame={handleEndGame} />
+              : <GameIntro gameType="wheel" onStart={() => markIntroShown('wheel')} />
+          )}
+          {currentTab === 'match' && (
+            introShown['match']
+              ? <MatchGame onEndGame={handleEndGame} />
+              : <GameIntro gameType="match" onStart={() => markIntroShown('match')} />
+          )}
+          {currentTab === 'number' && (
+            introShown['number']
+              ? <NumberGuesserGame onEndGame={handleEndGame} />
+              : <GameIntro gameType="number" onStart={() => markIntroShown('number')} />
+          )}
+          {currentTab === 'letter' && (
+            introShown['letter']
+              ? <LetterRaceGame onEndGame={handleEndGame} />
+              : <GameIntro gameType="letter" onStart={() => markIntroShown('letter')} />
+          )}
         </main>
 
-        {/* Clean bottom spacing */}
-        <div className="h-4" />
+        {/* Dedicated Bottom Ad Banner Slot */}
+        <div className="w-full px-3 pb-3 pt-1 shrink-0 z-20">
+          <div className="w-full h-14 rounded-2xl border-2 border-dashed border-white/20 bg-black/15 backdrop-blur-md flex items-center justify-between px-4 text-white/70 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📢</span>
+              <div className="text-left">
+                <p className="text-[9px] font-black uppercase tracking-widest text-white/50 leading-none">Sponsored</p>
+                <p className="text-xs font-bold text-white/80 leading-tight">Ad Banner Space Reserved</p>
+              </div>
+            </div>
+            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/10 text-white/60 border border-white/15 uppercase">
+              Ad Space
+            </span>
+          </div>
+        </div>
 
         <RoomModal 
           isOpen={isRoomModalOpen} 

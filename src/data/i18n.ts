@@ -15,6 +15,8 @@ export const i18n = {
     tabQuiz: 'Guess My Heart',
     tabWheel: 'Spin Wheel',
     tabMatch: 'Couple Match',
+    tabNumber: 'Number Guesser',
+    tabLetter: 'Letter Race',
     // Header
     playTogether: 'Play Together',
     heartPoints: 'pts',
@@ -137,6 +139,8 @@ export const i18n = {
     tabQuiz: 'Guess My Heart',
     tabWheel: 'Spin Wheel',
     tabMatch: 'Couple Match',
+    tabNumber: 'Teka Nombor',
+    tabLetter: 'Lumba Huruf',
     playTogether: 'Main Berdua',
     heartPoints: 'pts',
     catAll: 'Semua',

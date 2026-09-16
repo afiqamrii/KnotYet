@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useRef, useCallback, useEff
 import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
 
-export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match';
+export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
 
 export type MultiplayerMessage = 
   | { type: 'PROFILE_SYNC'; payload: UserProfile }
@@ -19,6 +19,12 @@ export type MultiplayerMessage =
   | { type: 'MATCH_NEXT' }
   | { type: 'MATCH_RESTART' }
   | { type: 'QUIZ_RESTART' }
+  | { type: 'NUM_SET_SECRET'; payload: number }
+  | { type: 'NUM_GUESS'; payload: { val: number; name?: string } | number }
+  | { type: 'NUM_NEXT' }
+  | { type: 'LETTER_START'; payload: string }
+  | { type: 'LETTER_WORD_SUBMIT'; payload: string }
+  | { type: 'LETTER_NEXT' }
   | { type: 'LEAVE_ROOM' };
 
 interface MultiplayerState {

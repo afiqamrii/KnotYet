@@ -40,6 +40,27 @@ export const STATIC_MEMES = {
     'https://media.giphy.com/media/qQdL532ZANbjy/giphy.gif',
     'https://media.giphy.com/media/tLRifcvQNJIic/giphy.gif',
     'https://media.giphy.com/media/HteV6g0QTNxp6/giphy.gif'
+  ],
+  win: [
+    'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', // Drake clapping
+    'https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif', // Confetti celebration
+    'https://media.giphy.com/media/26tOZ42Mg6pbTUPHW/giphy.gif', // Yes!
+    'https://media.giphy.com/media/nxxZv20hxZwru/giphy.gif', // Minions cheering
+    'https://media.giphy.com/media/d20PG6M6SAFqtmce9r/giphy.gif', // Let's go
+    'https://media.giphy.com/media/YRuFixSNWFVcXhqQJ/giphy.gif', // Leonardo DiCaprio toast
+    'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' // SpongeBob celebration
+  ],
+  higher: [
+    'https://media.giphy.com/media/l41lFptE0LsKVZ61O/giphy.gif', // Going up
+    'https://media.giphy.com/media/Zdg7kl9bnyqXrPH2jq/giphy.gif', // Higher!
+    'https://media.giphy.com/media/3oKIPa2TdahY8LAAxy/giphy.gif', // Mind blown upwards
+    'https://media.giphy.com/media/26FPCXdkvDbKBbgOI/giphy.gif' // Pointing up
+  ],
+  lower: [
+    'https://media.giphy.com/media/l2Je0oOcT4cioSIfu/giphy.gif', // Going down
+    'https://media.giphy.com/media/3o6UBil4zn1Tt03PI4/giphy.gif', // Pointing down
+    'https://media.giphy.com/media/4cuyucPeVWbNS/giphy.gif', // Look down
+    'https://media.giphy.com/media/l4pTfx2qLszoacZRS/giphy.gif' // Thumbs down
   ]
 };
 
@@ -61,5 +82,15 @@ export async function getContextualMeme(questionText: string, isMatch: boolean):
     pool = isMatch ? STATIC_MEMES.defaultMatch : STATIC_MEMES.defaultMismatch;
   }
 
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export async function getWinMeme(): Promise<string> {
+  const pool = STATIC_MEMES.win;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export async function getHintMeme(hint: 'higher' | 'lower'): Promise<string> {
+  const pool = STATIC_MEMES[hint];
   return pool[Math.floor(Math.random() * pool.length)];
 }

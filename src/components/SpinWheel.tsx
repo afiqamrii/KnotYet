@@ -7,7 +7,11 @@ import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 
-export const SpinWheel: React.FC = () => {
+export interface Props {
+  onEndGame?: () => void;
+}
+
+export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   const { t, addHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
@@ -97,20 +101,58 @@ export const SpinWheel: React.FC = () => {
     executeSpin(newRotation, randomSegmentIndex, promptIndex);
   };
 
+  const handleEndGame = () => {
+    if (onEndGame) {
+      onEndGame();
+    } else {
+      if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
+        sessionStorage.removeItem('wheel_spin_state');
+        sessionStorage.removeItem('wheel_rotation');
+        sessionStorage.removeItem('wheel_selectedIdea');
+        
+        const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+        stored.wheel = false;
+        sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+        
+        window.location.reload();
+      }
+    }
+  };
+
   return (
-    <div className="game-card w-full max-w-sm mx-auto p-6 flex flex-col items-center justify-between min-h-[510px]">
-      {/* Header */}
-      <div className="text-center space-y-1">
-        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-black text-white"
-          style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316, #FF2D9B)', boxShadow: '0 4px 12px rgba(245,158,11,0.35)' }}>
-          <Sparkles className="w-3.5 h-3.5" /> Date Night Mode
+    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+      {/* Standardized Game Header Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+            style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316)' }}>
+            <Dices className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Anti-Awkward Wheel</h2>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
+              <span>Date Night Mode</span>
+              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-amber-500/80 text-white text-[9px] font-black">
+                🎡 Spin & Ask
+              </span>
+            </div>
+          </div>
         </div>
-        <h2 className="text-2xl font-black text-ink">{t.wheelTitle}</h2>
-        <p className="text-[11px] text-ink-3 font-medium">{t.wheelSub}</p>
+        <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+          End Game
+        </button>
       </div>
 
-      {/* Wheel */}
-      <div className="relative my-4" style={{ width: 272, height: 272 }}>
+      {/* Main Game Card - Full Height Flexible */}
+      <div className="game-card w-full flex-1 flex flex-col items-center justify-between p-5 overflow-y-auto no-scrollbar relative animate-pop-in">
+        {/* Header inside Card */}
+        <div className="text-center space-y-1 shrink-0">
+          <h3 className="text-xl font-black text-ink">{t.wheelTitle}</h3>
+          <p className="text-[11px] text-ink-3 font-medium">{t.wheelSub}</p>
+        </div>
+
+        {/* Wheel */}
+        <div className="relative my-auto py-2 shrink-0" style={{ width: 270, height: 270 }}>
         {/* Pointer */}
         <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
           <div className="w-0 h-0"
@@ -272,5 +314,6 @@ export const SpinWheel: React.FC = () => {
         </div>
       )}
     </div>
+  </div>
   );
 };

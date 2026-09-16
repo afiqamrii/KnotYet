@@ -14,6 +14,7 @@ interface AuthContextType {
   couple: CoupleProgress | null;
   isLoading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInAsGuest: () => void;
   signOut: () => Promise<void>;
   refreshProgress: () => Promise<void>;
   refreshCouple: () => Promise<void>;
@@ -30,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
   couple: null,
   isLoading: true,
   signInWithGoogle: async () => {},
+  signInAsGuest: () => {},
   signOut: async () => {},
   refreshProgress: async () => {},
   refreshCouple: async () => {},
@@ -110,12 +112,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        setUser(session.user);
+      } else if (localStorage.getItem('knotyet_guest_active') === 'true') {
+        const guestId = localStorage.getItem('knotyet_guest_id') || 'guest-123';
+        setUser({ id: guestId, email: 'guest@knotyet.local' } as any);
+        setProfile({ id: guestId, name: 'Guest Player', avatar_id: 'sunny', created_at: '' });
+        setProgress({ user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: 320, answered_questions: [], last_reset_date: '', is_premium: false });
+        setIsLoading(false);
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        setUser(session.user);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -209,9 +224,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error;
   };
 
+  const signInAsGuest = () => {
+    const guestId = 'guest-' + Date.now();
+    localStorage.setItem('knotyet_guest_active', 'true');
+    localStorage.setItem('knotyet_guest_id', guestId);
+    const guestUser = { id: guestId, email: 'guest@knotyet.local' } as any;
+    const guestProf = { id: guestId, name: 'Guest Player', avatar_id: 'sunny', created_at: new Date().toISOString() };
+    const guestProg = { user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: 320, answered_questions: [], last_reset_date: '', is_premium: false };
+    setUser(guestUser);
+    setProfile(guestProf);
+    setProgress(guestProg);
+    setIsLoading(false);
+  };
+
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    localStorage.removeItem('knotyet_guest_active');
+    localStorage.removeItem('knotyet_guest_id');
+    setUser(null);
+    setProfile(null);
+    setProgress(null);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore network errors when signing out
+    }
   };
   
   const incrementPlayCount = async (type: 'solo' | 'multiplayer') => {
@@ -246,7 +282,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay, checkLimit }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signInAsGuest, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay, checkLimit }}>
       {children}
       {isAdModalOpen && adLimitType && (
         <AdModal 

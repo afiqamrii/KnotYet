@@ -8,7 +8,36 @@ import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext'
 import { getContextualMeme } from '../utils/memes';
 import { Avatar } from './AvatarPicker';
 
-export const MatchGame: React.FC = () => {
+interface Props {
+  onEndGame?: () => void;
+}
+
+class MatchGameErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("MatchGame Crash:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-red-100 text-red-900 rounded-xl overflow-auto text-xs font-mono">
+          <h2 className="font-bold text-lg">Oops, Crash in Match Game!</h2>
+          <pre>{this.state.error?.toString()}</pre>
+          <pre>{this.state.error?.stack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { profile, partner, addHeartPoints } = useGame();
   const multiplayer = useMultiplayer();
 
@@ -58,6 +87,27 @@ export const MatchGame: React.FC = () => {
       multiplayer.sendMessage({ type: 'MATCH_RESTART' });
     }
   }, [multiplayer]);
+
+  const handleEndGame = () => {
+    if (onEndGame) {
+      onEndGame();
+    } else {
+      if (window.confirm("Are you sure you want to end the game? This will reset your progress.")) {
+        sessionStorage.removeItem('match_currentIndex');
+        sessionStorage.removeItem('match_stage');
+        sessionStorage.removeItem('match_myAnswer');
+        sessionStorage.removeItem('match_partnerAnswer');
+        sessionStorage.removeItem('match_score');
+        sessionStorage.removeItem('match_completed');
+        
+        const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+        stored.match = false;
+        sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+        
+        window.location.reload();
+      }
+    }
+  };
 
   const handleNext = useCallback(() => {
     if (multiplayer.status === 'connected') {
@@ -126,52 +176,95 @@ export const MatchGame: React.FC = () => {
   if (completed) {
     const pointsEarned = (score * 15) + ((MATCH_QUESTIONS.length - score) * 5) + HEART_POINTS.COMPLETE_QUIZ;
     return (
-      <div className="game-card w-full max-w-md mx-auto p-8 text-center space-y-6 flex flex-col justify-center min-h-[510px]">
-        <div className="w-20 h-20 bg-brand text-white rounded-full mx-auto flex items-center justify-center animate-bounce-soft" style={{ boxShadow: '0 8px 32px rgba(124,58,237,0.4)' }}>
-          <Trophy className="w-10 h-10" />
-        </div>
-        <div>
-          <h2 className="text-3xl font-black text-ink">Match Score: {score}/{MATCH_QUESTIONS.length}</h2>
-          <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full text-xs font-black text-white bg-green-500" style={{ boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
-            <Sparkles className="w-3 h-3" /> +{pointsEarned} Points Earned!
-          </div>
-          <p className="text-sm font-semibold text-ink-3 mt-4 mb-2">
-            {score === MATCH_QUESTIONS.length ? 'You are a perfect match! 💖' : 'It was so much fun getting to know you better! ✨'}
-          </p>
-        </div>
-        
-        {/* Partners display */}
-        {profile && partner && (
-          <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
-            <div className="text-center">
-              <Avatar avatarId={profile.avatarId} size={40} />
-              <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
+      <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+        {/* Standardized Game Header */}
+        <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+              style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)' }}>
+              <HeartHandshake className="w-4 h-4" />
             </div>
-            <div className="text-2xl">💖</div>
-            <div className="text-center">
-              <Avatar avatarId={partner.avatarId} size={40} />
-              <p className="text-[10px] font-black text-ink-3 mt-1">{partner.name}</p>
+            <div>
+              <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Couple Match</h2>
+              <p className="text-[10px] font-bold text-white/80">Completed!</p>
             </div>
           </div>
-        )}
-
-        <div className="rounded-3xl overflow-hidden shadow-xl border-4 border-white mt-4">
-          <img 
-            src={score > MATCH_QUESTIONS.length / 2 ? "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif" : "https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif"} 
-            alt="Final Score Meme" 
-            className="w-full h-40 object-cover" 
-          />
+          <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+            End Game
+          </button>
         </div>
 
-        <button onClick={() => handleRestart()} className="btn-chunky btn-pink w-full text-sm">
-          <RefreshCw className="w-4 h-4" /> Play Again
-        </button>
+        <div className="game-card w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
+          <div className="w-20 h-20 bg-brand text-white rounded-full mx-auto flex items-center justify-center animate-bounce-soft" style={{ boxShadow: '0 8px 32px rgba(124,58,237,0.4)' }}>
+            <Trophy className="w-10 h-10" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-ink">Match Score: {score}/{MATCH_QUESTIONS.length}</h2>
+            <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full text-xs font-black text-white bg-green-500" style={{ boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
+              <Sparkles className="w-3 h-3" /> +{pointsEarned} Points Earned!
+            </div>
+            <p className="text-sm font-semibold text-ink-3 mt-4 mb-2">
+              {score === MATCH_QUESTIONS.length ? 'You are a perfect match! 💖' : 'It was so much fun getting to know you better! ✨'}
+            </p>
+          </div>
+          
+          {/* Partners display */}
+          {profile && partner && (
+            <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
+              <div className="text-center">
+                <Avatar avatarId={profile.avatarId} size={40} />
+                <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
+              </div>
+              <div className="text-2xl">💖</div>
+              <div className="text-center">
+                <Avatar avatarId={partner.avatarId} size={40} />
+                <p className="text-[10px] font-black text-ink-3 mt-1">{partner.name}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-3xl overflow-hidden shadow-xl border-4 border-white mt-2">
+            <img 
+              src={score > MATCH_QUESTIONS.length / 2 ? "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif" : "https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif"} 
+              alt="Final Score Meme" 
+              className="w-full h-36 object-cover" 
+            />
+          </div>
+
+          <button onClick={() => handleRestart()} className="btn-chunky btn-pink w-full text-sm py-3.5">
+            <RefreshCw className="w-4 h-4" /> Play Again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="game-card w-full max-w-md mx-auto p-6 sm:p-8 flex flex-col justify-between min-h-[510px] relative">
+    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+      {/* Standardized Game Header Bar */}
+      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
+            style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)' }}>
+            <HeartHandshake className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Couple Match</h2>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
+              <span>Question {currentIndex + 1} / {MATCH_QUESTIONS.length}</span>
+              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-purple-500/80 text-white text-[9px] font-black">
+                ✨ Compatibility
+              </span>
+            </div>
+          </div>
+        </div>
+        <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+          End Game
+        </button>
+      </div>
+
+      {/* Main Game Card - Full Height Flexible */}
+      <div className="game-card w-full flex-1 flex flex-col justify-between p-5 overflow-y-auto no-scrollbar relative animate-pop-in">
       {pointsToast && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white p-6 rounded-3xl w-full max-w-sm text-center shadow-2xl animate-pop-in flex flex-col gap-4">
@@ -269,5 +362,11 @@ export const MatchGame: React.FC = () => {
         )}
       </div>
     </div>
+  </div>
   );
 };
+export const MatchGame: React.FC<Props> = (props) => (
+  <MatchGameErrorBoundary>
+    <MatchGameInner {...props} />
+  </MatchGameErrorBoundary>
+);
