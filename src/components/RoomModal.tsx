@@ -53,7 +53,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
 
   return (
     <div className="modal-overlay centered" onClick={onClose}>
-      <div className="game-card w-full max-w-sm p-6 space-y-5 animate-pop-in relative"
+      <div className="game-card w-full max-w-sm sm:max-w-md p-6 sm:p-7 space-y-5 animate-pop-in relative"
         onClick={e => e.stopPropagation()}>
         <button onClick={onClose}
           className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100">

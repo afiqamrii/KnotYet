@@ -277,7 +277,7 @@ export const GameIntro: React.FC<GameIntroProps> = ({ gameType, onStart, countdo
 
   // ── Intro screen ───────────────────────────────────────────────
   return (
-    <div className="game-card w-full max-w-sm mx-auto flex-1 flex flex-col justify-between overflow-hidden animate-pop-in shadow-xl my-0.5">
+    <div className="game-card w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl mx-auto flex-1 flex flex-col justify-between overflow-hidden animate-pop-in shadow-xl my-0.5">
 
       {/* ── Header ── */}
       <div className="relative px-4 pt-4 pb-3 flex flex-col items-center shrink-0" style={{ background: config.gradient }}>

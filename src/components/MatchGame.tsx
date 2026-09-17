@@ -200,7 +200,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   if (completed) {
     const pointsEarned = (score * 15) + ((questions.length - score) * 5) + HEART_POINTS.COMPLETE_QUIZ;
     return (
-      <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+      <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
         {/* Standardized Game Header */}
         <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
           <div className="flex items-center gap-2.5">
@@ -264,7 +264,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   }
 
   return (
-    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+    <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
       <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -373,16 +373,18 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
                     </p>
                   </div>
                 )}
-                {currentQuiz.options.map((opt, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleSelect(opt)}
-                    className="w-full py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl border-2 border-stone-200 bg-stone-50 text-left font-bold text-xs sm:text-sm text-ink hover:border-brand hover:bg-indigo-50 active:scale-[0.98] transition-all flex items-center justify-between"
-                  >
-                    <span>{opt}</span>
-                    <span className="text-xs text-stone-400 font-bold"># {i + 1}</span>
-                  </button>
-                ))}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+                  {currentQuiz.options.map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleSelect(opt)}
+                      className="w-full py-2.5 sm:py-3.5 px-3.5 sm:px-4 rounded-2xl border-2 border-stone-200 bg-stone-50 text-left font-bold text-xs sm:text-sm text-ink hover:border-brand hover:bg-indigo-50 active:scale-[0.98] transition-all flex items-center justify-between"
+                    >
+                      <span className="leading-snug">{opt}</span>
+                      <span className="text-xs text-stone-400 font-bold ml-2 shrink-0"># {i + 1}</span>
+                    </button>
+                  ))}
+                </div>
               </>
             )}
           </>

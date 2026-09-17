@@ -3,11 +3,12 @@ import { useGame, type RelationshipType } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Avatar, AvatarPicker } from '../components/AvatarPicker';
-import { X, Share2, ChevronRight, Trophy, LogOut, Heart } from 'lucide-react';
+import { X, Share2, ChevronRight, Trophy, LogOut, Heart, MessageCircle } from 'lucide-react';
 import { sounds } from '../utils/audio';
 
 interface ProfileScreenProps {
   onClose: () => void;
+  onOpenFriends?: () => void;
 }
 
 const RELATIONSHIP_OPTIONS: { type: RelationshipType; emoji: string }[] = [
@@ -17,7 +18,7 @@ const RELATIONSHIP_OPTIONS: { type: RelationshipType; emoji: string }[] = [
   { type: 'spouse', emoji: '💍' },
 ];
 
-export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFriends }) => {
   const { profile, partner, setProfile, setPartner, t } = useGame();
   const { user, couple, signInWithGoogle, signOut } = useAuth();
   const [view, setView] = useState<'main' | 'edit' | 'addPartner' | 'editPartner' | 'waiting'>('main');
@@ -105,17 +106,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   // ---- MAIN VIEW ----
   if (view === 'main') return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-4">
-        <h2 className="text-xl font-black text-white">{t.profileTitle}</h2>
-        <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80"
-          style={{ background: 'rgba(255,255,255,0.15)' }}>
-          <X className="w-5 h-5" />
-        </button>
-      </div>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-start overflow-y-auto" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
+      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl flex flex-col h-full min-h-screen">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4">
+          <h2 className="text-xl font-black text-white">{t.profileTitle}</h2>
+          <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80"
+            style={{ background: 'rgba(255,255,255,0.15)' }}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-      <div className="flex-1 overflow-y-auto px-5 pb-8 space-y-4 no-scrollbar">
+        <div className="flex-1 overflow-y-auto px-5 pb-8 space-y-4 no-scrollbar">
         {/* Profile Card */}
         <div className="game-card p-5 flex items-center gap-4">
           <Avatar avatarId={profile.avatarId} size={64} />
@@ -181,6 +183,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
               </div>
             </div>
             <button
+              onClick={() => {
+                onClose();
+                onOpenFriends?.();
+              }}
+              className="w-full py-2.5 rounded-xl text-xs font-black text-pink-600 border-2 border-pink-200 bg-pink-50 hover:bg-pink-100 active:scale-95 transition flex items-center justify-center gap-1.5"
+            >
+              <MessageCircle className="w-4 h-4" /> Chat with {partner.name}
+            </button>
+            <button
               onClick={() => setIsUnlinkOpen(true)}
               className="w-full py-2.5 rounded-xl text-xs font-bold text-red-500 border-2 border-red-200 bg-red-50 active:scale-95 transition"
             >
@@ -235,6 +246,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
             <ChevronRight className="w-5 h-5 text-ink-3" />
           </button>
         )}
+
+        {/* Friends & Circle */}
+        <button
+          onClick={() => {
+            onClose();
+            onOpenFriends?.();
+          }}
+          className="game-card w-full p-4 flex items-center justify-between active:scale-98 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm"
+              style={{ background: '#FCE7F3' }}>
+              💌
+            </div>
+            <div className="text-left">
+              <p className="font-black text-ink text-sm">Friends & Loved Ones</p>
+              <p className="text-xs text-ink-3 font-semibold">Direct chat, circle list & invite to play</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-ink-3" />
+        </button>
 
         {/* Sync / Login Section */}
         <div className="game-card p-5 space-y-3">
@@ -293,18 +325,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
         </div>
       </div>
     </div>
+  </div>
   );
 
   // ---- EDIT PROFILE VIEW ----
   if (view === 'edit') return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white">
-      <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-stone-100">
-        <button onClick={() => setView('main')} className="text-sm font-bold text-ink-3">← Back</button>
-        <span className="font-black text-ink flex-1">Edit Profile</span>
-        <button onClick={handleSaveEdit}
-          className="px-4 py-1.5 rounded-xl text-xs font-black text-white bg-brand active:scale-95">Save</button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar">
+    <div className="fixed inset-0 z-50 flex flex-col items-center bg-white">
+      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl flex flex-col h-full">
+        <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-stone-100">
+          <button onClick={() => setView('main')} className="text-sm font-bold text-ink-3">← Back</button>
+          <span className="font-black text-ink flex-1">Edit Profile</span>
+          <button onClick={handleSaveEdit}
+            className="px-4 py-1.5 rounded-xl text-xs font-black text-white bg-brand active:scale-95">Save</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar">
         {/* Current Avatar Preview */}
         <div className="flex justify-center">
           <Avatar avatarId={editAvatar} size={80} showName />
@@ -321,6 +355,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
         </div>
       </div>
     </div>
+  </div>
   );
 
   // ---- ADD PARTNER VIEW ----

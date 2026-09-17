@@ -67,7 +67,7 @@ export const LandingPage: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="relative z-10 max-w-lg mx-auto px-5 flex flex-col min-h-[100dvh]">
+      <div className="relative z-10 max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto px-5 sm:px-8 flex flex-col min-h-[100dvh]">
         
         {/* Nav */}
         <nav className="flex items-center justify-between pt-6 pb-4"
@@ -109,7 +109,7 @@ export const LandingPage: React.FC = () => {
           </p>
 
           {/* CTA Buttons */}
-          <div className="space-y-3 mb-10">
+          <div className="w-full max-w-md mx-auto space-y-3 mb-10">
             <button
               onClick={() => signInWithGoogle().catch(console.error)}
               className="w-full py-4 px-6 rounded-2xl font-black text-base flex items-center justify-center gap-3 transition active:scale-[0.97]"
@@ -148,30 +148,32 @@ export const LandingPage: React.FC = () => {
         {/* Features Section */}
         <section className="py-12 space-y-5"
           style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(40px)', transition: 'all 0.8s ease 0.6s' }}>
-          <h2 className="text-xl font-black text-ink mb-6">What You Can Play</h2>
+          <h2 className="text-xl sm:text-2xl font-black text-ink mb-6 text-center sm:text-left">What You Can Play</h2>
           
-          {FEATURES.map((feat, i) => (
-            <div
-              key={i}
-              className="p-5 rounded-2xl flex items-start gap-4 transition-all duration-300 cursor-pointer"
-              style={{
-                background: activeFeature === i ? 'white' : 'transparent',
-                border: activeFeature === i ? `1px solid ${feat.bg.replace('0.1', '0.2')}` : '1px solid transparent',
-                boxShadow: activeFeature === i ? '0 8px 24px rgba(0,0,0,0.04)' : 'none',
-                transform: activeFeature === i ? 'scale(1.02)' : 'scale(1)',
-              }}
-              onClick={() => setActiveFeature(i)}
-            >
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-                style={{ background: feat.bg, color: feat.color }}>
-                {feat.icon}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {FEATURES.map((feat, i) => (
+              <div
+                key={i}
+                className="p-5 rounded-2xl flex flex-col sm:flex-col items-start gap-3 transition-all duration-300 cursor-pointer"
+                style={{
+                  background: activeFeature === i ? 'white' : 'rgba(255,255,255,0.6)',
+                  border: activeFeature === i ? `1px solid ${feat.bg.replace('0.1', '0.2')}` : '1px solid rgba(0,0,0,0.05)',
+                  boxShadow: activeFeature === i ? '0 8px 24px rgba(0,0,0,0.06)' : 'none',
+                  transform: activeFeature === i ? 'scale(1.02)' : 'scale(1)',
+                }}
+                onClick={() => setActiveFeature(i)}
+              >
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: feat.bg, color: feat.color }}>
+                  {feat.icon}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-ink mb-1">{feat.title}</h3>
+                  <p className="text-xs sm:text-sm text-ink-3 font-medium leading-relaxed">{feat.desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-black text-ink mb-1">{feat.title}</h3>
-                <p className="text-sm text-ink-3 font-medium leading-relaxed">{feat.desc}</p>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </section>
 
         {/* Stats / Trust signals */}
@@ -195,7 +197,7 @@ export const LandingPage: React.FC = () => {
 
         {/* Bottom CTA */}
         <section className="pb-12 pt-4">
-          <div className="p-6 rounded-3xl text-center space-y-4 shadow-sm"
+          <div className="max-w-xl mx-auto p-6 sm:p-8 rounded-3xl text-center space-y-4 shadow-sm"
             style={{ background: 'white', border: '1px solid #E5E7EB' }}>
             <h3 className="text-lg font-black text-ink">Ready to Start?</h3>
             <p className="text-xs text-ink-3 font-medium">

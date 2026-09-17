@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layers, Dices, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, Hash, TextCursor } from 'lucide-react';
+import { Layers, Dices, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, Hash, TextCursor, MessageCircle } from 'lucide-react';
 import { SWIPE_CARDS, CardCategory } from './data/questions';
 import { getShuffledSwipeCards, getSwipeCardsByIds, markQuestionAsSeen } from './utils/questionManager';
 import { SwipeCard } from './components/SwipeCard';
@@ -16,6 +16,9 @@ import { GameProvider, useGame, HEART_POINTS } from './store/GameContext';
 import { useAuth } from './store/AuthContext';
 import { supabase } from './lib/supabase';
 import { MultiplayerProvider, useMultiplayer, MultiplayerMessage } from './store/MultiplayerContext';
+import { FriendsProvider, useFriends } from './store/FriendsContext';
+import { InGameChat } from './components/InGameChat';
+import { FriendsModal } from './components/FriendsModal';
 import { LandingPage } from './screens/LandingPage';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
@@ -32,7 +35,9 @@ const AppInner: React.FC = () => {
   const { profile, partner, setPartner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
   const { user, couple, refreshCouple, isLoading, checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
+  const friends = useFriends();
   const [partnerAcceptedToast, setPartnerAcceptedToast] = useState<{name: string, relationshipType: string} | null>(null);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
 
   const [activeTab, setActiveTabState] = useState<ActiveTab>(() => {
     return (localStorage.getItem('knotyet_activeTab') as ActiveTab) || 'swipe';
@@ -481,31 +486,31 @@ const AppInner: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-[100dvh] min-h-screen w-full flex justify-center items-stretch sm:items-center sm:py-4 overflow-x-hidden"
+    <div className="min-h-[100dvh] min-h-screen w-full flex justify-center items-stretch md:items-center p-0 sm:p-3 md:p-6 lg:p-8 overflow-x-hidden transition-all duration-300"
       style={{ background: 'linear-gradient(160deg, #6D28D9 0%, #7C3AED 40%, #4F46E5 100%)' }}
     >
       {/* Decorative background shapes */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         {/* Top-right teal blob */}
-        <div className="absolute w-64 h-64 rounded-full opacity-40 top-[-60px] right-[-60px]"
-          style={{ background: '#06B6D4', filter: 'blur(40px)' }} />
+        <div className="absolute w-72 md:w-96 h-72 md:h-96 rounded-full opacity-40 top-[-60px] right-[-60px]"
+          style={{ background: '#06B6D4', filter: 'blur(60px)' }} />
         {/* Bottom-left yellow blob */}
-        <div className="absolute w-56 h-56 rounded-full opacity-30 bottom-[15%] left-[-40px]"
-          style={{ background: '#FACC15', filter: 'blur(36px)' }} />
+        <div className="absolute w-64 md:w-80 h-64 md:h-80 rounded-full opacity-30 bottom-[15%] left-[-40px]"
+          style={{ background: '#FACC15', filter: 'blur(50px)' }} />
         {/* Bottom-right pink blob */}
-        <div className="absolute w-48 h-48 rounded-full opacity-35 bottom-[-30px] right-[10%]"
-          style={{ background: '#FF2D9B', filter: 'blur(32px)' }} />
+        <div className="absolute w-56 md:w-80 h-56 md:h-80 rounded-full opacity-35 bottom-[-30px] right-[10%]"
+          style={{ background: '#FF2D9B', filter: 'blur(50px)' }} />
         {/* Mid dot pattern */}
         <div className="absolute inset-0 dotted-pattern opacity-20" />
       </div>
 
-      {/* Phone container */}
-      <div className="w-full max-w-md min-h-[100dvh] sm:h-[844px] sm:max-h-[94vh] sm:rounded-[44px] flex flex-col relative shadow-2xl safe-pt flex-1 sm:flex-initial sm:overflow-hidden"
-        style={{ background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(0px)' }}
+      {/* Main Responsive Game Console */}
+      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl min-h-[100dvh] md:min-h-0 md:h-[880px] md:max-h-[95vh] rounded-none sm:rounded-[36px] md:rounded-[44px] flex flex-col relative shadow-2xl safe-pt flex-1 md:flex-initial overflow-hidden border-0 sm:border sm:border-white/20 transition-all duration-300"
+        style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(16px)' }}
       >
         {/* ====== HEADER ====== */}
         {!isPlayingGame && (
-          <header className="px-4 pt-4 pb-3 sticky top-0 z-30"
+          <header className="px-4 sm:px-6 pt-4 pb-3 sticky top-0 z-30 shrink-0"
             style={multiplayer.status === 'connected' 
               ? { background: 'linear-gradient(180deg, rgba(16,185,129,0.95) 0%, rgba(5,150,105,0.90) 100%)', backdropFilter: 'blur(10px)' }
               : { background: 'linear-gradient(180deg, rgba(109,40,217,0.98) 0%, rgba(109,40,217,0.92) 100%)', backdropFilter: 'blur(10px)' }}
@@ -567,8 +572,25 @@ const AppInner: React.FC = () => {
               <span className="text-sm font-black text-white tracking-widest font-mono">{formatTime(sessionSeconds)}</span>
             </div>
 
-            {/* Right side: Room / Disconnect & Music */}
+            {/* Right side: Friends, Music & Room / Disconnect */}
             <div className="flex items-center gap-2 relative">
+              <button
+                onClick={() => {
+                  sounds.playFlip();
+                  setIsFriendsModalOpen(true);
+                }}
+                aria-label="Friends & Circle"
+                title="Friends & Loved Ones"
+                className="w-8 h-8 flex items-center justify-center rounded-full transition active:scale-95 bg-white/20 hover:bg-white/30 border border-white/40 shadow-sm relative"
+              >
+                <MessageCircle className="w-4 h-4 text-white" />
+                {friends.unreadTotal > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-pink-500 text-white text-[9px] font-black flex items-center justify-center border border-white animate-pulse">
+                    {friends.unreadTotal}
+                  </span>
+                )}
+              </button>
+
               <button
                 onClick={() => setIsMusicMenuOpen(!isMusicMenuOpen)}
                 className="w-8 h-8 flex items-center justify-center rounded-full transition active:scale-95 bg-white/20 hover:bg-white/30 border border-white/40 shadow-sm"
@@ -727,7 +749,7 @@ const AppInner: React.FC = () => {
             <>
               {currentTab === 'swipe' && (
                 introShown['swipe'] ? (
-                  <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full space-y-2 animate-fade-in">
+                  <div className="w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl flex-1 flex flex-col justify-between h-full space-y-2 sm:space-y-3 animate-fade-in mx-auto">
                     {/* Standardized Game Header */}
                     <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
                       <div className="flex items-center gap-2.5">
@@ -774,7 +796,7 @@ const AppInner: React.FC = () => {
                     </div>
 
                     {/* Card Stack Area - Full Height Elastic */}
-                    <div className="relative w-full flex-1 min-h-[320px] select-none my-auto flex items-center justify-center py-1">
+                    <div className="relative w-full flex-1 min-h-[340px] sm:min-h-[380px] md:min-h-[440px] select-none my-auto flex items-center justify-center py-2">
                       {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
                       {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
                       {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
@@ -896,7 +918,26 @@ const AppInner: React.FC = () => {
           onSelectCategory={() => { setIsSummaryOpen(false); setSelectedCategory('all'); }}
         />
 
-        {isProfileOpen && <ProfileScreen onClose={() => setIsProfileOpen(false)} />}
+        {isProfileOpen && (
+          <ProfileScreen
+            onClose={() => setIsProfileOpen(false)}
+            onOpenFriends={() => setIsFriendsModalOpen(true)}
+          />
+        )}
+
+        <FriendsModal
+          isOpen={isFriendsModalOpen}
+          onClose={() => setIsFriendsModalOpen(false)}
+          onLaunchMultiplayer={(code) => {
+            setIsFriendsModalOpen(false);
+            if (profile) {
+              multiplayer.hostRoom(code, profile);
+              setIsRoomModalOpen(true);
+            }
+          }}
+        />
+
+        <InGameChat />
 
         {/* In-App End Game Confirmation Modal */}
         <EndGameModal
@@ -1062,7 +1103,9 @@ export const AppRoutes: React.FC = () => {
 export const App: React.FC = () => (
   <GameProvider>
     <MultiplayerProvider>
-      <AppRoutes />
+      <FriendsProvider>
+        <AppRoutes />
+      </FriendsProvider>
     </MultiplayerProvider>
   </GameProvider>
 );

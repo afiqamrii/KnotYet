@@ -322,7 +322,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   }
 
   return (
-    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+    <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 sm:space-y-3 mx-auto">
       {/* Standardized Game Header Bar */}
       <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -373,7 +373,14 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
 
               {/* The Meme - constrained height so button never cuts off */}
               <div className="rounded-xl overflow-hidden bg-stone-100 border-2 border-stone-200 shadow-inner max-h-36 sm:max-h-40 flex items-center justify-center">
-                <img src={pointsToast.imgUrl} alt="Reaction" className="w-full h-28 sm:h-36 object-contain" />
+                <img 
+                  src={pointsToast.imgUrl} 
+                  alt="Reaction Meme" 
+                  className="w-full h-full object-cover" 
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
               </div>
 
               <button 
@@ -402,7 +409,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
             🎯 {t.quizHeader(currentQuiz.targetRole)}
           </div>
           <h3 className={`font-black text-ink leading-snug px-1 ${
-            currentQuiz.question.length > 60 ? 'text-xs sm:text-sm' : 'text-sm sm:text-base'
+            currentQuiz.question.length > 60 ? 'text-xs sm:text-sm md:text-base' : 'text-sm sm:text-base md:text-lg'
           }`}>
             {currentQuiz.question}
           </h3>
@@ -420,7 +427,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
               🤫 {t.quizSecretPrompt(currentQuiz.targetRole)}
             </p>
           </div>
-          <div className="space-y-1.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2.5">
             {currentQuiz.options.map((opt, i) => {
               const s = OPTS[i % OPTS.length];
               return (
@@ -497,7 +504,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
                 )}
               </p>
             </div>
-            <div className="space-y-1.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2.5">
               {currentQuiz.options.map((opt, i) => {
                 const s = OPTS[i % OPTS.length];
                 return (

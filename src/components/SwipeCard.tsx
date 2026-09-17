@@ -182,26 +182,26 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           )}
 
           {/* Question - Auto-scaled */}
-          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-2 text-center overflow-y-auto no-scrollbar my-auto">
-            <div className="mb-2 shrink-0"><HelpCircle className="w-8 h-8 sm:w-9 sm:h-9 text-violet-300 mx-auto" /></div>
+          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 md:px-8 py-2 md:py-4 text-center overflow-y-auto no-scrollbar my-auto">
+            <div className="mb-2 shrink-0"><HelpCircle className="w-8 h-8 sm:w-9 sm:h-9 md:w-11 md:h-11 text-violet-300 mx-auto" /></div>
             <p className={`font-black text-ink leading-snug px-1 ${
-              card.question.length > 70 ? 'text-sm sm:text-base' : 'text-base sm:text-lg'
+              card.question.length > 70 ? 'text-sm sm:text-base md:text-lg lg:text-xl' : 'text-base sm:text-lg md:text-xl lg:text-2xl'
             }`}>
               {card.question}
             </p>
           </div>
 
           {/* Bottom actions */}
-          <div className="p-3.5 sm:p-5 pt-0 space-y-2 shrink-0">
+          <div className="p-3.5 sm:p-5 md:p-6 pt-0 space-y-2 shrink-0">
             {canFlip && (
               <button onClick={toggleFlip}
-                className="btn-chunky w-full text-xs py-2.5"
-                style={{ background: catColors.bg, color: 'white', boxShadow: `0 4px 0 rgba(0,0,0,0.15), 0 6px 16px ${catColors.shadow}`, borderRadius: '16px' }}>
-                <RotateCw className="w-3.5 h-3.5" />
+                className="btn-chunky w-full text-xs sm:text-sm py-2.5 sm:py-3.5"
+                style={{ background: catColors.bg, color: 'white', boxShadow: `0 4px 0 rgba(0,0,0,0.15), 0 6px 16px ${catColors.shadow}`, borderRadius: '18px' }}>
+                <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 {card.category === 'teka-teki' ? t.revealAnswer : 'Type Answers'}
               </button>
             )}
-            <div className="flex items-center justify-between text-[10px] sm:text-[11px] px-2 font-bold text-ink-3">
+            <div className="flex items-center justify-between text-[10px] sm:text-xs md:text-sm px-2 font-bold text-ink-3">
               <span>{t.skipLeft}</span>
               <span>{t.passRight}</span>
             </div>

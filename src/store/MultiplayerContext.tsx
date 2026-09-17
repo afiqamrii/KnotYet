@@ -1,8 +1,19 @@
 import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
+import { sounds } from '../utils/audio';
 
 export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
+  text: string;
+  timestamp: number;
+  isQuickReaction?: boolean;
+}
 
 export type MultiplayerMessage = 
   | { type: 'PROFILE_SYNC'; payload: UserProfile }
@@ -29,6 +40,8 @@ export type MultiplayerMessage =
   | { type: 'START_GAME'; payload: { game: GameMode; questionIds?: string[] } }
   | { type: 'START_COUNTDOWN'; payload: { game: GameMode } }
   | { type: 'END_GAME' }
+  | { type: 'CHAT_MESSAGE'; payload: ChatMessage }
+  | { type: 'CHAT_TYPING'; payload: { isTyping: boolean } }
   | { type: 'LEAVE_ROOM' };
 
 interface MultiplayerState {
@@ -39,6 +52,9 @@ interface MultiplayerState {
   remoteProfile: UserProfile | null;
   activeGame: GameMode;
   error: string | null;
+  chatMessages: ChatMessage[];
+  unreadChatCount: number;
+  latestIncomingMessage: ChatMessage | null;
 }
 
 interface MultiplayerContextType extends MultiplayerState {
@@ -47,6 +63,8 @@ interface MultiplayerContextType extends MultiplayerState {
   leaveRoom: () => void;
   setGame: (game: GameMode) => void;
   sendMessage: (msg: MultiplayerMessage) => void;
+  sendChatMessage: (text: string, isQuickReaction?: boolean) => void;
+  clearUnreadChatCount: () => void;
   messageListener: React.MutableRefObject<((msg: MultiplayerMessage) => void) | null>;
 }
 
@@ -69,6 +87,9 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     remoteProfile: null,
     activeGame: 'lobby',
     error: null,
+    chatMessages: [],
+    unreadChatCount: 0,
+    latestIncomingMessage: null,
   });
 
   useEffect(() => {
@@ -105,6 +126,9 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       remoteProfile: null,
       activeGame: 'lobby',
       error: null,
+      chatMessages: [],
+      unreadChatCount: 0,
+      latestIncomingMessage: null,
     });
   }, []);
 
@@ -146,6 +170,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
         if (messageListener.current) {
           messageListener.current(msg);
         }
+      } else if (msg.type === 'CHAT_MESSAGE') {
+        setState(s => ({
+          ...s,
+          chatMessages: [...s.chatMessages, msg.payload],
+          unreadChatCount: s.unreadChatCount + 1,
+          latestIncomingMessage: msg.payload,
+        }));
+        sounds.playChatPop();
       } else if (msg.type === 'LEAVE_ROOM') {
         handlePartnerLeft();
       } else {
@@ -242,6 +274,34 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, []);
 
+  const sendChatMessage = useCallback((text: string, isQuickReaction = false) => {
+    if (!connRef.current || !connRef.current.open || !localProfileRef.current) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const newMsg: ChatMessage = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      senderId: 'me',
+      senderName: localProfileRef.current.name,
+      senderAvatar: localProfileRef.current.avatarId,
+      text: trimmed,
+      timestamp: Date.now(),
+      isQuickReaction,
+    };
+
+    setState(s => ({
+      ...s,
+      chatMessages: [...s.chatMessages, newMsg],
+    }));
+
+    connRef.current.send({ type: 'CHAT_MESSAGE', payload: newMsg });
+    sounds.playChatSent();
+  }, []);
+
+  const clearUnreadChatCount = useCallback(() => {
+    setState(s => ({ ...s, unreadChatCount: 0, latestIncomingMessage: null }));
+  }, []);
+
   return (
     <MultiplayerContext.Provider value={{
       ...state,
@@ -250,6 +310,8 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       leaveRoom,
       setGame,
       sendMessage,
+      sendChatMessage,
+      clearUnreadChatCount,
       messageListener
     }}>
       {children}

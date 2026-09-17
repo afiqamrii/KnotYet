@@ -125,7 +125,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   };
 
   return (
-    <div className="w-full flex-1 flex flex-col justify-between h-full animate-fade-in space-y-3 max-w-sm mx-auto overflow-hidden">
+    <div className="w-full flex-1 flex flex-col justify-between h-full animate-fade-in space-y-3 max-w-sm sm:max-w-md md:max-w-2xl lg:max-w-3xl mx-auto overflow-hidden">
       
       {/* ── Partner Connection Status Hero ── */}
       <div 
@@ -202,7 +202,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           <span className="text-[10px] font-bold text-white/60">6 Modes Ready</span>
         </div>
 
-        <div className="grid grid-cols-1 gap-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
           {GAMES.map((game) => (
             <div
               key={game.id}

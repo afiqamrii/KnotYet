@@ -60,7 +60,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
             style={{ background: 'radial-gradient(circle, #FF2D9B 0%, transparent 70%)', animation: 'float 10s ease-in-out infinite reverse' }} />
         </div>
 
-        <div className="relative z-10 max-w-lg mx-auto px-5 flex-1 flex flex-col justify-center py-12"
+        <div className="relative z-10 max-w-lg sm:max-w-xl md:max-w-2xl mx-auto px-5 flex-1 flex flex-col justify-center py-12"
           style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(30px)', transition: 'all 0.8s ease' }}>
           
           {/* Greeting */}
@@ -132,7 +132,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
             style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)' }} />
         </div>
 
-        <div className="relative z-10 max-w-lg mx-auto px-5 flex-1 flex flex-col justify-center py-12"
+        <div className="relative z-10 max-w-lg sm:max-w-xl md:max-w-2xl mx-auto px-5 flex-1 flex flex-col justify-center py-12"
           style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(30px)', transition: 'all 0.6s ease' }}>
           
           <h2 className="text-2xl font-black text-ink mb-1">Pick Your Character</h2>
@@ -176,7 +176,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
           style={{ background: 'radial-gradient(circle, #FF2D9B 0%, transparent 70%)' }} />
       </div>
 
-      <div className="relative z-10 max-w-lg mx-auto px-5 flex-1 flex flex-col justify-center py-12"
+      <div className="relative z-10 max-w-lg sm:max-w-xl md:max-w-2xl mx-auto px-5 flex-1 flex flex-col justify-center py-12"
         style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(30px)', transition: 'all 0.6s ease' }}>
 
         <button

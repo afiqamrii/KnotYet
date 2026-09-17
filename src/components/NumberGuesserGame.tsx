@@ -180,7 +180,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   return (
-    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+    <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
       <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -290,10 +290,10 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
                 </div>
               ) : (
                 isMyTurn ? (
-                  <form onSubmit={handleGuess} className="w-full space-y-2.5 animate-fade-in">
+                  <form onSubmit={handleGuess} className="w-full max-w-md mx-auto space-y-2.5 sm:space-y-4 animate-fade-in">
                     {multiplayer.status === 'connected' && (
-                      <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center animate-bounce-soft mb-1">
-                        <p className="text-xs font-black text-emerald-800 flex items-center justify-center gap-1.5">
+                      <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center animate-bounce-soft mb-1">
+                        <p className="text-xs sm:text-sm font-black text-emerald-800 flex items-center justify-center gap-1.5">
                           <span>🎯</span> Your Turn! {partnerName} is waiting for your guess...
                         </p>
                       </div>
@@ -304,7 +304,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
                       max={MAX_NUM}
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
-                      className="w-full text-center text-3xl font-black text-indigo-600 bg-indigo-50 border-3 border-indigo-100 rounded-xl py-2.5 focus:outline-none focus:border-indigo-300 shadow-inner"
+                      className="w-full text-center text-3xl sm:text-5xl font-black text-indigo-600 bg-indigo-50 border-3 border-indigo-100 rounded-2xl py-3 sm:py-4 focus:outline-none focus:border-indigo-300 shadow-inner"
                       placeholder="?"
                       autoFocus
                     />

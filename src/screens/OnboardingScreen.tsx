@@ -21,7 +21,7 @@ export const OnboardingScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-end justify-center pb-0"
+    <div className="min-h-screen flex flex-col items-center justify-end sm:justify-center p-0 sm:p-6"
       style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 50%, #06B6D4 100%)' }}
     >
       {/* Decorative blobs */}
@@ -35,7 +35,7 @@ export const OnboardingScreen: React.FC = () => {
       </div>
 
       {/* Top illustration */}
-      <div className="fixed top-0 left-0 right-0 flex flex-col items-center justify-center pt-12 pb-6 z-10 pointer-events-none">
+      <div className="fixed sm:static top-0 left-0 right-0 flex flex-col items-center justify-center pt-12 sm:pt-0 pb-6 z-10 pointer-events-none">
         <div className="animate-float">
           <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl shadow-xl border-4 border-white/30"
             style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(20px)' }}
@@ -52,8 +52,8 @@ export const OnboardingScreen: React.FC = () => {
       </div>
 
       {/* Bottom Sheet Card */}
-      <div className="w-full max-w-md game-card rounded-b-none rounded-t-[2.5rem] p-6 space-y-5 z-20 relative"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)', marginBottom: 0, minHeight: '66vh' }}
+      <div className="w-full max-w-md sm:max-w-xl game-card rounded-b-none sm:rounded-b-[2.5rem] rounded-t-[2.5rem] p-6 sm:p-8 space-y-5 z-20 relative shadow-2xl"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)', marginBottom: 0 }}
       >
         {step === 'auth' ? (
           <div className="flex flex-col h-full justify-center space-y-4 pt-10">

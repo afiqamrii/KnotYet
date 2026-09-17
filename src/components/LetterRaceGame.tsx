@@ -167,7 +167,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   return (
-    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+    <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
       <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -277,7 +277,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
               <p className="text-fuchsia-500 font-bold text-xs sm:text-sm">Type a word starting with '{letter}'!</p>
             </div>
             
-            <form onSubmit={handleWordSubmit} className="w-full space-y-3">
+            <form onSubmit={handleWordSubmit} className="w-full max-w-md mx-auto space-y-3">
               <input
                 type="text"
                 value={inputValue}

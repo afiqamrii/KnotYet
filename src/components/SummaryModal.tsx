@@ -30,7 +30,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   return (
     <div className="modal-overlay centered" onClick={onRestart}>
-      <div className="game-card w-full max-w-sm p-6 text-center space-y-5 animate-pop-in"
+      <div className="game-card w-full max-w-sm sm:max-w-md p-6 sm:p-8 text-center space-y-5 animate-pop-in"
         onClick={e => e.stopPropagation()}>
 
         <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto animate-float"

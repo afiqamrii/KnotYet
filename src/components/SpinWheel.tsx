@@ -110,7 +110,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   };
 
   return (
-    <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2">
+    <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
       <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
         <div className="flex items-center gap-2.5">
@@ -142,7 +142,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
         </div>
 
         {/* Wheel */}
-        <div className="relative my-auto py-1 shrink-0 w-[220px] h-[220px] sm:w-[260px] sm:h-[260px]">
+        <div className="relative my-auto py-1 shrink-0 w-[220px] h-[220px] sm:w-[270px] sm:h-[270px] md:w-[320px] md:h-[320px] lg:w-[360px] lg:h-[360px]">
         {/* Pointer */}
         <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
           <div className="w-0 h-0"
@@ -214,7 +214,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
       {/* Result Modal */}
       {showModal && selectedSegment && (
         <div className="modal-overlay centered" onClick={() => setShowModal(false)}>
-          <div className="game-card w-full max-w-xs p-6 text-center space-y-4 animate-pop-in relative"
+          <div className="game-card w-full max-w-xs sm:max-w-md p-6 text-center space-y-4 animate-pop-in relative"
             onClick={e => e.stopPropagation()}
             style={{ boxShadow: `0 0 0 4px ${selectedSegment.color}30, 0 20px 60px rgba(0,0,0,0.25)` }}>
 
