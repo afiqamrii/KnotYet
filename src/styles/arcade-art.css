@@ -1,0 +1,40 @@
+.knot-mark { display: inline-flex; position: relative; width: 43px; height: 38px; flex-shrink: 0; }
+.knot-mark svg { position: absolute; width: 29px; height: 31px; stroke: #241d35; stroke-width: 2.3; }
+.knot-mark svg:first-child { left: 0; top: 0; fill: #ff829e; transform: rotate(-23deg); }
+.knot-mark svg:last-child { right: 0; bottom: 0; fill: #d5f578; transform: rotate(16deg); }
+.game-art { height: 160px; width: 100%; position: relative; display: grid; place-items: center; color: #241d35; isolation: isolate; }
+.game-art::before { content: ''; width: 142px; height: 116px; background: rgba(255,255,255,.35); border-radius: 50%; position: absolute; z-index: -1; }
+.art-spark { position: absolute; font-size: 27px; }
+.art-spark-one { top: 22px; left: 18%; transform: rotate(-15deg); }
+.art-spark-two { bottom: 13px; right: 17%; font-size: 34px; }
+.art-card-fan { position: relative; width: 92px; height: 114px; transform: rotate(9deg); }
+.art-card-fan > div { position: absolute; inset: 0; border: 2px solid #241d35; border-radius: 12px; box-shadow: 3px 4px 0 #241d35; }
+.art-card-fan > div:nth-child(1) { background: #7650e8; transform: translate(-23px,0) rotate(-27deg); }
+.art-card-fan > div:nth-child(2) { background: #ffcd70; transform: translate(-9px,-3px) rotate(-13deg); }
+.art-card-fan > div:nth-child(3) { background: #fffaf0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }
+.art-card-fan svg { width: 39px; height: 39px; color: #ff829e; stroke: #241d35; stroke-width: 1.5; }
+.art-card-fan span { font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 800; }
+.art-hearts { position: relative; width: 158px; height: 120px; }
+.art-chat { position: absolute; width: 95px; height: 77px; right: 0; bottom: 3px; border: 2px solid #241d35; border-radius: 23px 23px 6px 23px; background: #ff829e; box-shadow: 3px 4px 0 #241d35; transform: rotate(7deg); display: flex; align-items: center; justify-content: center; gap: 5px; }
+.art-chat svg { width: 28px; height: 28px; color: #fffaf0; stroke: #241d35; }
+.art-chat span { font-family: 'Outfit',sans-serif; font-size: 20px; font-weight: 800; }
+.art-chat-back { background: #fffaf0; left: 0; top: 0; right: auto; bottom: auto; border-radius: 23px 23px 23px 6px; transform: rotate(-9deg); }
+.art-wheel { width: 124px; height: 124px; border-radius: 50%; position: relative; border: 3px solid #241d35; background: #fffaf0; padding: 6px; box-shadow: 4px 5px 0 #241d35; transform: rotate(-12deg); }
+.art-wheel-disc { height: 100%; border: 2px solid #241d35; border-radius: 50%; background: conic-gradient(#ff829e 0deg 60deg,#d5f578 60deg 120deg,#a9ddf5 120deg 180deg,#7650e8 180deg 240deg,#ffcd70 240deg 300deg,#c9b7fa 300deg 360deg); }
+.art-wheel-center { position: absolute; width: 35px; height: 35px; top: 50%; left: 50%; transform: translate(-50%,-50%); background: #fffaf0; border: 2px solid #241d35; border-radius: 50%; display: grid; place-items: center; }
+.art-wheel-center svg { width: 17px; height: 17px; }
+.art-wheel > i { position: absolute; left: calc(50% - 9px); top: -11px; width: 18px; height: 25px; background: #241d35; clip-path: polygon(0 0,100% 0,50% 100%); }
+.art-numbers { display: flex; align-items: center; transform: rotate(-8deg); }
+.art-numbers span { width: 56px; height: 74px; display: grid; place-items: center; border: 2px solid #241d35; border-radius: 13px; background: #fffaf0; font-family: 'Outfit',sans-serif; font-size: 43px; font-weight: 800; box-shadow: 3px 4px 0 #241d35; }
+.art-numbers span:nth-child(2) { background: #7650e8; color: #fff; height: 86px; transform: rotate(14deg) translateY(-4px); z-index: 1; }
+.art-numbers span:last-child { background: #d5f578; transform: rotate(5deg); }
+.art-letters { position: relative; width: 146px; height: 116px; }
+.art-letters span { position: absolute; width: 67px; height: 72px; display: grid; place-items: center; background: #fffaf0; border: 2px solid #241d35; box-shadow: 3px 4px 0 #241d35; border-radius: 13px; font-family: 'Outfit',sans-serif; font-weight: 800; font-size: 43px; transform: rotate(-13deg); top: 6px; left: 0; }
+.art-letters span:nth-child(2) { background: #ff829e; transform: rotate(12deg); left: 72px; top: 0; }
+.art-letters span:last-child { width: 75px; height: 33px; font-size: 17px; background: #d5f578; transform: rotate(-5deg); top: 78px; left: 42px; border-radius: 20px; }
+.art-match { display: flex; position: relative; gap: 8px; }
+.art-match > span { display: grid; place-items: center; width: 69px; height: 87px; border: 2px solid #241d35; border-radius: 12px; background: #ff829e; box-shadow: 3px 4px 0 #241d35; transform: rotate(-12deg); }
+.art-match > span:nth-child(2) { background: #d5f578; transform: rotate(12deg); }
+.art-match > svg { position: absolute; top: -25px; right: 0; }
+.game-art-compact { height: 130px; transform: scale(.8); }
+.duo-mascot { width: 250px; max-width: 100%; height: auto; overflow: visible; }

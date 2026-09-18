@@ -2,9 +2,23 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { AdModal } from '../components/AdModal';
+import { readJson } from '../utils/storage';
 
 const MULTIPLAYER_DAILY_LIMIT = 3;
 const SOLO_DAILY_LIMIT = 5;
+const GUEST_EMAIL = 'guest@knotyet.local';
+
+const isGuestUser = (user: User | null): boolean => user?.id.startsWith('guest-') === true;
+
+const createGuestUser = (id: string): User => ({
+  id,
+  email: GUEST_EMAIL,
+  aud: 'authenticated',
+  role: 'authenticated',
+  created_at: new Date().toISOString(),
+  app_metadata: { provider: 'guest', providers: ['guest'] },
+  user_metadata: { display_name: 'Guest Player' },
+});
 
 interface AuthContextType {
   session: Session | null;
@@ -65,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshProgress = async () => {
-    if (!user) return;
+    if (!user || isGuestUser(user)) return;
     const { data, error } = await supabase
       .from('user_progress')
       .select('*')
@@ -97,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshCouple = async () => {
-    if (!user) return;
+    if (!user || isGuestUser(user)) return;
     const { data, error } = await supabase
       .from('couples')
       .select('*')
@@ -116,9 +130,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session.user);
       } else if (localStorage.getItem('knotyet_guest_active') === 'true') {
         const guestId = localStorage.getItem('knotyet_guest_id') || 'guest-123';
-        setUser({ id: guestId, email: 'guest@knotyet.local' } as any);
-        setProfile({ id: guestId, name: 'Guest Player', avatar_id: 'sunny', created_at: '' });
-        setProgress({ user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: 320, answered_questions: [], last_reset_date: '', is_premium: false });
+        const saved = readJson<Record<string, unknown> | null>(localStorage, 'jodohdeck_profile', null);
+        const name = typeof saved?.name === 'string' && saved.name.trim() ? saved.name : 'Guest Player';
+        const avatar = typeof saved?.avatarId === 'string' ? saved.avatarId : 'sunny';
+        const points = typeof saved?.heartPoints === 'number' && Number.isFinite(saved.heartPoints) ? Math.max(0, saved.heartPoints) : 320;
+        setUser(createGuestUser(guestId));
+        setProfile({ id: guestId, name, avatar_id: avatar, created_at: '' });
+        setProgress({ user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: points, answered_questions: [], last_reset_date: '', is_premium: false });
         setIsLoading(false);
       } else {
         setUser(null);
@@ -142,6 +160,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!user) {
         setProfile(null);
         setProgress(null);
+        setIsLoading(false);
+        return;
+      }
+
+      if (isGuestUser(user)) {
         setIsLoading(false);
         return;
       }
@@ -228,9 +251,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const guestId = 'guest-' + Date.now();
     localStorage.setItem('knotyet_guest_active', 'true');
     localStorage.setItem('knotyet_guest_id', guestId);
-    const guestUser = { id: guestId, email: 'guest@knotyet.local' } as any;
+    const guestUser = createGuestUser(guestId);
     const guestProf = { id: guestId, name: 'Guest Player', avatar_id: 'sunny', created_at: new Date().toISOString() };
     const guestProg = { user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: 320, answered_questions: [], last_reset_date: '', is_premium: false };
+    localStorage.setItem('jodohdeck_profile', JSON.stringify({ name: guestProf.name, avatarId: guestProf.avatar_id, heartPoints: guestProg.heart_points }));
     setUser(guestUser);
     setProfile(guestProf);
     setProgress(guestProg);
@@ -238,13 +262,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    const shouldSignOutRemotely = !isGuestUser(user);
     localStorage.removeItem('knotyet_guest_active');
     localStorage.removeItem('knotyet_guest_id');
     setUser(null);
     setProfile(null);
     setProgress(null);
     try {
-      await supabase.auth.signOut();
+      if (shouldSignOutRemotely) await supabase.auth.signOut();
     } catch {
       // Ignore network errors when signing out
     }

@@ -1,126 +1,66 @@
-import React, { useEffect, useState } from 'react';
-import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import '../styles/invite.css';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowRight, Check, MessageCircle, Users } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
-import { getAvatar } from '../components/AvatarPicker';
-import { Heart, Sparkles, Check, ChevronRight } from 'lucide-react';
+import { useGame } from '../store/GameContext';
+import { Avatar } from '../components/AvatarPicker';
+import { BrandMark } from '../components/ArcadeArt';
+import { ACCEPTED_INVITE_KEY, PENDING_INVITE_KEY, getChatIdentity, parseFriendInvite, type FriendInvite } from '../utils/friendInvites';
 import { sounds } from '../utils/audio';
 
 export const InviteScreen: React.FC = () => {
-  const { user, signInWithGoogle, isLoading } = useAuth();
+  const { user, signInWithGoogle, signInAsGuest, isLoading } = useAuth();
+  const { setProfile } = useGame();
   const location = useLocation();
   const navigate = useNavigate();
-  
-  const [inviteData, setInviteData] = useState<{name: string, avatar: string, rel: string, uid?: string | null} | null>(null);
-  const [isAccepted, setIsAccepted] = useState(false);
-
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const n = searchParams.get('n');
-    const a = searchParams.get('a');
-    const r = searchParams.get('r');
-    const uid = searchParams.get('uid');
-    
-    if (n && a && r) {
-      const data = { name: n, avatar: a, rel: r, uid };
-      setInviteData(data);
-      sessionStorage.setItem('pendingInvite', JSON.stringify(data));
-    } else {
-      const stored = sessionStorage.getItem('pendingInvite');
-      if (stored) {
-        setInviteData(JSON.parse(stored));
-      }
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [invite] = useState<FriendInvite | null>(() => {
+    const fromLink = parseFriendInvite(location.search);
+    if (fromLink) { sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(fromLink)); return fromLink; }
+    if (location.search) return null;
+    try { return JSON.parse(sessionStorage.getItem(PENDING_INVITE_KEY) || 'null'); } catch { return null; }
+  });
+  const accept = async (google = false) => {
+    if (!invite || busy) return;
+    if (user && getChatIdentity(user.id).id === invite.id) { setError('This is your own invite. Send it to your person instead.'); return; }
+    setError('');
+    sessionStorage.setItem(ACCEPTED_INVITE_KEY, JSON.stringify(invite));
+    if (google) {
+      setBusy(true);
+      try { await signInWithGoogle(); } catch { setError('Sign-in could not start. Try again or continue as a guest.'); setBusy(false); }
+      return;
     }
-  }, [location]);
-
-  const handleAccept = async () => {
+    if (!user) {
+      signInAsGuest();
+      setProfile({ name: 'Guest Player', avatarId: 'sunny', heartPoints: 320 });
+    }
     sounds.playSuccess();
-    setIsAccepted(true);
-    
-    setTimeout(async () => {
-      if (user) {
-        navigate('/play');
-      } else {
-        try {
-          await signInWithGoogle();
-        } catch (err) {
-          console.error(err);
-          setIsAccepted(false);
-        }
-      }
-    }, 2000);
+    sessionStorage.removeItem(PENDING_INVITE_KEY);
+    navigate('/play');
   };
-
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-white font-bold" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>Loading...</div>;
-
-  if (!inviteData) {
-    return <Navigate to="/" replace />;
-  }
-
-  if (isAccepted) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-white text-center" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
-        <span className="text-7xl mb-6 animate-bounce">💖</span>
-        <h1 className="text-4xl font-black mb-3">Yay!</h1>
-        <p className="text-xl font-bold text-white/90">Preparing your linked profile...</p>
-      </div>
-    );
-  }
-
-  const inviterAvatar = getAvatar(inviteData.avatar);
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-white relative overflow-hidden" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-pink-500/20 blur-[100px] rounded-full mix-blend-screen animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-500/20 blur-[100px] rounded-full mix-blend-screen animate-pulse" style={{ animationDelay: '1s' }} />
-      </div>
-
-      <div className="relative z-10 max-w-sm w-full space-y-8 animate-fade-in text-center">
-        <div className="flex items-center justify-center gap-4">
-          <div className="w-24 h-24 rounded-full bg-white shadow-2xl flex items-center justify-center border-4 border-white/50 relative z-10 animate-bounce-soft"
-          style={{ background: inviterAvatar?.bg }}>
-          <span className="text-5xl drop-shadow-md">{inviterAvatar?.face}</span>
-          </div>
-          <Heart className="w-8 h-8 text-pink-400 animate-pulse" fill="currentColor" />
-          <div className="w-24 h-24 rounded-full flex items-center justify-center border-4 border-dashed border-white/30 text-white/50 bg-white/5">
-            <span className="text-4xl">?</span>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <h1 className="text-3xl font-black">
-            {inviteData.name} invited you!
-          </h1>
-          <p className="text-lg text-white/80 font-medium leading-relaxed">
-            They want to link accounts as your <span className="font-bold text-pink-300 capitalize">{inviteData.rel}</span> on KnotYet.
-          </p>
-        </div>
-
-        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-5 space-y-4 text-left">
-          <h3 className="font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-pink-400" /> If you accept:
-          </h3>
-          <ul className="space-y-3">
-            <li className="flex items-start gap-3 text-sm text-white/90">
-              <Check className="w-5 h-5 text-green-400 shrink-0" />
-              Your avatars will be combined everywhere in the app!
-            </li>
-            <li className="flex items-start gap-3 text-sm text-white/90">
-              <Check className="w-5 h-5 text-green-400 shrink-0" />
-              You'll instantly join their multiplayer rooms easily.
-            </li>
-            <li className="flex items-start gap-3 text-sm text-white/90">
-              <Check className="w-5 h-5 text-green-400 shrink-0" />
-              Track your relationship compatibility together.
-            </li>
-          </ul>
-        </div>
-
-        <button onClick={handleAccept} className="w-full btn-chunky btn-pink py-4 text-lg group">
-          {user ? 'Accept & Continue' : 'Login to Accept'}
-          <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-        </button>
-      </div>
-    </div>
+    <main className="invite-page">
+      <Link to="/" className="invite-brand"><BrandMark /><span>KnotYet</span></Link>
+      <section className="invite-sheet" aria-labelledby="invite-title">
+        {isLoading ? <p>Getting your invitation ready...</p> : !invite ? <>
+          <div className="invite-icon"><MessageCircle size={36} /></div>
+          <h1 id="invite-title">A fresh invite, please.</h1>
+          <p>This link is missing its connection details. Ask your friend to copy a new invite from Friends & loved ones.</p>
+          <Link to="/" className="btn-chunky btn-purple">Back to KnotYet <ArrowRight size={18} /></Link>
+        </> : <>
+          <span className="invite-eyebrow">A LITTLE MORE US</span>
+          <div className="invite-duo"><Avatar avatarId={invite.avatar} size={84} /><span className="invite-plus">+</span><div className="invite-you"><Users size={34} /></div></div>
+          <h1 id="invite-title">{invite.name} saved you a spot.</h1>
+          <p>Accept their invite and make room for more chats, more games, and more good times together.</p>
+          <div className="invite-perks"><span><Check size={18} /> Add each other to your circle</span><span><Check size={18} /> Chat and send game invites</span></div>
+          <p className="invite-note">Keep KnotYet open on both devices to connect. Chats are saved in this browser.</p>
+          {error && <p role="alert" className="invite-error">{error}</p>}
+          <button className="btn-chunky btn-purple" disabled={busy} onClick={() => void accept()}>{user ? 'Accept & connect' : 'Accept as a guest'}<ArrowRight size={18} /></button>
+          {!user && <button className="invite-google" disabled={busy} onClick={() => void accept(true)}>{busy ? 'Opening sign-in...' : 'Or sign in with Google'}</button>}
+        </>}
+      </section>
+    </main>
   );
 };

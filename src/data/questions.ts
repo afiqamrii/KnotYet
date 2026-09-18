@@ -37,6 +37,18 @@ export interface WheelSegment {
 
 import taarufData from './taaruf_game_final.json';
 
+type BonusChallenge = {
+  cabaran?: string;
+  cabaran_tajuk?: string;
+  tajuk?: string;
+  denda?: string;
+  deskripsi?: string;
+  arahan_game?: string;
+};
+
+const getBonusQuestion = (item: BonusChallenge) => item.cabaran || item.cabaran_tajuk || item.tajuk || '';
+const getBonusDescription = (item: BonusChallenge) => item.denda || item.deskripsi || item.arahan_game || 'Lakukan cabaran ini sekarang!';
+
 const getTurn = (index: number): 'Lelaki' | 'Perempuan' | 'Dua-dua Serentak' => {
   const turns: ('Lelaki' | 'Perempuan' | 'Dua-dua Serentak')[] = ['Lelaki', 'Perempuan', 'Dua-dua Serentak'];
   return turns[index % 3];
@@ -73,8 +85,8 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
       type: 'trap' as const
     }
   })),
-  ...Object.entries(taarufData.soalan_matang_prakahwinan).flatMap(([_key, items]: [string, any], categoryIndex) => 
-    items.map((item: any, i: number) => ({
+  ...Object.entries(taarufData.soalan_matang_prakahwinan).flatMap(([_key, items], categoryIndex) =>
+    items.map((item, i) => ({
       id: `sm-${categoryIndex}-${i}`,
       category: 'taaruf-realiti' as CardCategory,
       categoryLabel: 'Taaruf',
@@ -88,16 +100,16 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
       }
     }))
   ),
-  ...taarufData.bonus_challenges.map((item: any, i) => ({
+  ...taarufData.bonus_challenges.map((item, i) => ({
     id: `bc-${i}`,
     category: 'dare-santai' as CardCategory,
     categoryLabel: 'Bonus Challenge',
     badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
     turn: getTurn(i),
-    question: item.cabaran || item.cabaran_tajuk || item.tajuk || '',
+    question: getBonusQuestion(item),
     flipContent: {
       title: 'Cabaran:',
-      description: item.denda || item.deskripsi || item.arahan_game || 'Lakukan cabaran ini sekarang!',
+      description: getBonusDescription(item),
       type: 'dare' as const
     }
   }))
@@ -130,10 +142,10 @@ export const MATCH_QUESTIONS: MatchQuestion[] = taarufData.compatibility_match_c
 export const WHEEL_SEGMENTS: WheelSegment[] = [
   {
     id: 'masa-depan',
-    label: '🚀 Masa Depan',
-    icon: '🚀',
-    color: '#3b82f6', // blue
-    textColor: '#ffffff',
+    label: 'Masa Depan',
+    icon: '',
+    color: '#cbeafa', // blue
+    textColor: '#241d35',
     category: 'Masa Depan',
     prompts: [
       'Apa impian terbesar awak yang belum tercapai?',
@@ -143,10 +155,10 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   },
   {
     id: 'zaman-kanak',
-    label: '🧸 Kenangan',
-    icon: '🧸',
-    color: '#f59e0b', // amber
-    textColor: '#ffffff',
+    label: 'Kenangan',
+    icon: '',
+    color: '#ffe5a0', // amber
+    textColor: '#241d35',
     category: 'Zaman Kanak-Kanak',
     prompts: [
       'Apa kenangan paling kelakar masa awak kecil?',
@@ -156,10 +168,10 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   },
   {
     id: 'deep-talk',
-    label: '💭 Deep Talk',
-    icon: '💭',
-    color: '#6366f1', // indigo
-    textColor: '#ffffff',
+    label: 'Deep Talk',
+    icon: '',
+    color: '#c7b4ff', // indigo
+    textColor: '#241d35',
     category: 'Deep Talk',
     prompts: [
       'Apa satu perkara yang paling awak takutkan dalam hidup?',
@@ -169,10 +181,10 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   },
   {
     id: 'romantik',
-    label: '❤️ Romantik',
-    icon: '❤️',
-    color: '#ec4899', // pink
-    textColor: '#ffffff',
+    label: 'Romantik',
+    icon: '',
+    color: '#ffb4c6', // pink
+    textColor: '#241d35',
     category: 'Romantik',
     prompts: [
       'Apakah love language awak?',
@@ -182,10 +194,10 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   },
   {
     id: 'spontan',
-    label: '🤪 Spontan',
-    icon: '🤪',
-    color: '#10b981', // emerald
-    textColor: '#ffffff',
+    label: 'Spontan',
+    icon: '',
+    color: '#d5f578', // emerald
+    textColor: '#241d35',
     category: 'Spontan',
     prompts: [
       'Kalau awak ada kuasa super, apa kuasa yang awak nak?',
@@ -195,10 +207,10 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   },
   {
     id: 'kewangan',
-    label: '💰 Kewangan',
-    icon: '💰',
-    color: '#f43f5e', // rose
-    textColor: '#ffffff',
+    label: 'Kewangan',
+    icon: '',
+    color: '#ffd4a4', // rose
+    textColor: '#241d35',
     category: 'Kewangan',
     prompts: [
       'Macam mana awak uruskan perbelanjaan bulanan?',

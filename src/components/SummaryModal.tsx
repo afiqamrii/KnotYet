@@ -1,3 +1,4 @@
+import { UiSymbol } from './GameCardDesign';
 import React from 'react';
 import { Heart, RefreshCw, Share2, Sparkles, CheckCircle2 } from 'lucide-react';
 import { sounds } from '../utils/audio';
@@ -20,7 +21,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   const handleShare = () => {
     sounds.playSuccess();
-    const text = `We just discussed ${answeredCount} questions in ${categoryLabel} on KnotYet! Do you dare test your partner's honesty? 🔥`;
+    const text = `We just discussed ${answeredCount} questions in ${categoryLabel} on KnotYet! Do you dare test your partner's honesty?`;
     if (navigator.share) {
       navigator.share({ title: 'KnotYet', text }).catch(console.error);
     } else {
@@ -66,7 +67,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
           <div className="flex items-center justify-between p-3 rounded-2xl"
             style={{ background: '#EDE9FE', border: '2px solid #DDD6FE' }}>
             <div className="flex items-center gap-2">
-              <span className="text-xl">💗</span>
+              <span className="text-xl"><UiSymbol kind="heart" /></span>
               <div className="text-left">
                 <p className="text-xs font-black text-brand">{t.pointsEarned}</p>
                 <p className="text-[10px] text-ink-3">+10 for completing deck</p>

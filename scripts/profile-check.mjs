@@ -1,0 +1,86 @@
+﻿import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+const errors=[];
+const base=process.env.SMOKE_URL || 'http://localhost:5174';
+async function fit(page,label) {
+ const metrics=await page.locator('.profile-page').evaluate(e=>({width:innerWidth,docWidth:document.documentElement.scrollWidth,scrollWidth:e.scrollWidth,height:e.clientHeight,scrollHeight:e.scrollHeight,emptyButtons:[...e.querySelectorAll('button')].filter(b=>!b.textContent.trim()&&!b.getAttribute('aria-label')).length}));
+ assert.ok(metrics.scrollWidth<=metrics.width+1,`${label}: no horizontal overflow ${JSON.stringify(metrics)}`);
+ assert.equal(metrics.emptyButtons,0,`${label}: controls have names`);
+ assert.equal(await page.locator('vite-error-overlay').count(),0);
+ return metrics;
+}
+try {
+ for(const viewport of [{width:1536,height:695},{width:1280,height:600},{width:768,height:1024},{width:390,height:844},{width:320,height:740}]) {
+  const context=await browser.newContext({viewport,reducedMotion:'reduce',permissions:['clipboard-read','clipboard-write']});
+  const page=await context.newPage();
+  page.on('pageerror',e=>errors.push(e.message));
+  const guestWrites=[];
+  page.on('request',r=>{if(/\/rest\/v1\/(profiles|user_progress)/.test(r.url()) && r.method()!=='GET')guestWrites.push(r.url());});
+  await page.goto(base);
+  await page.getByRole('button',{name:'Start playing',exact:true}).click();
+  await page.getByRole('button',{name:'Open your profile'}).click();
+  await page.locator('.profile-dashboard').waitFor();
+  await page.evaluate(()=>document.fonts.ready);
+  const main=await fit(page,'main');
+  if(viewport.width>=900)assert.ok(main.scrollHeight<=main.height+1,'Laptop dashboard fits at 100%');
+  assert.match(await page.locator('.profile-account').innerText(),/Playing as a guest/);
+  assert.doesNotMatch(await page.locator('.profile-account').innerText(),/guest@|cloud/i);
+  await page.screenshot({path:`artifacts/profile-${viewport.width}-main.png`});
+  await page.getByRole('button',{name:'Edit profile',exact:true}).click();
+  await page.getByLabel('Your nickname').fill('   ');
+  assert.equal(await page.getByRole('button',{name:'Save profile',exact:true}).isDisabled(),true);
+  await page.getByLabel('Your nickname').fill('Afiq Plays');
+  await page.getByRole('group',{name:'Choose your character'}).getByRole('button',{name:'Coco',exact:true}).click();
+  await fit(page,'edit');
+  await page.screenshot({path:`artifacts/profile-${viewport.width}-edit.png`});
+  await page.getByRole('button',{name:'Save profile',exact:true}).click();
+  assert.equal(await page.locator('.profile-player-pass h2').innerText(),'Afiq Plays');
+  assert.match(await page.locator('.profile-pass-bottom').innerText(),/Coco/);
+  await page.getByRole('button',{name:'Edit profile',exact:true}).click();
+  await page.getByLabel('Your nickname').fill('Discard this');
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(await page.locator('.profile-player-pass h2').innerText(),'Afiq Plays');
+  await page.evaluate(()=>{const saved=JSON.parse(localStorage.getItem('jodohdeck_profile'));localStorage.setItem('jodohdeck_profile',JSON.stringify({...saved,heartPoints:365}));});
+  await page.reload();
+  await page.locator('.profile-dashboard').waitFor();
+  assert.equal(await page.locator('.profile-player-pass h2').innerText(),'Afiq Plays','Guest name persists through refresh');
+  assert.match(await page.locator('.profile-pass-bottom').innerText(),/Coco/,'Guest character persists');
+  assert.equal(await page.locator('.profile-heart-total > strong').innerText(),'365','Guest earned points persist');
+  await page.getByRole('button',{name:'Invite your person',exact:true}).click();
+  await page.getByRole('group',{name:'Your relationship'}).getByRole('button',{name:/Best/}).click();
+  const link=await page.getByLabel('Your invite link').inputValue();
+  const query=new URL(link).searchParams;
+  assert.equal(query.get('r'),'bestfriend');
+  assert.equal(query.get('n'),'Afiq Plays');
+  assert.equal(query.get('a'),'coco');
+  await page.getByRole('button',{name:'Copy link',exact:true}).click();
+  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),link);
+  await fit(page,'invite');
+  await page.screenshot({path:`artifacts/profile-${viewport.width}-invite.png`});
+  await page.evaluate(()=>{Object.defineProperty(navigator,'share',{configurable:true,value:async()=>{throw new DOMException('Cancelled','AbortError');}});});
+  await page.getByRole('button',{name:'Share invite',exact:true}).click();
+  assert.equal(await page.locator('.profile-view-invite').count(),1,'Cancelled share stays on invite');
+  await page.evaluate(()=>{Object.defineProperty(navigator,'share',{configurable:true,value:async data=>{window.__sharedProfile=data;}});});
+  await page.getByRole('button',{name:'Share invite',exact:true}).click();
+  await page.locator('.profile-view-waiting').waitFor();
+  assert.equal(await page.evaluate(()=>window.__sharedProfile.url),link);
+  await fit(page,'waiting');
+  await page.getByRole('button',{name:'Back to my profile',exact:true}).first().click();
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  assert.match(await page.locator('.profile-confirm').innerText(),/guest session/);
+  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.getByRole('button',{name:'Friends & chat',exact:true}).click();
+  await page.getByRole('heading',{name:'Your little circle'}).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Open your profile'}).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.profile-page').count(),0,'Escape returns to game lobby');
+  assert.equal(await page.getByRole('button',{name:'Open your profile'}).evaluate(e=>document.activeElement===e),true,'Focus returns to profile trigger');
+  assert.deepEqual(guestWrites,[],'Guest changes stay local');
+  console.log(`${viewport.width}x${viewport.height}: dashboard, editing, persistence, invitation, share cancellation, chat, and keyboard checks passed`);
+  await context.close();
+ }
+ assert.deepEqual(errors,[]);
+} finally {await browser.close();}
+

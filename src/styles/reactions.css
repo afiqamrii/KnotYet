@@ -1,0 +1,24 @@
+.giphy-reaction { width: 100%; max-width: 420px; margin: 0 auto; color: #241d35; }
+.giphy-stage { position: relative; width: 100%; height: clamp(150px, 24dvh, 225px); overflow: hidden; border-radius: 15px; background: #241d35; }
+.giphy-stage > img { width: 100%; height: 100%; object-fit: contain; opacity: 0; display: block; }
+.giphy-stage > img.is-loaded { opacity: 1; }
+.giphy-placeholder { position: absolute; inset: 0; display: grid; place-items: center; background: #eee6ff; }
+.giphy-unavailable { position: absolute; left: 0; right: 0; bottom: 8px; font-size: 11px; text-align: center; }
+.giphy-reaction figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 500 10px/1.3 'DM Sans',sans-serif; padding: 3px 2px 0; color: #6b6079; }
+.giphy-reaction figcaption a { display: inline-flex; gap: 3px; align-items: center; min-height: 44px; color: inherit; text-decoration: none; }.giphy-reaction figcaption a:hover { text-decoration: underline; }
+.giphy-reaction figcaption strong { letter-spacing: .5px; color: #241d35; }
+.giphy-reaction figcaption button { display: inline-flex; gap: 4px; align-items: center; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; min-height: 44px; color: #594b71; background: transparent; cursor: pointer; }
+.giphy-reaction figcaption button:hover { border-color: #b6a4d0; background: #eee6ff; }
+.giphy-reaction-compact { max-width: 300px; }.giphy-reaction-compact .giphy-stage { height: clamp(120px,21dvh,190px); }
+.game-result-overlay { position: fixed; inset: 0; z-index: 160; display: grid; place-items: center; padding: 16px; background: #241d35b8; backdrop-filter: blur(7px); overflow: auto; }
+.reaction-dialog { --reaction-accent: #d5f578; position: relative; width: min(100%,490px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; padding: 22px; display: flex; flex-direction: column; gap: 12px; text-align: center; color: #241d35; font-family: 'DM Sans',sans-serif; background: #fffaf0; border: 2px solid #241d35; border-radius: 25px; box-shadow: 6px 7px 0 #241d35; animation: reaction-enter 220ms ease-out; }
+.reaction-surprise { --reaction-accent: #ffb4c6; }
+.reaction-eyebrow { display: flex; align-items: center; justify-content: center; gap: 7px; align-self: center; background: var(--reaction-accent); border: 1px solid #241d35; padding: 6px 10px; border-radius: 7px; color: #241d35; font-size: 9px; line-height: 1.3; font-weight: 750; letter-spacing: .8px; transform: rotate(-2deg); }.reaction-eyebrow svg { height: 15px; width: 15px; }
+.reaction-dialog h2 { color: #241d35; font: 750 clamp(26px,4vw,34px)/1.05 'Outfit',sans-serif; letter-spacing: -.8px; margin: 0; }.reaction-points { font-size: 13px; font-weight: 750; color: #665277; margin: -3px 0 0; }
+.reaction-answers { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; text-align: left; }.reaction-answers > div { min-width: 0; padding: 12px; border-radius: 12px; background: #f1ebfa; }.reaction-answers > div:first-child { background: #eaf2d7; }.reaction-answers small { display: block; color: #65596f; font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }.reaction-answers p { font: 500 15px/1.35 'Outfit',sans-serif; overflow-wrap: anywhere; margin: 0; }
+.reaction-next { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 48px; flex-shrink: 0; background: #7650e8; border: 1.5px solid #241d35; border-radius: 13px; box-shadow: 2px 3px 0 #241d35; color: white; font: 650 15px/1.2 'Outfit',sans-serif; cursor: pointer; padding: 12px; }.reaction-next:hover { background: #6440d1; }.reaction-next:active { transform: translate(2px,2px); box-shadow: none; }
+.reaction-dialog button:focus-visible,.reaction-dialog a:focus-visible { outline: 3px solid #7650e8; outline-offset: 3px; }
+@keyframes reaction-enter { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+@media (max-width: 479px) { .game-result-overlay { padding: 12px; }.reaction-dialog { padding: 18px; gap: 10px; max-height: calc(100dvh - 24px); border-radius: 21px; }.reaction-answers { gap: 7px; }.reaction-answers > div { padding: 10px; }.reaction-answers p { font-size: 14px; } }
+@media (max-height: 650px) { .reaction-dialog { gap: 8px; padding: 16px; }.reaction-dialog .giphy-stage { height: 140px; }.reaction-dialog h2 { font-size: 27px; } }
+@media (prefers-reduced-motion: reduce) { .reaction-dialog { animation: none; } }

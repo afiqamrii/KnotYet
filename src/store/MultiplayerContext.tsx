@@ -63,7 +63,7 @@ interface MultiplayerContextType extends MultiplayerState {
   leaveRoom: () => void;
   setGame: (game: GameMode) => void;
   sendMessage: (msg: MultiplayerMessage) => void;
-  sendChatMessage: (text: string, isQuickReaction?: boolean) => void;
+  sendChatMessage: (text: string, isQuickReaction?: boolean) => boolean;
   clearUnreadChatCount: () => void;
   messageListener: React.MutableRefObject<((msg: MultiplayerMessage) => void) | null>;
 }
@@ -75,6 +75,10 @@ export const useMultiplayer = () => {
   if (!ctx) throw new Error('useMultiplayer must be used within a MultiplayerProvider');
   return ctx;
 };
+
+const isMultiplayerMessage = (value: unknown): value is MultiplayerMessage => (
+  typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
+);
 
 const getPeerId = (code: string) => `jodohdeck-v2-${code}`;
 
@@ -107,9 +111,12 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
   const localProfileRef = useRef<UserProfile | null>(null);
+  const partnerLeftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageListener = useRef<((msg: MultiplayerMessage) => void) | null>(null);
 
   const cleanup = useCallback(() => {
+    if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
+    partnerLeftTimer.current = null;
     if (connRef.current) {
       connRef.current.close();
       connRef.current = null;
@@ -135,13 +142,12 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const handlePartnerLeft = useCallback(() => {
     setState(s => {
       if (s.status === 'connected') {
-        return { ...s, status: 'partner_left' };
+        return { ...s, isConnected: false, status: 'partner_left' };
       }
       return s;
     });
-    setTimeout(() => {
-      cleanup();
-    }, 3000);
+    if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
+    partnerLeftTimer.current = setTimeout(cleanup, 3000);
   }, [cleanup]);
 
   const handleConnection = useCallback((conn: DataConnection) => {
@@ -155,8 +161,9 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     });
 
-    conn.on('data', (data: any) => {
-      const msg = data as MultiplayerMessage;
+    conn.on('data', (data) => {
+      if (!isMultiplayerMessage(data)) return;
+      const msg = data;
       
       if (msg.type === 'PROFILE_SYNC') {
         setState(s => ({ ...s, remoteProfile: msg.payload }));
@@ -171,11 +178,13 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
           messageListener.current(msg);
         }
       } else if (msg.type === 'CHAT_MESSAGE') {
+        if (!msg.payload || typeof msg.payload.text !== 'string' || !msg.payload.text.trim() || typeof msg.payload.id !== 'string') return;
+        const incoming = { ...msg.payload, senderId: 'partner', text: msg.payload.text.slice(0, 2000) };
         setState(s => ({
           ...s,
-          chatMessages: [...s.chatMessages, msg.payload],
+          chatMessages: s.chatMessages.some(item => item.id === incoming.id) ? s.chatMessages : [...s.chatMessages, incoming],
           unreadChatCount: s.unreadChatCount + 1,
-          latestIncomingMessage: msg.payload,
+          latestIncomingMessage: incoming,
         }));
         sounds.playChatPop();
       } else if (msg.type === 'LEAVE_ROOM') {
@@ -189,8 +198,9 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     conn.on('close', () => {
-      handlePartnerLeft();
+      if (connRef.current === conn) handlePartnerLeft();
     });
+    conn.on('error', () => { if (connRef.current === conn) handlePartnerLeft(); });
   }, [handlePartnerLeft, cleanup]);
 
   const hostRoom = useCallback((code: string, profile: UserProfile) => {
@@ -213,6 +223,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     peer.on('connection', (conn) => {
+      if (connRef.current?.open) { conn.close(); return; }
       handleConnection(conn);
     });
 
@@ -243,7 +254,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       handleConnection(conn);
     });
 
-    peer.on('error', (err: any) => {
+    peer.on('error', (err) => {
       console.error(err);
       let errorMsg = 'Failed to connect. Make sure host is waiting.';
       if (err.type === 'peer-unavailable') {
@@ -275,9 +286,9 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const sendChatMessage = useCallback((text: string, isQuickReaction = false) => {
-    if (!connRef.current || !connRef.current.open || !localProfileRef.current) return;
+    if (!connRef.current || !connRef.current.open || !localProfileRef.current) return false;
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || trimmed.length > 2000) return false;
 
     const newMsg: ChatMessage = {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -289,13 +300,26 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       isQuickReaction,
     };
 
+    try {
+      connRef.current.send({ type: 'CHAT_MESSAGE', payload: newMsg });
+    } catch {
+      return false;
+    }
     setState(s => ({
       ...s,
       chatMessages: [...s.chatMessages, newMsg],
     }));
-
-    connRef.current.send({ type: 'CHAT_MESSAGE', payload: newMsg });
     sounds.playChatSent();
+    return true;
+  }, []);
+
+  useEffect(() => () => {
+    if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
+    const connection = connRef.current;
+    connRef.current = null;
+    connection?.close();
+    peerRef.current?.destroy();
+    peerRef.current = null;
   }, []);
 
   const clearUnreadChatCount = useCallback(() => {

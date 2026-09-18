@@ -1,267 +1,154 @@
-// Web Audio API Synthesizer for instant, zero-dependency sound effects
+﻿// Cheerful, short major-key plucks and pops, synthesized locally for instant feedback.
+const SOUND_PREFERENCE = 'knotyet_sound_preferences';
 
 class SoundEffects {
   private ctx: AudioContext | null = null;
+  private master: GainNode | null = null;
   private bgm: HTMLAudioElement | null = null;
-  public isMuted: boolean = false;
-  public currentTrackIndex: number = 0;
+  private lastTap = -Infinity;
+  private lastTick = -Infinity;
+  public isMuted = false;
+  public effectVolume = .5;
+  public currentTrackIndex = 0;
   public tracks = [
     { name: 'Chill Lo-Fi', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
-    { name: 'Upbeat Arcade', url: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/oedipus_wizball_highscore.mp3' }
+    { name: 'Upbeat Arcade', url: 'https://raw.githubusercontent.com/photonstorm/phaser3-examples/master/public/assets/audio/oedipus_wizball_highscore.mp3' },
   ];
 
-  private init() {
-    if (!this.ctx && typeof window !== 'undefined') {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioCtx) {
-        this.ctx = new AudioCtx();
-      }
-    }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  }
-
-  // Card whoosh/pop sound when swiping
-  playSwipe() {
+  constructor() {
     try {
-      this.init();
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      // Super cute 'bloop' pop sound
-      osc.frequency.setValueAtTime(400, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
-
-      gain.gain.setValueAtTime(0, this.ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.4, this.ctx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.1);
-    } catch {
-      // Audio not supported or blocked
-    }
+      const saved = JSON.parse(localStorage.getItem(SOUND_PREFERENCE) || '{}');
+      this.isMuted = saved.muted === true;
+      if (typeof saved.volume === 'number' && Number.isFinite(saved.volume)) this.effectVolume = Math.max(0, Math.min(1, saved.volume));
+    } catch { /* Storage is optional. */ }
   }
 
-  // Card flip sound (Cute 'boop')
+  private save() {
+    try { localStorage.setItem(SOUND_PREFERENCE, JSON.stringify({ muted: this.isMuted, volume: this.effectVolume })); } catch { /* Storage is optional. */ }
+  }
+
+  private init() {
+    if (this.isMuted || this.effectVolume === 0 || typeof window === 'undefined') return false;
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return false;
+      this.ctx = new AudioCtx();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.effectVolume;
+      this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
+    return true;
+  }
+
+  private tone(frequency: number, duration: number, volume: number, delay = 0, endFrequency = frequency) {
+    if (!this.ctx || !this.master) return;
+    const time = this.ctx.currentTime + delay;
+    const oscillator = this.ctx.createOscillator();
+    const envelope = this.ctx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(frequency, time);
+    oscillator.frequency.exponentialRampToValueAtTime(endFrequency, time + duration);
+    envelope.gain.setValueAtTime(0, time);
+    envelope.gain.linearRampToValueAtTime(volume, time + .004);
+    envelope.gain.exponentialRampToValueAtTime(.0001, time + duration);
+    oscillator.connect(envelope);
+    envelope.connect(this.master);
+    oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
+    oscillator.start(time);
+    oscillator.stop(time + duration + .01);
+  }
+
+  private brush(duration: number, volume: number, cutoff: number) {
+    if (!this.ctx || !this.master) return;
+    const buffer = this.ctx.createBuffer(1, Math.ceil(this.ctx.sampleRate * duration), this.ctx.sampleRate);
+    const samples = buffer.getChannelData(0);
+    for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+    const source = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
+    const envelope = this.ctx.createGain();
+    source.buffer = buffer;
+    filter.type = 'lowpass'; filter.frequency.value = cutoff; filter.Q.value = .6;
+    const time = this.ctx.currentTime;
+    envelope.gain.setValueAtTime(0, time);
+    envelope.gain.linearRampToValueAtTime(volume, time + .003);
+    envelope.gain.exponentialRampToValueAtTime(.0001, time + duration);
+    source.connect(filter); filter.connect(envelope); envelope.connect(this.master);
+    source.onended = () => { source.disconnect(); filter.disconnect(); envelope.disconnect(); };
+    source.start(time); source.stop(time + duration);
+  }
+
+  private pluck(frequency: number, duration: number, volume: number, delay = 0) {
+    // A soft fundamental plus a quiet octave gives a toy-piano tone, without
+    // harsh square waves or the old high-pitched frequency sweeps.
+    this.tone(frequency, duration, volume, delay);
+    this.tone(frequency * 2, duration * .55, volume * .13, delay);
+  }
+
   playFlip() {
     try {
-      this.init();
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      // Higher pitched quick cute 'boop'
-      osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1400, this.ctx.currentTime + 0.05);
-
-      gain.gain.setValueAtTime(0, this.ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.3, this.ctx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.05);
-    } catch {
-      // ignore
-    }
+      if (!this.init() || !this.ctx || this.ctx.currentTime - this.lastTap < .055) return;
+      this.lastTap = this.ctx.currentTime;
+      this.pluck(523.25, .13, .2);
+      this.tone(783.99, .09, .06, .025);
+    } catch { /* Audio may be unavailable. */ }
   }
-
-  // Wheel click tick
+  playSwipe() {
+    try { if (this.init()) { this.brush(.085, .09, 1900); this.pluck(523.25, .11, .12); this.pluck(659.25, .16, .12, .055); } } catch { /* optional */ }
+  }
   playTick() {
     try {
-      this.init();
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(800, this.ctx.currentTime);
-
-      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.03);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.03);
-    } catch {
-      // ignore
-    }
+      if (!this.init() || !this.ctx || this.ctx.currentTime - this.lastTick < .045) return;
+      this.lastTick = this.ctx.currentTime;
+      this.pluck(783.99, .06, .085);
+    } catch { /* optional */ }
   }
-
-  // Match / Win chime
   playSuccess() {
     try {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      // Extended arpeggio for a longer celebration! (C5, E5, G5, C6, E6, G6, C7)
-      const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00]; 
-
-      notes.forEach((freq, idx) => {
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-
-        // Use square wave for a more retro/festive celebration sound
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.1);
-
-        gain.gain.setValueAtTime(0.1, now + idx * 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.1 + 0.3);
-
-        osc.connect(gain);
-        gain.connect(this.ctx!.destination);
-
-        osc.start(now + idx * 0.1);
-        osc.stop(now + idx * 0.1 + 0.3);
-      });
-    } catch {
-      // ignore
-    }
+      if (!this.init()) return;
+      // A rising C-major fanfare, with a warm chord under the final note.
+      [523.25, 659.25, 783.99, 1046.5].forEach((note, index) => this.pluck(note, index === 3 ? .38 : .19, .16, index * .09));
+      [261.63, 329.63, 392].forEach(note => this.tone(note, .4, .055, .27));
+    } catch { /* optional */ }
   }
-
-  // Mismatch / Wrong guess sound
   playMismatch() {
-    try {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const notes = [440, 370];
-
-      notes.forEach((freq, idx) => {
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
-
-        gain.gain.setValueAtTime(0.15, now + idx * 0.12);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.18);
-
-        osc.connect(gain);
-        gain.connect(this.ctx!.destination);
-
-        osc.start(now + idx * 0.12);
-        osc.stop(now + idx * 0.12 + 0.18);
-      });
-    } catch {
-      // ignore
-    }
+    try { if (this.init()) { this.pluck(392, .16, .14); this.pluck(329.63, .16, .12, .085); this.pluck(523.25, .25, .12, .17); } } catch { /* optional */ }
   }
-
-  // Chat message received sound (Cute high-pitch bubble pop)
   playChatPop() {
-    try {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(580, now);
-      osc.frequency.exponentialRampToValueAtTime(1180, now + 0.08);
-
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.25, now + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.08);
-    } catch {
-      // ignore
-    }
+    try { if (this.init()) { this.pluck(659.25, .12, .12); this.pluck(783.99, .16, .12, .06); } } catch { /* optional */ }
   }
-
-  // Chat message sent sound (Crisp soft pop)
   playChatSent() {
-    try {
-      this.init();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(420, now);
-      osc.frequency.exponentialRampToValueAtTime(740, now + 0.06);
-
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.18, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.06);
-    } catch {
-      // ignore
-    }
+    try { if (this.init()) { this.pluck(523.25, .1, .09); this.pluck(659.25, .12, .09, .04); } } catch { /* optional */ }
   }
 
-  // Background Music
+  setEffectVolume(volume: number) {
+    if (!Number.isFinite(volume)) return;
+    this.effectVolume = Math.max(0, Math.min(1, volume));
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.isMuted ? 0 : this.effectVolume, this.ctx.currentTime, .015);
+    this.save();
+  }
+
   playBGM() {
     if (typeof window === 'undefined' || this.isMuted) return;
-    
-    if (!this.bgm) {
-      this.bgm = new Audio(this.tracks[this.currentTrackIndex].url);
-      this.bgm.loop = true;
-      this.bgm.volume = 0.25;
-    }
-    
-    // Ensure the src is correct
-    if (this.bgm.src !== this.tracks[this.currentTrackIndex].url) {
-      this.bgm.src = this.tracks[this.currentTrackIndex].url;
-      this.bgm.load();
-    }
-    
-    this.bgm.play().catch(() => console.log('BGM autoplay blocked'));
+    if (!this.bgm) { this.bgm = new Audio(this.tracks[this.currentTrackIndex].url); this.bgm.loop = true; this.bgm.volume = .12; }
+    if (this.bgm.src !== this.tracks[this.currentTrackIndex].url) { this.bgm.src = this.tracks[this.currentTrackIndex].url; this.bgm.load(); }
+    void this.bgm.play().catch(() => undefined);
   }
-
-  stopBGM() {
-    if (this.bgm) {
-      this.bgm.pause();
-    }
-  }
-  
+  stopBGM() { this.bgm?.pause(); }
   setTrack(index: number) {
-    if (index >= 0 && index < this.tracks.length) {
-      this.currentTrackIndex = index;
-      if (this.bgm) {
-        const wasPlaying = !this.bgm.paused;
-        this.bgm.src = this.tracks[this.currentTrackIndex].url;
-        this.bgm.load();
-        if (wasPlaying && !this.isMuted) {
-          this.bgm.play().catch(() => console.log('BGM autoplay blocked'));
-        }
-      }
+    if (!Number.isInteger(index) || index < 0 || index >= this.tracks.length) return;
+    this.currentTrackIndex = index;
+    if (this.bgm) {
+      const wasPlaying = !this.bgm.paused;
+      this.bgm.src = this.tracks[index].url; this.bgm.load();
+      if (wasPlaying && !this.isMuted) void this.bgm.play().catch(() => undefined);
     }
   }
-
   toggleMute() {
     this.isMuted = !this.isMuted;
-    if (this.isMuted) {
-      this.stopBGM();
-    } else {
-      this.playBGM();
-    }
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.isMuted ? 0 : this.effectVolume, this.ctx.currentTime, .01);
+    if (this.isMuted) this.stopBGM(); else this.playBGM();
+    this.save();
     return this.isMuted;
   }
 }

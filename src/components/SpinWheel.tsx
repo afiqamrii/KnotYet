@@ -1,3 +1,4 @@
+import { UiSymbol, RoundLabel } from './GameCardDesign';
 import React, { useState, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { Sparkles, Dices, RotateCcw, X } from 'lucide-react';
@@ -25,6 +26,11 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   const [myAnswer, setMyAnswer] = useState<string | null>(null);
   const [partnerAnswer, setPartnerAnswer] = useState<string | null>(null);
   const tickIntervalRef = useRef<number | null>(null);
+  const spinTimeoutRef = useRef<number | null>(null);
+  React.useEffect(() => () => {
+    if (tickIntervalRef.current !== null) window.clearTimeout(tickIntervalRef.current);
+    if (spinTimeoutRef.current !== null) window.clearTimeout(spinTimeoutRef.current);
+  }, []);
 
   const numSegments = WHEEL_SEGMENTS.length;
   const segmentAngle = 360 / numSegments;
@@ -61,7 +67,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
     };
     playNextTick();
 
-    setTimeout(() => {
+    spinTimeoutRef.current = window.setTimeout(() => {
       setSpinning(false);
       const landed = WHEEL_SEGMENTS[segmentIdx];
       setSelectedSegment(landed);
@@ -112,8 +118,16 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   // Desktop keyboard controls
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea') return;
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      // Open dialogs own the keyboard; native controls keep their activation keys.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return;
+      if (showModal && e.key === 'Escape') {
+        e.preventDefault();
+        setShowModal(false);
+        return;
+      }
+      if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [role="dialog"], [role="alertdialog"]')) return;
 
       if (showModal) {
         if (e.key === 'Escape') {
@@ -142,7 +156,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
-      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+      <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
             style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316)' }}>
@@ -153,18 +167,18 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
             <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
               <span>Date Night Mode</span>
               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-amber-500/80 text-white text-[9px] font-black">
-                🎡 Spin & Ask
+                Spin & Ask
               </span>
             </div>
           </div>
         </div>
-        <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+        <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95">
           End Game
         </button>
       </div>
 
       {/* Main Game Card - Full Height Flexible */}
-      <div className="game-card w-full flex-1 flex flex-col items-center justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
+      <div className="game-card activity-card wheel-board w-full flex-1 flex flex-col items-center justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
         {/* Header inside Card */}
         <div className="text-center space-y-0.5 shrink-0">
           <h3 className="text-base sm:text-xl font-black text-ink">{t.wheelTitle}</h3>
@@ -176,12 +190,12 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
         {/* Pointer */}
         <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
           <div className="w-0 h-0"
-            style={{ borderLeft: '12px solid transparent', borderRight: '12px solid transparent', borderTop: '20px solid #FF2D9B', filter: 'drop-shadow(0 2px 4px rgba(255,45,155,0.5))' }} />
+            style={{ borderLeft: '12px solid transparent', borderRight: '12px solid transparent', borderTop: '20px solid #241d35' }} />
         </div>
 
         {/* Outer ring */}
         <div className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ border: '4px solid white', boxShadow: '0 0 0 4px rgba(124,58,237,0.2), 0 12px 40px rgba(0,0,0,0.18)' }} />
+          style={{ border: '3px solid #241d35', boxShadow: '5px 6px 0 #241d35' }} />
 
         {/* SVG Wheel */}
         <svg viewBox="0 0 300 300" style={{
@@ -205,11 +219,11 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
             const ty = 150 + 95 * Math.sin(midRad);
             return (
               <g key={seg.id}>
-                <path d={pathData} fill={seg.color} stroke="white" strokeWidth="3" />
-                <text x={tx} y={ty} fill={seg.textColor} fontSize="11" fontWeight="900"
+                <path d={pathData} fill={seg.color} stroke="#241d35" strokeWidth="1.5" />
+                <text x={tx} y={ty} fill={seg.textColor} fontSize="10" fontWeight="600" fontFamily="Outfit, sans-serif"
                   textAnchor="middle" dominantBaseline="middle"
                   transform={`rotate(${startAngle + segmentAngle / 2}, ${tx}, ${ty})`}>
-                  {seg.icon} {seg.label.replace(/^[^\s]+\s/, '')}
+                  {seg.label}
                 </text>
               </g>
             );
@@ -222,7 +236,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
           style={{
             width: 64, height: 64, borderRadius: '50%',
             top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)',
+            background: '#7650e8',
             border: '4px solid white',
             boxShadow: '0 4px 0 rgba(0,0,0,0.2), 0 8px 20px rgba(255,45,155,0.4)',
           }}>
@@ -231,12 +245,13 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
         </button>
       </div>
 
+      <RoundLabel title="LEAVE IT TO LUCK" detail="SPIN & TALK" kind="dice" />
       {/* Spin button */}
       <div className="w-full space-y-2">
         <button onClick={spinTheWheel} disabled={spinning}
           className="btn-chunky btn-amber w-full text-sm disabled:opacity-60">
           <Dices className="w-4 h-4" />
-          {spinning ? t.wheelSpinning + ' 🎡' : t.wheelSpin + ' 🎡'}
+          {spinning ? t.wheelSpinning : t.wheelSpin}
         </button>
         <p className="text-[10px] text-center text-ink-3 font-semibold">{t.wheelTip}</p>
       </div>
@@ -244,25 +259,25 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
       {/* Result Modal */}
       {showModal && selectedSegment && (
         <div className="modal-overlay centered" onClick={() => setShowModal(false)}>
-          <div className="game-card w-full max-w-xs sm:max-w-md p-6 text-center space-y-4 animate-pop-in relative"
+          <div className="game-card activity-card wheel-prompt w-full max-w-xs sm:max-w-md p-6 text-center space-y-4 animate-pop-in relative"
             onClick={e => e.stopPropagation()}
             style={{ boxShadow: `0 0 0 4px ${selectedSegment.color}30, 0 20px 60px rgba(0,0,0,0.25)` }}>
 
-            <button onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100">
+            <button onClick={() => setShowModal(false)} aria-label="Close wheel prompt"
+              className="absolute top-4 right-4 w-11 h-11 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100">
               <X className="w-4 h-4" />
             </button>
 
             <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-3xl animate-float"
               style={{ background: `${selectedSegment.color}18`, border: `3px solid ${selectedSegment.color}40`, boxShadow: `0 8px 24px ${selectedSegment.color}35` }}>
-              {selectedSegment.icon}
+              <UiSymbol kind="dice" />
             </div>
 
             <div>
-              <span className="tag text-xs" style={{ background: `${selectedSegment.color}15`, color: selectedSegment.color, border: `2px solid ${selectedSegment.color}30` }}>
+              <span className="tag text-xs" style={{ background: `${selectedSegment.color}15`, color: '#241d35', border: '1.5px solid #241d35' }}>
                 {selectedSegment.label}
               </span>
-              <h3 className="text-base font-black text-ink mt-2.5 leading-snug">{activePrompt}</h3>
+              <h3 className={`question-text ${(activePrompt?.length ?? 0) > 140 ? 'question-long' : ''}`}>{activePrompt}</h3>
             </div>
 
             <div className="flex items-center gap-1 text-xs font-bold text-ink-3">
@@ -275,7 +290,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
                 {partnerAnswer && !myAnswer && (
                   <div className="p-2.5 rounded-xl bg-amber-50 border-2 border-amber-200 text-center animate-bounce-soft">
                     <p className="text-xs text-amber-800 font-black flex items-center justify-center gap-1.5">
-                      <span>⚡</span> {partnerName} has already answered! Waiting for your reaction...
+                      <span><UiSymbol kind="zap" /></span> {partnerName} has already answered! Waiting for your reaction...
                     </p>
                   </div>
                 )}
@@ -305,7 +320,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
                     </div>
                     <button onClick={() => setShowModal(false)}
                       className="btn-chunky btn-green w-full text-xs" style={{ borderRadius: '12px' }}>
-                      ✅ Continue
+                      <UiSymbol kind="check" /> Continue
                     </button>
                   </>
                 ) : !myAnswer ? (
@@ -320,6 +335,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
                     <input
                       type="text"
                       name="ans"
+                      aria-label="Your answer or reaction"
                       autoComplete="off"
                       placeholder="Type answer or reaction..."
                       className="w-full bg-stone-100 border-2 border-stone-200 p-3 rounded-xl text-sm font-semibold focus:border-brand outline-none mb-2"
@@ -332,9 +348,9 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
               </div>
             ) : (
               <div className="space-y-2">
-                <button onClick={() => { setShowModal(false); sounds.playSuccess(); }}
+                <button onClick={() => { setShowModal(false); sounds.playFlip(); }}
                   className="btn-chunky btn-green w-full text-xs" style={{ borderRadius: '12px' }}>
-                  ✅ {t.wheelDone}
+                  <UiSymbol kind="check" /> {t.wheelDone}
                 </button>
                 <button onClick={() => { setShowModal(false); spinTheWheel(); }}
                   className="btn-chunky btn-white w-full text-xs flex items-center justify-center gap-1.5" style={{ borderRadius: '12px' }}>

@@ -121,7 +121,7 @@ export const AdModal: React.FC<AdModalProps> = ({ onClose, onRewardEarned, title
               <Sparkles className="w-8 h-8 text-emerald-500" />
             </div>
             <h3 className="text-2xl font-black text-emerald-600 mb-2">Reward Unlocked!</h3>
-            <p className="text-sm font-bold text-ink-3">Enjoy your {rewardText} 💖</p>
+            <p className="text-sm font-bold text-ink-3">Enjoy your {rewardText}</p>
           </div>
         )}
         

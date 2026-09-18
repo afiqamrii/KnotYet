@@ -1,222 +1,91 @@
-import React, { useEffect, useState } from 'react';
+import { UiSymbol } from '../components/GameCardDesign';
+import { useState } from 'react';
+import { ArrowDown, ArrowRight, Check, ChevronRight, Gamepad2, Heart, Link2, Play, RefreshCw, Sparkles, Users, Wifi } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
-import { Heart, Layers, Dices, Sparkles, Users, Shield, ChevronDown, ArrowRight } from 'lucide-react';
+import { BrandMark, DuoMascot, GameArtwork } from '../components/ArcadeArt';
+import '../styles/landing.css';
 
-const FEATURES = [
-  {
-    icon: <Layers className="w-6 h-6" />,
-    title: 'Icebreaker Cards',
-    desc: 'Swipe through deep questions, fun riddles, and vibe-check prompts that spark real conversations.',
-    color: '#FF2D9B',
-    bg: 'rgba(255,45,155,0.1)',
-  },
-  {
-    icon: <Heart className="w-6 h-6" />,
-    title: 'Guess My Heart',
-    desc: 'Test how well you know each other. Pick secretly, guess your partner\'s answer, and see if your hearts align.',
-    color: '#06B6D4',
-    bg: 'rgba(6,182,212,0.1)',
-  },
-  {
-    icon: <Dices className="w-6 h-6" />,
-    title: 'Spin the Wheel',
-    desc: 'When the silence gets awkward — spin the anti-awkward wheel and let fate pick the next topic.',
-    color: '#F59E0B',
-    bg: 'rgba(245,158,11,0.1)',
-  },
-  {
-    icon: <Users className="w-6 h-6" />,
-    title: 'Play Together Online',
-    desc: 'Create a room, share a code, and play in real-time with your partner — perfect for long-distance couples.',
-    color: '#7C3AED',
-    bg: 'rgba(124,58,237,0.1)',
-  },
+const GAMES = [
+  { id: 'swipe', title: 'Icebreaker Cards', kind: 'cards', mood: 'closer', tag: 'A little deeper', description: 'Skip the small talk. Find your next “wait, really?” moment.', color: 'pink' },
+  { id: 'quiz', title: 'Guess My Heart', kind: 'heart', mood: 'closer', tag: 'How well do you know me?', description: 'Make your guess. Reveal your answers. Cue the butterflies.', color: 'purple' },
+  { id: 'wheel', title: 'Spin Wheel', kind: 'wheel', mood: 'laughs', tag: 'Let fate decide', description: 'One spin. A random topic. A very good excuse to keep talking.', color: 'yellow' },
+  { id: 'number', title: 'Number Guesser', kind: 'number', mood: 'laughs', tag: 'A friendly little rivalry', description: 'Follow the clues and race to find the mystery number.', color: 'blue' },
+  { id: 'letter', title: 'Letter Race', kind: 'letter', mood: 'laughs', tag: 'Ready, set, think!', description: 'One letter. Two quick minds. Race to get the first word in.', color: 'green' },
+] as const;
+const QUESTIONS = [
+  'If we could press pause on life for a day, what would we do together?',
+  'What tiny thing do I do that always makes you smile?',
+  'If our relationship had a theme song, what would it be?',
+  'What is one adventure you would love us to try together?',
 ];
+type Mood = 'all' | 'closer' | 'laughs';
 
-export const LandingPage: React.FC = () => {
+export const LandingPage = () => {
   const { signInWithGoogle, signInAsGuest } = useAuth();
-  const [isVisible, setIsVisible] = useState(false);
-  const [activeFeature, setActiveFeature] = useState(0);
-
-  useEffect(() => {
-    setIsVisible(true);
-    const interval = setInterval(() => {
-      setActiveFeature(prev => (prev + 1) % FEATURES.length);
-    }, 3500);
-    return () => clearInterval(interval);
-  }, []);
-
+  const [mood, setMood] = useState<Mood>('all');
+  const [question, setQuestion] = useState(0);
+  const [signInError, setSignInError] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const startGame = (game = 'swipe', joinPartner = false) => {
+    localStorage.setItem('knotyet_activeTab', game);
+    if (joinPartner) sessionStorage.setItem('knotyet_openRoom', 'true');
+    else sessionStorage.removeItem('knotyet_openRoom');
+    signInAsGuest();
+  };
+  const signIn = async () => {
+    setSignInError(''); setIsSigningIn(true);
+    try { await signInWithGoogle(); }
+    catch { setSignInError('Couldn’t connect to Google. Try again, or jump in with free guest play.'); }
+    finally { setIsSigningIn(false); }
+  };
   return (
-    <div className="min-h-[100dvh] relative overflow-hidden bg-[#F8F7FF]">
-
-      {/* Animated gradient orbs */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute w-[500px] h-[500px] rounded-full opacity-10 top-[-120px] right-[-120px]"
-          style={{ background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)', animation: 'float 8s ease-in-out infinite' }} />
-        <div className="absolute w-[400px] h-[400px] rounded-full opacity-[0.07] bottom-[-100px] left-[-80px]"
-          style={{ background: 'radial-gradient(circle, #FF2D9B 0%, transparent 70%)', animation: 'float 10s ease-in-out infinite reverse' }} />
-        <div className="absolute w-[300px] h-[300px] rounded-full opacity-5 top-[40%] left-[50%]"
-          style={{ background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)', animation: 'float 12s ease-in-out infinite' }} />
-        
-        {/* Subtle grid pattern */}
-        <div className="absolute inset-0"
-          style={{
-            backgroundImage: 'linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px)',
-            backgroundSize: '64px 64px',
-          }} />
-      </div>
-
-      {/* Content */}
-      <div className="relative z-10 max-w-lg md:max-w-3xl lg:max-w-5xl mx-auto px-5 sm:px-8 flex flex-col min-h-[100dvh]">
-        
-        {/* Nav */}
-        <nav className="flex items-center justify-between pt-6 pb-4"
-          style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(-20px)', transition: 'all 0.6s ease 0.1s' }}>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xl font-black tracking-tight">
-              <span className="text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(135deg, #FF2D9B, #7C3AED)' }}>Knot</span>
-              <span className="text-ink">Yet</span>
-            </span>
+    <div className="date-arcade" id="top">
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <header className="date-nav page-width">
+        <a className="date-brand" href="#top" aria-label="KnotYet home"><BrandMark /><span>KnotYet<span className="brand-period">.</span></span></a>
+        <nav className="date-nav-links" aria-label="Main navigation"><a href="#games">The games</a><a href="#how-it-works">How to play</a><span className="nav-love-note">Made for two <Heart size={13} fill="currentColor" /></span></nav>
+        <button className="arcade-button nav-play" onClick={() => startGame()}><Gamepad2 size={18} /> Let’s play <ArrowRight size={16} /></button>
+      </header>
+      <main id="main-content">
+        <section className="date-hero page-width" aria-labelledby="hero-title">
+          <div className="date-hero-copy">
+            <span className="date-eyebrow"><span /> TWO PLAYERS. ENDLESS POSSIBILITIES.</span>
+            <h1 id="hero-title">Your next<br />date night.<br /><span>With a twist<svg viewBox="0 0 370 18" aria-hidden="true"><path d="M3 12Q150-4 365 8M32 17Q180 3 336 13" /></svg></span><span className="hero-period">.</span></h1>
+            <p>A little playful. A little personal. A whole lot of <strong>you two.</strong> Turn “what should we do?” into your favourite part of the day.</p>
+            <div className="date-hero-actions"><button className="arcade-button button-purple hero-play" onClick={() => startGame()}><Play size={18} fill="currentColor" /> Start playing <ArrowRight size={19} /></button><button className="join-link" onClick={() => startGame('swipe', true)}><Link2 size={17} /> Join your partner</button></div>
+            <div className="date-perks"><span><Check /> Free to try</span><span><Check /> No downloads</span><span><Check /> No sign-up needed</span></div>
+            <div className="hero-footnote"><span className="tiny-players" aria-hidden="true"><span><UiSymbol kind="smile" /></span><span><UiSymbol kind="smile" /></span></span><span>Same sofa or miles apart.<br /><strong>Good company is all you need.</strong></span><svg viewBox="0 0 62 40" aria-hidden="true"><path d="M3 3Q49 4 42 33M34 25L42 34L52 28" /></svg></div>
           </div>
-        </nav>
-
-        {/* Hero */}
-        <div className="flex-1 flex flex-col justify-center py-8"
-          style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(30px)', transition: 'all 0.8s ease 0.3s' }}>
-          
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6 self-start"
-            style={{ background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.3)' }}>
-            <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-            <span className="text-xs font-bold text-violet-700 tracking-wide">Interactive Couple's Game</span>
-          </div>
-
-          <h1 className="text-4xl sm:text-5xl font-black text-ink leading-[1.1] mb-4">
-            Get to Know{' '}
-            <span className="text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(135deg, #FF2D9B, #F59E0B, #06B6D4)' }}>
-              Each Other
-            </span>
-            <br />Before Saying{' '}
-            <span className="text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(135deg, #7C3AED, #FF2D9B)' }}>
-              "I Do"
-            </span>
-          </h1>
-
-          <p className="text-base text-ink-3 font-medium leading-relaxed mb-8 max-w-md">
-            Swipe cards, guess hearts, and spin the wheel — fun games designed for couples to build understanding, chemistry, and trust.
-          </p>
-
-          {/* CTA Buttons */}
-          <div className="w-full max-w-md mx-auto space-y-3 mb-10">
-            <button
-              onClick={() => signInWithGoogle().catch(console.error)}
-              className="w-full py-4 px-6 rounded-2xl font-black text-base flex items-center justify-center gap-3 transition active:scale-[0.97]"
-              style={{
-                background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)',
-                color: 'white',
-                boxShadow: '0 8px 32px rgba(255,45,155,0.3), 0 4px 0 rgba(0,0,0,0.15)',
-              }}
-            >
-              <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="G" />
-              Continue with Google
-              <ArrowRight className="w-5 h-5 ml-auto" />
-            </button>
-
-            <button
-              onClick={() => signInAsGuest()}
-              className="w-full py-3.5 px-6 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-white text-ink-2 hover:text-ink border-2 border-slate-200 hover:border-slate-300 transition active:scale-[0.97] shadow-sm"
-            >
-              <span>✨</span>
-              <span>Play as Guest / Quick Play</span>
-              <ArrowRight className="w-4 h-4 ml-auto text-ink-3" />
-            </button>
-            
-            <p className="text-center text-xs text-ink-3/70 font-medium flex items-center justify-center gap-1.5 pt-1">
-              <Shield className="w-3 h-3" /> Your data stays private. We only save your game progress.
-            </p>
-          </div>
-
-          {/* Scroll hint */}
-          <div className="flex flex-col items-center gap-1 animate-bounce opacity-40">
-            <span className="text-[10px] text-ink font-bold uppercase tracking-widest">Explore Features</span>
-            <ChevronDown className="w-4 h-4 text-ink" />
-          </div>
-        </div>
-
-        {/* Features Section */}
-        <section className="py-12 space-y-5"
-          style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(40px)', transition: 'all 0.8s ease 0.6s' }}>
-          <h2 className="text-xl sm:text-2xl font-black text-ink mb-6 text-center sm:text-left">What You Can Play</h2>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {FEATURES.map((feat, i) => (
-              <div
-                key={i}
-                className="p-5 rounded-2xl flex flex-col sm:flex-col items-start gap-3 transition-all duration-300 cursor-pointer"
-                style={{
-                  background: activeFeature === i ? 'white' : 'rgba(255,255,255,0.6)',
-                  border: activeFeature === i ? `1px solid ${feat.bg.replace('0.1', '0.2')}` : '1px solid rgba(0,0,0,0.05)',
-                  boxShadow: activeFeature === i ? '0 8px 24px rgba(0,0,0,0.06)' : 'none',
-                  transform: activeFeature === i ? 'scale(1.02)' : 'scale(1)',
-                }}
-                onClick={() => setActiveFeature(i)}
-              >
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: feat.bg, color: feat.color }}>
-                  {feat.icon}
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-ink mb-1">{feat.title}</h3>
-                  <p className="text-xs sm:text-sm text-ink-3 font-medium leading-relaxed">{feat.desc}</p>
-                </div>
-              </div>
-            ))}
+          <div className="date-hero-scene">
+            <div className="scene-grid" aria-hidden="true" />
+            <span className="scene-star scene-star-top" aria-hidden="true">✦</span><span className="scene-star scene-star-side" aria-hidden="true">✳</span>
+            <div className="scene-sticker"><Heart fill="currentColor" /><span>LESS SCROLLING<br /><strong>more us time.</strong></span></div>
+            <div className="hero-card-stack">
+              <div className="hero-card-back hero-card-back-one" aria-hidden="true" /><div className="hero-card-back hero-card-back-two" aria-hidden="true" />
+              <article className="hero-question-card">
+                <div className="question-card-top"><span><Sparkles size={14} /> THE CLOSER DECK</span><Heart size={18} /></div>
+                <span className="question-number">LET’S START WITH THIS...</span>
+                <p className="preview-question" aria-live="polite" aria-atomic="true">{QUESTIONS[question]}</p>
+                <div className="question-card-bottom"><span>you + me + a good question</span><button aria-label="Another question" title="Try another question" onClick={() => setQuestion((value) => (value + 1) % QUESTIONS.length)}><RefreshCw size={18} /></button></div>
+              </article>
+            </div>
+            <span className="scene-try-note">go on, give it a try <svg viewBox="0 0 54 39" aria-hidden="true"><path d="M3 6Q18 33 48 20M39 14L49 19L44 29" /></svg></span>
+            <div className="scene-mascots"><DuoMascot /></div>
+            <div className="scene-player-tag"><span className="player-tag-dot" /><Users size={15} /><span>Better in 2-player mode</span></div>
           </div>
         </section>
-
-        {/* Stats / Trust signals */}
-        <section className="py-10 grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-2xl font-black text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(135deg, #FF2D9B, #F59E0B)' }}>200+</p>
-            <p className="text-[10px] text-ink-3/60 font-bold uppercase tracking-wider mt-1">Questions</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(135deg, #7C3AED, #06B6D4)' }}>4</p>
-            <p className="text-[10px] text-ink-3/60 font-bold uppercase tracking-wider mt-1">Game Modes</p>
-          </div>
-          <div>
-            <p className="text-2xl font-black text-transparent bg-clip-text"
-              style={{ backgroundImage: 'linear-gradient(135deg, #06B6D4, #10B981)' }}>Free</p>
-            <p className="text-[10px] text-ink-3/60 font-bold uppercase tracking-wider mt-1">Forever</p>
-          </div>
+        <div className="date-good-stuff" aria-label="Ways to connect"><div className="page-width"><span><Gamepad2 /> 5 ways to play</span><i aria-hidden="true">✦</i><span><Heart /> 600+ conversation cards</span><i aria-hidden="true">✦</i><span><Wifi /> Together, anywhere</span><i aria-hidden="true">✦</i><span><Sparkles /> Zero awkward silences</span></div></div>
+        <section className="date-games page-width" id="games" aria-labelledby="games-title">
+          <div className="date-section-top"><div><span className="section-kicker">PICK YOUR KIND OF FUN</span><h2 id="games-title">Two players. <span>All the feels.</span></h2><p>A little competition or a deeper connection? There’s a game for that.</p></div><a href="#game-grid" className="all-games-link">Find your game <ArrowDown size={17} /></a></div>
+          <div className="mood-filters" role="group" aria-label="Filter games by mood">{([{ id: 'all', label: 'All games', icon: Gamepad2 }, { id: 'closer', label: 'Get closer', icon: Heart }, { id: 'laughs', label: 'Just for laughs', icon: Sparkles }] as const).map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={mood === id} onClick={() => setMood(id)}><Icon size={15} />{label}<span>{id === 'all' ? 5 : id === 'closer' ? 2 : 3}</span></button>)}</div>
+          <div className="date-game-grid" id="game-grid">{GAMES.filter((game) => mood === 'all' || game.mood === mood).map((game, index) => <button className={`date-game-tile tile-${game.color}`} key={game.id} onClick={() => startGame(game.id)} aria-label={`Play ${game.title}`}><div className="tile-art"><span className="tile-number">0{GAMES.indexOf(game) + 1}</span>{index === 0 && mood === 'all' && <span className="tile-pick">START HERE</span>}<GameArtwork kind={game.kind} /></div><div className="tile-copy"><span className="tile-tag">{game.tag}</span><h3>{game.title}</h3><p>{game.description}</p><span className="tile-bottom"><span><Users size={13} /> Made for two</span><span className="tile-arrow"><ArrowRight size={18} /></span></span></div></button>)}</div>
+          <p className="games-footnote"><Heart size={14} /> New couple, old flames, or somewhere in between. You’re in the right place.</p>
         </section>
-
-        {/* Bottom CTA */}
-        <section className="pb-12 pt-4">
-          <div className="max-w-xl mx-auto p-6 sm:p-8 rounded-3xl text-center space-y-4 shadow-sm"
-            style={{ background: 'white', border: '1px solid #E5E7EB' }}>
-            <h3 className="text-lg font-black text-ink">Ready to Start?</h3>
-            <p className="text-xs text-ink-3 font-medium">
-              Sign in to save your progress, track your answers, and never repeat the same question.
-            </p>
-            <button
-              onClick={() => signInWithGoogle().catch(console.error)}
-              className="w-full py-3.5 rounded-2xl font-black text-sm text-white transition active:scale-[0.97]"
-              style={{ background: 'linear-gradient(135deg, #7C3AED, #FF2D9B)', boxShadow: '0 6px 24px rgba(124,58,237,0.3)' }}
-            >
-              Get Started — It's Free
-            </button>
-          </div>
-          
-          <p className="text-center text-[10px] text-ink-3/40 font-medium mt-6">
-            Made with love for couples everywhere.
-          </p>
-        </section>
-      </div>
+        <section className="date-how" id="how-it-works" aria-labelledby="how-title"><div className="page-width"><div className="date-how-heading"><span className="section-kicker">LESS SETUP, MORE QUALITY TIME</span><h2 id="how-title">Your only plan?<br /><span>Press play.</span></h2><DuoMascot /></div><ol className="date-steps"><li><span className="step-number">1</span><div><h3>Pick your vibe</h3><p>Deep chats, silly guesses, or friendly competition. Follow your mood.</p></div><Gamepad2 aria-hidden="true" /></li><li><span className="step-number">2</span><div><h3>Grab your favourite person</h3><p>Share a screen, or send a room code to play from your own devices.</p></div><Link2 aria-hidden="true" /></li><li><span className="step-number">3</span><div><h3>See where the game takes you</h3><p>Learn something new. Laugh at a wrong answer. Make a little time for us.</p></div><Heart aria-hidden="true" /></li></ol></div></section>
+        <section className="date-final page-width" aria-labelledby="final-title"><span className="final-spark" aria-hidden="true">✷</span><div><span className="section-kicker">THE BEST THINGS ARE TWO-PLAYER</span><h2 id="final-title">Make a little room<br />for <span>us time.</span></h2><p>No perfect plans needed. Just you, your person, and one more round.</p></div><div className="final-actions"><button className="arcade-button button-lime" onClick={() => startGame()}>Let the good times play <ArrowRight size={19} /></button><button className="save-progress-link" disabled={isSigningIn} onClick={() => void signIn()}>{isSigningIn ? 'Connecting…' : 'Sign in with Google to save your progress'}<ChevronRight size={14} /></button>{signInError && <p className="signin-error" role="alert">{signInError}</p>}</div></section>
+      </main>
+      <div className={'footer-legal-link page-width'}><a href={'/privacy'}>Privacy Policy</a></div>
+      <footer className="date-footer page-width"><a className="date-brand" href="#top"><BrandMark /><span>KnotYet<span className="brand-period">.</span></span></a><p>A little play. A little closer.</p><span>Made with <Heart size={12} fill="currentColor" /> for the two of you. <span>© {new Date().getFullYear()}</span></span></footer>
     </div>
   );
 };

@@ -1,4 +1,7 @@
+import { UiSymbol, RoundLabel } from './GameCardDesign';
+import { GiphyReaction, ReactionDialog } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'react';
+import { readStringUnion } from '../utils/storage';
 import confetti from 'canvas-confetti';
 import { Heart, Sparkles, RefreshCw, Trophy } from 'lucide-react';
 import { GuessQuizItem } from '../data/questions';
@@ -7,7 +10,6 @@ import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 import { Avatar } from './AvatarPicker';
-import { getContextualMeme } from '../utils/memes';
 import { getShuffledGuessQuestions, getGuessQuestionsByIds, markQuestionAsSeen } from '../utils/questionManager';
 
 // Points to award per correct guess
@@ -62,12 +64,16 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   });
 
   const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('guess_currentIndex')) || 0);
-  const [stage, setStage] = useState<'secret' | 'handover' | 'guess' | 'reveal'>(() => (sessionStorage.getItem('guess_stage') as any) || 'secret');
+  const [stage, setStage] = useState<'secret' | 'handover' | 'guess' | 'reveal'>(() => readStringUnion(sessionStorage, 'guess_stage', ['secret', 'handover', 'guess', 'reveal'] as const, 'secret'));
   const [actualAnswer, setActualAnswer] = useState<string | null>(() => sessionStorage.getItem('guess_actualAnswer') || null);
   const [guessedAnswer, setGuessedAnswer] = useState<string | null>(() => sessionStorage.getItem('guess_guessedAnswer') || null);
   const [score, setScore] = useState(() => Number(sessionStorage.getItem('guess_score')) || 0);
   const [completed, setCompleted] = useState(() => sessionStorage.getItem('guess_completed') === 'true');
-  const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean; imgUrl: string } | null>(null);
+  const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean } | null>(() => {
+    if (stage !== 'reveal' || !actualAnswer || !guessedAnswer) return null;
+    const positive = actualAnswer === guessedAnswer;
+    return { positive, text: positive ? t.earnedPoints(EARN) : t.deductedPoints(DEDUCT) };
+  });
   const [isMySecret, setIsMySecret] = useState<boolean>(() => sessionStorage.getItem('guess_isMySecret') === 'true');
 
   useEffect(() => {
@@ -138,11 +144,11 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     }
   }, [multiplayer]);
 
-  const showToast = (text: string, positive: boolean, imgUrl: string) => {
-    setPointsToast({ text, positive, imgUrl });
+  const showToast = (text: string, positive: boolean) => {
+    setPointsToast({ text, positive });
   };
 
-  const receiveGuess = useCallback(async (option: string) => {
+  const receiveGuess = useCallback((option: string) => {
     setGuessedAnswer(option);
     const isMatch = option === actualAnswer;
     
@@ -152,12 +158,11 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       recordAnsweredQuestion(currentQuiz.id);
     }
     
-    const randomMeme = await getContextualMeme(currentQuiz.question, isMatch);
 
     if (isMatch) {
       setScore((p) => p + 1);
       addHeartPoints(EARN, multiplayer.status === 'connected');
-      showToast(t.earnedPoints(EARN), true, randomMeme);
+      showToast(t.earnedPoints(EARN), true);
       sounds.playSuccess();
       confetti({
         particleCount: 80, spread: 90, origin: { y: 0.6 },
@@ -165,7 +170,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       });
     } else {
       deductHeartPoints(DEDUCT);
-      showToast(t.deductedPoints(DEDUCT), false, randomMeme);
+      showToast(t.deductedPoints(DEDUCT), false);
       sounds.playMismatch();
     }
     setStage('reveal');
@@ -238,8 +243,11 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   // Desktop keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea') return;
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      // Open dialogs own the keyboard; native controls keep their activation keys.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return;
+      if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [role="dialog"], [role="alertdialog"]')) return;
 
       // Handle reveal / next modal
       if (pointsToast) {
@@ -301,7 +309,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     return (
       <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in mx-auto">
         {/* Standardized Game Header */}
-        <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm mb-2">
+        <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm mb-2">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
               style={{ background: 'linear-gradient(135deg, #06B6D4, #3B82F6)' }}>
@@ -312,12 +320,12 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
               <p className="text-[10px] font-bold text-white/80">Completed!</p>
             </div>
           </div>
-          <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+          <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95">
             End Game
           </button>
         </div>
 
-        <div className="game-card w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
+        <div className="game-card activity-card summary-board w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
           <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto shadow-btn-pink animate-float mt-2"
             style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)', boxShadow: '0 8px 24px rgba(255,45,155,0.4)' }}>
             <Trophy className="w-10 h-10 text-white" />
@@ -345,7 +353,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
                 <Avatar avatarId={profile.avatarId} size={40} />
                 <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
               </div>
-              <div className="text-2xl">💗</div>
+              <div className="text-2xl"><UiSymbol kind="heart" /></div>
               <div className="text-center">
                 <Avatar avatarId={partner.avatarId} size={40} />
                 <p className="text-[10px] font-black text-ink-3 mt-1">{partner.name}</p>
@@ -353,13 +361,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
             </div>
           )}
           
-          <div className="rounded-3xl overflow-hidden shadow-xl border-4 border-white mt-2">
-            <img 
-              src={percentage >= 50 ? "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif" : "https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif"} 
-              alt="Final Score Meme" 
-              className="w-full h-36 object-cover" 
-            />
-          </div>
+          <GiphyReaction mood="win" seed={`summary-${score}`} compact />
 
           <button onClick={() => handleRestart(true)} className="btn-chunky btn-pink w-full text-sm py-3.5">
             <RefreshCw className="w-4 h-4" /> {t.quizRestart}
@@ -372,7 +374,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 sm:space-y-3 mx-auto">
       {/* Standardized Game Header Bar */}
-      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+      <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
             style={{ background: 'linear-gradient(135deg, #06B6D4, #3B82F6)' }}>
@@ -383,64 +385,31 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
               <span>Question {currentIndex + 1} / {questions.length}</span>
               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-pink-500/80 text-white text-[9px] font-black">
-                💖 {profile?.heartPoints ?? 0} pts
+                <UiSymbol kind="heart" /> {profile?.heartPoints ?? 0} pts
               </span>
             </div>
           </div>
         </div>
-        <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+        <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95">
           End Game
         </button>
       </div>
 
       {/* Main Game Card - Full Height Flexible */}
-      <div className="game-card w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
-        {/* Full screen meme modal */}
+      <div className="game-card activity-card heart-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
+        <RoundLabel title="GUESS MY HEART" detail={`ROUND ${currentIndex + 1} / ${questions.length}`} kind="heart" />
+        {/* Round result */}
         {pointsToast && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white p-4 sm:p-5 rounded-3xl w-full max-w-xs sm:max-w-sm text-center shadow-2xl animate-pop-in flex flex-col gap-2.5 max-h-[85dvh] overflow-y-auto no-scrollbar">
-              <h3 className={`text-xl sm:text-2xl font-black ${pointsToast.positive ? 'text-green-500' : 'text-red-500'}`}>
-                {actualAnswer === guessedAnswer ? t.quizMatchTitle : t.quizMissTitle}
-              </h3>
-              
-              <p className={`text-sm sm:text-base font-black ${pointsToast.positive ? 'text-green-600' : 'text-red-600'}`}>
-                {pointsToast.text}
-              </p>
-              
-              {/* The answers! */}
-              <div className="flex items-center justify-center gap-2">
-                <div className="flex-1 p-2 sm:p-2.5 rounded-xl bg-stone-50 border border-stone-200">
-                  <span className="text-[9px] font-black text-ink-3 uppercase block mb-0.5">Target Answer</span>
-                  <span className="text-xs sm:text-sm font-bold text-ink leading-tight line-clamp-2">{actualAnswer}</span>
-                </div>
-                <div className="flex-1 p-2 sm:p-2.5 rounded-xl bg-stone-50 border border-stone-200">
-                  <span className="text-[9px] font-black text-ink-3 uppercase block mb-0.5">Guessed</span>
-                  <span className="text-xs sm:text-sm font-bold text-ink leading-tight line-clamp-2">{guessedAnswer}</span>
-                </div>
-              </div>
-
-              {/* The Meme - constrained height so button never cuts off */}
-              <div className="rounded-xl overflow-hidden bg-stone-100 border-2 border-stone-200 shadow-inner max-h-36 sm:max-h-40 flex items-center justify-center">
-                <img 
-                  src={pointsToast.imgUrl} 
-                  alt="Reaction Meme" 
-                  className="w-full h-full object-cover" 
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              </div>
-
-              <button 
-                onClick={() => {
-                  handleNext();
-                }}
-                className="w-full py-2.5 sm:py-3 rounded-2xl font-black text-white text-sm sm:text-base transition shadow-md shadow-brand-500/25 flex items-center justify-center bg-brand hover:bg-brand-dark active:scale-95 shrink-0 mt-1"
-              >
-                Next Question <span className="ml-2">→</span>
-              </button>
+          <ReactionDialog positive={pointsToast.positive} title={pointsToast.positive ? 'You get each other!' : 'A new thing about you!'} points={pointsToast.text}>
+            <div className="reaction-answers">
+              <div><small>Their answer</small><p>{actualAnswer}</p></div>
+              <div><small>Your guess</small><p>{guessedAnswer}</p></div>
             </div>
-          </div>
+            <GiphyReaction mood={pointsToast.positive ? 'match' : 'miss'} seed={currentQuiz.id} />
+            <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} className="reaction-next">
+              Next Question <UiSymbol kind="next" />
+            </button>
+          </ReactionDialog>
         )}
 
         {/* Top Progress Bar inside Card */}
@@ -451,14 +420,12 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         </div>
 
         {/* Question Area - Auto-scaled */}
-        <div className="text-center space-y-1 shrink-0 my-auto py-1">
+        <div className="question-panel">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black text-white"
             style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316)', boxShadow: '0 2px 8px rgba(245,158,11,0.25)' }}>
-            🎯 {t.quizHeader(currentQuiz.targetRole)}
+            <UiSymbol kind="game" /> {t.quizHeader(currentQuiz.targetRole)}
           </div>
-          <h3 className={`font-black text-ink leading-snug px-1 ${
-            currentQuiz.question.length > 60 ? 'text-xs sm:text-sm md:text-base' : 'text-sm sm:text-base md:text-lg'
-          }`}>
+          <h3 className={`question-text ${currentQuiz.question.length > 140 ? 'question-long' : ''}`}>
             {currentQuiz.question}
           </h3>
           {currentQuiz.vibeText && (
@@ -472,17 +439,15 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
           <div className="py-1 px-2.5 rounded-xl text-center"
             style={{ background: '#FEF3C7', border: '1.5px solid #FDE68A' }}>
             <p className="text-[11px] font-black text-amber-800 leading-tight">
-              🤫 {t.quizSecretPrompt(currentQuiz.targetRole)}
+              <UiSymbol kind="lock" /> {t.quizSecretPrompt(currentQuiz.targetRole)}
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2.5">
+          <div className="answer-grid">
             {currentQuiz.options.map((opt, i) => {
               const s = OPTS[i % OPTS.length];
               return (
                 <button key={i} onClick={() => handleSelectActual(opt)}
-                  className="option-btn"
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = s.border; (e.currentTarget as HTMLElement).style.background = s.bg; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#E5E7EB'; (e.currentTarget as HTMLElement).style.background = '#FFFFFF'; }}>
+                  className="option-btn">
                   <span className="font-bold text-xs sm:text-sm leading-tight">{opt}</span>
                   <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black text-white flex-shrink-0"
                     style={{ background: s.num }}>
@@ -498,9 +463,9 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       {/* STAGE 1.5: Pass the phone handover (single player only) */}
       {stage === 'handover' && (
         <div className="flex-1 flex flex-col items-center justify-center space-y-3 animate-pop-in px-2 my-auto">
-          <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-lg animate-handover-pulse"
+          <div className="handover-art"
             style={{ border: '3px solid rgba(124,58,237,0.3)', boxShadow: '0 8px 24px rgba(124,58,237,0.2)' }}>
-            <img src="/icons/pass-phone.jpg" alt="Pass phone" className="w-full h-full object-cover" />
+            <UiSymbol kind="users" className="handover-symbol" />
           </div>
           <div className="text-center space-y-1">
             <h3 className="text-base sm:text-lg font-black text-ink leading-tight">
@@ -536,7 +501,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
                 <span className="inline-block w-2 h-2 rounded-full bg-brand animate-ping" />
                 Waiting for {partnerName} to guess...
               </p>
-              <p className="text-[10px] font-semibold text-ink-3">Can {partnerName} read your heart correctly? 💖</p>
+              <p className="text-[10px] font-semibold text-ink-3">Can {partnerName} read your heart correctly?</p>
             </div>
             <div className="w-6 h-6 rounded-full border-2 border-brand border-t-transparent animate-spin mx-auto" />
           </div>
@@ -546,20 +511,18 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
               style={{ background: '#EDE9FE', border: '1.5px solid #DDD6FE' }}>
               <p className="text-[11px] font-black text-brand leading-tight">
                 {multiplayer.status === 'connected' ? (
-                  <>⚡ {partnerName} has locked in their secret answer! Can you guess it?</>
+                  <><UiSymbol kind="zap" /> {partnerName} has locked in their secret answer! Can you guess it?</>
                 ) : (
-                  <>👀 {t.quizGuessPrompt(isBoyTarget ? 'Perempuan' : 'Lelaki')}</>
+                  <><UiSymbol kind="users" /> {t.quizGuessPrompt(isBoyTarget ? 'Perempuan' : 'Lelaki')}</>
                 )}
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2.5">
+            <div className="answer-grid">
               {currentQuiz.options.map((opt, i) => {
                 const s = OPTS[i % OPTS.length];
                 return (
                   <button key={i} onClick={() => handleSelectGuess(opt)}
-                    className="option-btn"
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = s.border; (e.currentTarget as HTMLElement).style.background = s.bg; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#E5E7EB'; (e.currentTarget as HTMLElement).style.background = '#FFFFFF'; }}>
+                    className="option-btn">
                     <span className="font-bold text-xs sm:text-sm leading-tight">{opt}</span>
                     <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black text-white flex-shrink-0"
                       style={{ background: s.num }}>

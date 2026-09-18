@@ -12,3 +12,6 @@ dist-ssr
 *.sln
 *.sw?
 tsconfig.tsbuildinfo
+
+# Local UI verification screenshots and temporary harnesses
+artifacts/

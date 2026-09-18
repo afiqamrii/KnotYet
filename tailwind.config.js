@@ -29,12 +29,12 @@ export default {
         // Text
         'ink': '#1C1917',
         'ink-2': '#57534E',
-        'ink-3': '#A8A29E',
+        'ink-3': '#787080',
         // Heart points
         'hearts': '#FF2D9B',
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        sans: ['DM Sans', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
       },
       borderRadius: {
         '4xl': '2rem',

@@ -1,11 +1,13 @@
+import { UiSymbol, RoundLabel } from './GameCardDesign';
+import { GiphyReaction, ReactionDialog } from './GiphyReaction';
 import React, { useState, useEffect, useCallback } from 'react';
+import { readStringUnion } from '../utils/storage';
 import confetti from 'canvas-confetti';
 import { Trophy, HeartHandshake, RefreshCw, Sparkles } from 'lucide-react';
 import { MatchQuestion } from '../data/questions';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
-import { getContextualMeme } from '../utils/memes';
 import { Avatar } from './AvatarPicker';
 import { getShuffledMatchQuestions, getMatchQuestionsByIds, markQuestionAsSeen } from '../utils/questionManager';
 
@@ -55,12 +57,16 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   });
 
   const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('match_currentIndex')) || 0);
-  const [stage, setStage] = useState<'vote' | 'reveal'>(() => (sessionStorage.getItem('match_stage') as any) || 'vote');
+  const [stage, setStage] = useState<'vote' | 'reveal'>(() => readStringUnion(sessionStorage, 'match_stage', ['vote', 'reveal'] as const, 'vote'));
   const [myAnswer, setMyAnswer] = useState<string | null>(() => sessionStorage.getItem('match_myAnswer') || null);
   const [partnerAnswer, setPartnerAnswer] = useState<string | null>(() => sessionStorage.getItem('match_partnerAnswer') || null);
   const [score, setScore] = useState(() => Number(sessionStorage.getItem('match_score')) || 0);
   const [completed, setCompleted] = useState(() => sessionStorage.getItem('match_completed') === 'true');
-  const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean; imgUrl: string } | null>(null);
+  const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean } | null>(() => {
+    if (stage !== 'reveal' || !myAnswer || !partnerAnswer) return null;
+    const positive = myAnswer === partnerAnswer;
+    return { positive, text: positive ? '+15 hearts' : '+5 hearts for playing together' };
+  });
 
   useEffect(() => {
     sessionStorage.setItem('match_questions', JSON.stringify(questions));
@@ -159,11 +165,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         recordAnsweredQuestion(currentQuiz.id);
       }
       
-      getContextualMeme(currentQuiz.question, isMatch).then((randomMeme) => {
         if (isMatch) {
           setScore((s) => s + 1);
           addHeartPoints(15, multiplayer.status === 'connected');
-          showToast("Perfect Match! 💖", true, randomMeme);
+          showToast("+15 hearts", true);
           sounds.playSuccess();
           confetti({
             particleCount: 100, spread: 90, origin: { y: 0.6 },
@@ -171,10 +176,9 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
           });
         } else {
           addHeartPoints(5, multiplayer.status === 'connected');
-          showToast("Different Tastes! 🌟", false, randomMeme);
+          showToast("+5 hearts for playing together", false);
           sounds.playMismatch();
         }
-      });
     }
   }, [myAnswer, partnerAnswer, stage, addHeartPoints, currentQuiz, multiplayer.status, recordAnsweredQuestion]);
 
@@ -182,8 +186,8 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     // Timer removed, manual next button will handle progression
   }, [multiplayer.status, multiplayer.isHost]);
 
-  const showToast = (text: string, positive: boolean, imgUrl: string) => {
-    setPointsToast({ text, positive, imgUrl });
+  const showToast = (text: string, positive: boolean) => {
+    setPointsToast({ text, positive });
   };
 
   const handleSelect = (option: string) => {
@@ -198,8 +202,11 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   // Desktop keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea') return;
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      // Open dialogs own the keyboard; native controls keep their activation keys.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return;
+      if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [role="dialog"], [role="alertdialog"]')) return;
 
       if (pointsToast) {
         if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
@@ -235,7 +242,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     return (
       <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
         {/* Standardized Game Header */}
-        <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+        <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
               style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)' }}>
@@ -246,12 +253,12 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
               <p className="text-[10px] font-bold text-white/80">Completed!</p>
             </div>
           </div>
-          <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+          <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95">
             End Game
           </button>
         </div>
 
-        <div className="game-card w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
+        <div className="game-card activity-card summary-board w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
           <div className="w-20 h-20 bg-brand text-white rounded-full mx-auto flex items-center justify-center animate-bounce-soft" style={{ boxShadow: '0 8px 32px rgba(124,58,237,0.4)' }}>
             <Trophy className="w-10 h-10" />
           </div>
@@ -261,7 +268,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
               <Sparkles className="w-3 h-3" /> +{pointsEarned} Points Earned!
             </div>
             <p className="text-sm font-semibold text-ink-3 mt-4 mb-2">
-              {score === questions.length ? 'You are a perfect match! 💖' : 'It was so much fun getting to know you better! ✨'}
+              {score === questions.length ? 'You are a perfect match!' : 'It was so much fun getting to know you better!'}
             </p>
           </div>
           
@@ -272,7 +279,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
                 <Avatar avatarId={profile.avatarId} size={40} />
                 <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
               </div>
-              <div className="text-2xl">💖</div>
+              <div className="text-2xl"><UiSymbol kind="heart" /></div>
               <div className="text-center">
                 <Avatar avatarId={partner.avatarId} size={40} />
                 <p className="text-[10px] font-black text-ink-3 mt-1">{partner.name}</p>
@@ -280,13 +287,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
             </div>
           )}
 
-          <div className="rounded-3xl overflow-hidden shadow-xl border-4 border-white mt-2">
-            <img 
-              src={score > questions.length / 2 ? "https://media.giphy.com/media/11sBLVxNs7v6WA/giphy.gif" : "https://media.giphy.com/media/l0amJzVHIAfl7jMDos/giphy.gif"} 
-              alt="Final Score Meme" 
-              className="w-full h-36 object-cover" 
-            />
-          </div>
+          <GiphyReaction mood="win" seed={`summary-${score}`} compact />
 
           <button onClick={() => handleRestart()} className="btn-chunky btn-pink w-full text-sm py-3.5">
             <RefreshCw className="w-4 h-4" /> Play Again
@@ -299,7 +300,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
-      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+      <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
             style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)' }}>
@@ -310,53 +311,31 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
               <span>Question {currentIndex + 1} / {questions.length}</span>
               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-purple-500/80 text-white text-[9px] font-black">
-                ✨ Compatibility
+                Compatibility
               </span>
             </div>
           </div>
         </div>
-        <button onClick={handleEndGame} className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm">
+        <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95">
           End Game
         </button>
       </div>
 
       {/* Main Game Card - Full Height Flexible */}
-      <div className="game-card w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
-      {pointsToast && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white p-4 sm:p-5 rounded-3xl w-full max-w-xs sm:max-w-sm text-center shadow-2xl animate-pop-in flex flex-col gap-2.5 max-h-[85dvh] overflow-y-auto no-scrollbar">
-            <h3 className={`text-xl sm:text-2xl font-black ${pointsToast.positive ? 'text-green-500' : 'text-red-500'}`}>
-              {pointsToast.text}
-            </h3>
-            
-            {/* The answers! */}
-            <div className="flex items-center justify-center gap-2">
-              <div className="flex-1 p-2 sm:p-2.5 rounded-xl bg-stone-50 border border-stone-200">
-                <span className="text-[9px] font-black text-ink-3 uppercase block mb-0.5">You</span>
-                <span className="text-xs sm:text-sm font-bold text-ink leading-tight line-clamp-2">{myAnswer}</span>
-              </div>
-              <div className="flex-1 p-2 sm:p-2.5 rounded-xl bg-stone-50 border border-stone-200">
-                <span className="text-[9px] font-black text-ink-3 uppercase block mb-0.5">{multiplayer.remoteProfile?.name || 'Partner'}</span>
-                <span className="text-xs sm:text-sm font-bold text-ink leading-tight line-clamp-2">{partnerAnswer}</span>
-              </div>
+      <div className="game-card activity-card together-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
+        <RoundLabel title="COUPLE MATCH" detail={`ROUND ${currentIndex + 1} / ${questions.length}`} kind="together" />
+        {pointsToast && (
+          <ReactionDialog positive={pointsToast.positive} title={pointsToast.positive ? 'Great minds, same answer!' : 'Opposites keep it fun!'} points={pointsToast.text}>
+            <div className="reaction-answers">
+              <div><small>You</small><p>{myAnswer}</p></div>
+              <div><small>{multiplayer.remoteProfile?.name || 'Partner'}</small><p>{partnerAnswer}</p></div>
             </div>
-
-            {/* The Meme - constrained height so button never cuts off */}
-            <div className="rounded-xl overflow-hidden bg-stone-100 border-2 border-stone-200 shadow-inner max-h-36 sm:max-h-40 flex items-center justify-center">
-              <img src={pointsToast.imgUrl} alt="Reaction" className="w-full h-28 sm:h-36 object-contain" />
-            </div>
-
-            <button 
-              onClick={() => {
-                handleNext();
-              }}
-              className="w-full py-2.5 sm:py-3 rounded-2xl font-black text-white text-sm sm:text-base transition shadow-md shadow-brand-500/25 flex items-center justify-center bg-brand hover:bg-brand-dark active:scale-95 shrink-0 mt-1"
-            >
-              Next Question <span className="ml-2">→</span>
+            <GiphyReaction mood={pointsToast.positive ? 'match' : 'miss'} seed={currentQuiz.id} />
+            <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} className="reaction-next">
+              Next Question <UiSymbol kind="next" />
             </button>
-          </div>
-        </div>
-      )}
+          </ReactionDialog>
+        )}
 
       {/* Top Progress Bar */}
       <div className="w-full shrink-0 mb-2">
@@ -366,14 +345,12 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       </div>
 
       {/* Question - Dynamically Scaled */}
-      <div className="flex-1 flex flex-col justify-center my-auto py-2 text-center">
+      <div className="question-panel">
         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black text-white mx-auto mb-2"
           style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)', boxShadow: '0 2px 8px rgba(255,45,155,0.3)' }}>
           <HeartHandshake className="w-3 h-3" /> Compatibility Test
         </div>
-        <h3 className={`font-black text-ink leading-snug px-2 ${
-          currentQuiz.question.length > 60 ? 'text-base sm:text-lg' : 'text-lg sm:text-xl'
-        }`}>
+        <h3 className={`question-text ${currentQuiz.question.length > 140 ? 'question-long' : ''}`}>
           {currentQuiz.question}
         </h3>
       </div>
@@ -402,16 +379,16 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
                 {partnerAnswer && !myAnswer && (
                   <div className="p-2.5 rounded-xl bg-amber-50 border-2 border-amber-200 text-center animate-bounce-soft mb-2">
                     <p className="text-xs font-black text-amber-800 flex items-center justify-center gap-1.5">
-                      <span>⚡</span> {partnerName} has already picked! Waiting for your choice...
+                      <span><UiSymbol kind="zap" /></span> {partnerName} has already picked! Waiting for your choice...
                     </p>
                   </div>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+                <div className="answer-grid">
                   {currentQuiz.options.map((opt, i) => (
                     <button
                       key={i}
                       onClick={() => handleSelect(opt)}
-                      className="w-full py-2.5 sm:py-3.5 px-3.5 sm:px-4 rounded-2xl border-2 border-stone-200 bg-stone-50 text-left font-bold text-xs sm:text-sm text-ink hover:border-brand hover:bg-indigo-50 active:scale-[0.98] transition-all flex items-center justify-between"
+                      className="option-btn"
                     >
                       <span className="leading-snug">{opt}</span>
                       <span className="text-xs text-stone-400 font-bold ml-2 shrink-0"># {i + 1}</span>

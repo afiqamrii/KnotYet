@@ -1,6 +1,9 @@
+import { UiSymbol, RoundLabel } from './GameCardDesign';
+import { GiphyReaction } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'react';
+import { readJson } from '../utils/storage';
 import confetti from 'canvas-confetti';
-import { ArrowDown, ArrowUp, Trophy } from 'lucide-react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
@@ -47,18 +50,17 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const [secretNumber, setSecretNumber] = useState<number | null>(() => Number(sessionStorage.getItem('num_secret')) || null);
   const [guesses, setGuesses] = useState<{ value: number; hint: 'higher' | 'lower'; guesser?: string }[]>(() => {
     try {
-      return JSON.parse(sessionStorage.getItem('num_guesses') || '[]');
+      return readJson<Array<{ value: number; hint: 'higher' | 'lower'; guesser?: string }>>(sessionStorage, 'num_guesses', []);
     } catch { return []; }
   });
   const [inputValue, setInputValue] = useState('');
-  const [winGif, setWinGif] = useState<string | null>(null);
   const [winnerName, setWinnerName] = useState<string | null>(null);
   
   const [localP1Name, setLocalP1Name] = useState(() => sessionStorage.getItem('num_p1') || profile?.name || 'Player 1');
   const [localP2Name, setLocalP2Name] = useState(() => sessionStorage.getItem('num_p2') || partner?.name || 'Player 2');
 
   const [round, setRound] = useState(() => Number(sessionStorage.getItem('num_round')) || 1);
-  const [hintPopup, setHintPopup] = useState<{ hint: 'higher' | 'lower'; gif: string } | null>(null);
+  const [hintPopup, setHintPopup] = useState<{ hint: 'higher' | 'lower' } | null>(null);
 
   const isP1Turn = guesses.length % 2 === 0;
   
@@ -90,7 +92,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     sessionStorage.setItem('num_p2', localP2Name);
   }, [stage, secretNumber, guesses, round, localP1Name, localP2Name]);
 
-  const processGuess = async (val: number, guesser: string) => {
+  const processGuess = (val: number, guesser: string) => {
     if (secretNumber === null) return;
     
     if (val === secretNumber) {
@@ -101,18 +103,12 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       if (multiplayer.status !== 'connected') incrementPlayCount('solo');
       addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
-      
-      const { getWinMeme } = await import('../utils/memes');
-      const gif = await getWinMeme();
-      setWinGif(gif);
     } else {
       const hint = val < secretNumber ? 'higher' : 'lower';
       setGuesses(prev => [{ value: val, hint, guesser }, ...prev]);
       sounds.playMismatch();
       
-      const { getHintMeme } = await import('../utils/memes');
-      const gif = await getHintMeme(hint);
-      setHintPopup({ hint, gif });
+      setHintPopup({ hint });
       
       // Auto-hide hint popup after 2.5 seconds
       setTimeout(() => {
@@ -139,6 +135,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const handleNextRound = () => {
+    sounds.playFlip();
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'NUM_NEXT' });
     }
@@ -151,7 +148,6 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     setGuesses([]);
     setStage('guess');
     setInputValue('');
-    setWinGif(null);
     setWinnerName(null);
   }, []);
 
@@ -182,8 +178,11 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   // Desktop keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = document.activeElement?.tagName.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea') return;
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      // Open dialogs own the keyboard; native controls keep their activation keys.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return;
+      if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [role="dialog"], [role="alertdialog"]')) return;
 
       if (stage === 'reveal') {
         if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
@@ -200,7 +199,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
-      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+      <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
             style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)' }}>
@@ -218,13 +217,14 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         </div>
         <button 
           onClick={handleEndGame} 
-          className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm"
+          className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95"
         >
           End Game
         </button>
       </div>
 
-      <div className="game-card w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
+      <div className="game-card activity-card game-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
+        <RoundLabel title="THE NUMBER DUEL" detail={`ROUND ${round}`} kind="game" />
         {stage === 'setup' && (
           <div className="w-full flex-1 flex flex-col justify-between items-center animate-slide-up py-1">
             <div className="text-center space-y-1 shrink-0">
@@ -233,9 +233,10 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             </div>
             <div className="w-full space-y-2.5 my-auto py-2">
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-indigo-700 mb-1">Player 1</label>
+                <label htmlFor="number-player-one" className="block text-[11px] font-black uppercase tracking-wider text-indigo-700 mb-1">Player 1</label>
                 <input
                   type="text"
+                  id="number-player-one"
                   value={localP1Name}
                   onChange={(e) => setLocalP1Name(e.target.value)}
                   className="w-full text-center text-lg font-bold text-indigo-600 bg-indigo-50 border-3 border-indigo-100 rounded-xl py-2.5 focus:outline-none focus:border-indigo-300 shadow-sm"
@@ -243,9 +244,10 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-wider text-pink-700 mb-1">Player 2</label>
+                <label htmlFor="number-player-two" className="block text-[11px] font-black uppercase tracking-wider text-pink-700 mb-1">Player 2</label>
                 <input
                   type="text"
+                  id="number-player-two"
                   value={localP2Name}
                   onChange={(e) => setLocalP2Name(e.target.value)}
                   className="w-full text-center text-lg font-bold text-pink-600 bg-pink-50 border-3 border-pink-100 rounded-xl py-2.5 focus:outline-none focus:border-pink-300 shadow-sm"
@@ -255,7 +257,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             </div>
             <div className="w-full shrink-0">
               <button
-                onClick={() => setStage('guess')}
+                onClick={() => { sounds.playFlip(); setStage('guess'); }}
                 disabled={!localP1Name.trim() || !localP2Name.trim()}
                 className="btn-chunky w-full py-3 text-sm disabled:opacity-50"
                 style={{
@@ -296,15 +298,13 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
               </div>
             )}
 
-            <div className="my-auto py-1 flex flex-col items-center justify-center w-full">
+            <div className="number-guess-zone my-auto py-1 flex flex-col items-center justify-center w-full">
               {hintPopup ? (
                 <div className="flex flex-col items-center justify-center p-1 animate-pop-in space-y-2">
                   <h4 className={`text-2xl font-black ${hintPopup.hint === 'higher' ? 'text-indigo-600' : 'text-pink-600'}`}>
                     {hintPopup.hint.toUpperCase()}!
                   </h4>
-                  <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-2xl overflow-hidden shadow-lg" style={{ border: `3px solid ${hintPopup.hint === 'higher' ? '#6366F1' : '#EC4899'}` }}>
-                    <img src={hintPopup.gif} alt={hintPopup.hint} className="w-full h-full object-cover" />
-                  </div>
+                  <GiphyReaction mood={hintPopup.hint} seed={`${round}-${guesses.length}`} compact />
                 </div>
               ) : (
                 isMyTurn ? (
@@ -312,12 +312,13 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
                     {multiplayer.status === 'connected' && (
                       <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center animate-bounce-soft mb-1">
                         <p className="text-xs sm:text-sm font-black text-emerald-800 flex items-center justify-center gap-1.5">
-                          <span>🎯</span> Your Turn! {partnerName} is waiting for your guess...
+                          <span><UiSymbol kind="game" /></span> Your Turn! {partnerName} is waiting for your guess...
                         </p>
                       </div>
                     )}
                     <input
                       type="number"
+                      aria-label="Your guess, from 1 to 100"
                       min={MIN_NUM}
                       max={MAX_NUM}
                       value={inputValue}
@@ -357,15 +358,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         {stage === 'reveal' && (
           <div className="w-full flex-1 flex flex-col justify-between items-center text-center animate-pop-in py-2">
             <div className="my-auto space-y-4 flex flex-col items-center">
-              {winGif ? (
-                <div className="w-36 h-36 rounded-2xl overflow-hidden shadow-lg mx-auto" style={{ border: '4px solid #10B981' }}>
-                  <img src={winGif} alt="Winner" className="w-full h-full object-cover" />
-                </div>
-              ) : (
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center animate-bounce-soft mx-auto">
-                  <Trophy className="w-10 h-10 text-green-500" />
-                </div>
-              )}
+              <GiphyReaction mood="win" seed={`number-${round}`} compact />
               <div>
                 <h3 className="text-2xl font-black text-ink mb-1">{winnerName ? `${winnerName} Guessed It!` : 'Correct!'}</h3>
                 <p className="text-slate-600 font-medium">The secret number was <span className="font-black text-indigo-600 text-xl">{secretNumber}</span>!</p>

@@ -1,428 +1,262 @@
-import React, { useState, useEffect } from 'react';
-import { useGame, type RelationshipType } from '../store/GameContext';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ArrowRight, Check, Copy, Gamepad2, Heart, Link2, LogOut, MessageCircle, Pencil, Share2, ShieldCheck, Star, Users, X } from 'lucide-react';
+import { useGame, HEART_POINTS, type RelationshipType } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
+import { useFriends } from '../store/FriendsContext';
 import { supabase } from '../lib/supabase';
-import { Avatar, AvatarPicker } from '../components/AvatarPicker';
-import { X, Share2, ChevronRight, Trophy, LogOut, Heart, MessageCircle } from 'lucide-react';
+import { Avatar, AvatarPicker, getAvatar } from '../components/AvatarPicker';
+import { UiSymbol } from '../components/GameCardDesign';
+import { useChatDialog } from '../components/useChatDialog';
 import { sounds } from '../utils/audio';
+import '../styles/profile.css';
 
 interface ProfileScreenProps {
   onClose: () => void;
   onOpenFriends?: () => void;
 }
 
-const RELATIONSHIP_OPTIONS: { type: RelationshipType; emoji: string }[] = [
-  { type: 'bestfriend', emoji: '🤝' },
-  { type: 'crush', emoji: '🥺' },
-  { type: 'lover', emoji: '💖' },
-  { type: 'spouse', emoji: '💍' },
+type ProfileView = 'main' | 'edit' | 'invite' | 'waiting' | 'signOut' | 'unlink';
+const RELATIONSHIPS: { type: RelationshipType; icon: 'together' | 'smile' | 'heart' | 'ring' }[] = [
+  { type: 'bestfriend', icon: 'together' }, { type: 'crush', icon: 'smile' },
+  { type: 'lover', icon: 'heart' }, { type: 'spouse', icon: 'ring' },
 ];
+const cloudAvailable = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFriends }) => {
   const { profile, partner, setProfile, setPartner, t } = useGame();
-  const { user, couple, signInWithGoogle, signOut } = useAuth();
-  const [view, setView] = useState<'main' | 'edit' | 'addPartner' | 'editPartner' | 'waiting'>('main');
-  const [isSignOutOpen, setIsSignOutOpen] = useState(false);
-  const [isUnlinkOpen, setIsUnlinkOpen] = useState(false);
-  const { refreshCouple } = useAuth();
-
-  // Edit profile state
+  const { friends, unreadTotal, createInviteLink } = useFriends();
+  const { user, couple, signInWithGoogle, signOut, refreshCouple } = useAuth();
+  const [view, setView] = useState<ProfileView>('main');
   const [editName, setEditName] = useState(profile?.name ?? '');
   const [editAvatar, setEditAvatar] = useState(profile?.avatarId ?? 'sunny');
+  const [partnerRel, setPartnerRel] = useState<RelationshipType>('lover');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const invitedFrom = useRef(new Set<string>());
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const dialogRef = useChatDialog(true, () => { if (!busy) view === 'main' ? onClose() : changeView('main'); });
+  const isGuest = !user || user.id.startsWith('guest-');
+  const inviteLink = view === 'invite' || view === 'waiting' ? createInviteLink(partnerRel) : '';
 
-  // Add partner state
-  const [partnerRel, setPartnerRel] = useState<RelationshipType>('crush');
+  function changeView(next: ProfileView) {
+    setError('');
+    setNotice('');
+    setView(next);
+  }
 
-  // Auto-close waiting state if partner is linked remotely
   useEffect(() => {
-    if (view === 'waiting' && partner) {
+    if (dialogRef.current) dialogRef.current.scrollTop = 0;
+    titleRef.current?.focus({ preventScroll: true });
+  }, [dialogRef, view]);
+  useEffect(() => {
+    if (view !== 'waiting' && view !== 'invite') return;
+    const accepted = friends.find(friend => friend.linked && !invitedFrom.current.has(friend.id) && friend.relationshipType === partnerRel);
+    if (accepted) {
+      setNotice(`You're connected with ${accepted.name}. Let the good times begin!`);
       setView('main');
     }
-  }, [view, partner]);
+  }, [friends, partnerRel, view]);
 
   if (!profile) return null;
 
-
-
-  const handleSaveEdit = () => {
+  const relLabel = (type: RelationshipType) => ({ bestfriend: t.relBestFriend, crush: t.relCrush, lover: t.relLoving, spouse: t.relSpouse })[type];
+  const openEdit = () => {
+    setEditName(profile.name);
+    setEditAvatar(profile.avatarId);
+    changeView('edit');
+  };
+  const openInvite = () => {
+    invitedFrom.current = new Set(friends.map(friend => friend.id));
+    changeView('invite');
+  };
+  const openFriends = () => { onClose(); onOpenFriends?.(); };
+  const saveProfile = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!editName.trim()) return;
     setProfile({ ...profile, name: editName.trim(), avatarId: editAvatar });
-    setView('main');
+    changeView('main');
+    setNotice('Profile updated. Looking good!');
     sounds.playSuccess();
   };
-
-  const handleUnlink = async () => {
-    if (couple && user) {
-      const partnerId = couple.user1_id === user.id ? couple.user2_id : couple.user1_id;
-      
-      // Delete from Supabase
-      await supabase.from('couples').delete().eq('id', couple.id);
-      
-      // Broadcast unlink event to partner
-      supabase.channel(`partner_link_${partnerId}`).send({
-        type: 'broadcast',
-        event: 'partner_unlinked',
-        payload: {}
-      });
-      
-      await refreshCouple();
+  const copyInvite = async () => {
+    setError('');
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setNotice('Link copied! Send it to your person.');
+      sounds.playFlip();
+    } catch {
+      setError('Copy was unavailable. Select the invite link below and copy it manually.');
     }
-    
-    setPartner(null);
-    sounds.playFlip();
-    setIsUnlinkOpen(false);
   };
-
-
-
-  const handleShareWhatsApp = () => {
-    const url = `https://knotyetapp.me/invite?n=${encodeURIComponent(profile.name)}&a=${profile.avatarId}&r=${partnerRel}&uid=${user?.id}`;
-    const text = `Let's link our KnotYet accounts! 💖 Click here to accept my invite: ${url}`;
-    if (navigator.share) {
-      navigator.share({ title: 'KnotYet', text }).catch(console.error);
-    } else {
-      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  const shareInvite = async () => {
+    setError('');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'A little play, just us two.', text: 'Join me on KnotYet for our next game night.', url: inviteLink });
+      } else {
+        const text = `Join me on KnotYet for our next game night! ${inviteLink}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+      }
+      changeView('waiting');
+    } catch (reason) {
+      if (!(reason instanceof Error && reason.name === 'AbortError')) setError('Sharing did not open. You can copy the invite link instead.');
     }
-
-    setView('waiting');
+  };
+  const unlinkPartner = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      if (couple && user) {
+        const partnerId = couple.user1_id === user.id ? couple.user2_id : couple.user1_id;
+        const { error: unlinkError } = await supabase.from('couples').delete().eq('id', couple.id);
+        if (unlinkError) throw unlinkError;
+        const channel = supabase.channel(`partner_link_${partnerId}`);
+        try { await channel.send({ type: 'broadcast', event: 'partner_unlinked', payload: {} }); }
+        finally { void supabase.removeChannel(channel); }
+        await refreshCouple();
+      }
+      setPartner(null);
+      changeView('main');
+      setNotice('Partner profile unlinked.');
+      sounds.playFlip();
+    } catch { setError('We could not unlink your profiles. Please try again.'); }
+    finally { setBusy(false); }
+  };
+  const leaveAccount = async () => {
+    setBusy(true);
+    try { await signOut(); onClose(); }
+    catch { setError('Sign out did not finish. Please try again.'); setBusy(false); }
+  };
+  const connectAccount = async () => {
+    setBusy(true);
+    setError('');
+    try { await signInWithGoogle(); }
+    catch { setError('Sign-in could not open. Please try again.'); }
+    finally { setBusy(false); }
+  };
+  const titles: Record<ProfileView, string> = {
+    main: t.profileTitle, edit: 'Make it yours.', invite: 'Better as a duo.', waiting: 'Invite ready. Game on.', signOut: 'Heading out?', unlink: 'Unlink your person?',
   };
 
-  const relLabel = (type: RelationshipType) => {
-    const map: Record<RelationshipType, string> = {
-      bestfriend: t.relBestFriend,
-      crush: t.relCrush,
-      lover: t.relLoving,
-      spouse: t.relSpouse,
-    };
-    return map[type];
-  };
-
-  const relEmoji = (type: RelationshipType) => {
-    const map: Record<RelationshipType, string> = {
-      bestfriend: '🤝', crush: '🥺', lover: '💖', spouse: '💍',
-    };
-    return map[type];
-  };
-
-  // ---- MAIN VIEW ----
-  if (view === 'main') return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-start overflow-y-auto" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
-      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl flex flex-col h-full min-h-screen">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4">
-          <h2 className="text-xl font-black text-white">{t.profileTitle}</h2>
-          <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80"
-            style={{ background: 'rgba(255,255,255,0.15)' }}>
-            <X className="w-5 h-5" />
+  return createPortal(
+    <div className="profile-page" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="profile-title" tabIndex={-1}>
+      <div className={`profile-shell profile-view-${view}`}>
+        <header className="profile-header">
+          <div>
+            <span className="profile-eyebrow"><Gamepad2 size={15} aria-hidden="true" /> YOUR LITTLE CORNER OF KNOTYET</span>
+            <h1 id="profile-title" ref={titleRef} tabIndex={-1}>{titles[view]}</h1>
+          </div>
+          <button type="button" className="profile-button profile-back" aria-label={view === 'main' ? 'Back to games' : 'Back to my profile'} disabled={busy} onClick={() => view === 'main' ? onClose() : changeView('main')}>
+            <ArrowLeft size={17} aria-hidden="true" /><span>{view === 'main' ? 'Back to games' : 'My profile'}</span>
           </button>
-        </div>
+        </header>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-8 space-y-4 no-scrollbar">
-        {/* Profile Card */}
-        <div className="game-card p-5 flex items-center gap-4">
-          <Avatar avatarId={profile.avatarId} size={64} />
-          <div className="flex-1 min-w-0">
-            <p className="text-xl font-black text-ink truncate">{profile.name}</p>
-            <p className="text-xs text-ink-3 font-semibold capitalize">{profile.avatarId}</p>
+        {view === 'main' && <>
+          <div className="profile-dashboard">
+            <section className="profile-player-pass" aria-label="Your player card">
+              <div className="profile-pass-top"><span>PLAYER ONE</span><Gamepad2 size={22} aria-hidden="true" /></div>
+              <div className="profile-avatar-stage">
+                <Star className="profile-avatar-star" aria-hidden="true" />
+                <Avatar avatarId={profile.avatarId} size={120} />
+                <span className="profile-ready-stamp"><Check size={13} aria-hidden="true" /> READY TO PLAY</span>
+              </div>
+              <h2>{profile.name}</h2>
+              <p>Here for the good times.</p>
+              <div className="profile-pass-bottom">
+                <div><span>YOUR CHARACTER</span><strong>{getAvatar(profile.avatarId).name}</strong></div>
+                <button type="button" className="profile-button" onClick={openEdit}><Pencil size={15} aria-hidden="true" /> Edit profile</button>
+              </div>
+            </section>
+
+            <section className="profile-hearts" aria-labelledby="profile-hearts-title">
+              <div className="profile-section-heading"><h2 id="profile-hearts-title">{t.myHearts}</h2><Heart size={23} aria-hidden="true" /></div>
+              <div className="profile-heart-total"><strong>{profile.heartPoints.toLocaleString()}</strong><div><span>little reasons to</span><b>play one more round.</b></div></div>
+              <dl className="profile-score-guide">
+                <div><dt>Correct guess</dt><dd>+{HEART_POINTS.CORRECT_GUESS}</dd></div>
+                <div><dt>Missed guess</dt><dd>{HEART_POINTS.WRONG_GUESS}</dd></div>
+                <div><dt>Deck finished</dt><dd>+{HEART_POINTS.COMPLETE_DECK}</dd></div>
+              </dl>
+            </section>
+
+            <section className="profile-person" aria-labelledby="profile-person-title">
+              <div className="profile-section-heading"><span className="profile-tile-icon"><Heart aria-hidden="true" /></span><span className="profile-eyebrow">THE TWO OF YOU</span></div>
+              {partner ? <>
+                <div className="profile-partner-name"><Avatar avatarId={partner.avatarId} size={44} /><div><h2 id="profile-person-title">{partner.name}</h2><p>{relLabel(partner.relationshipType)}</p></div></div>
+                <p className="profile-tile-copy">{couple ? `${couple.couple_points.toLocaleString()} shared heart points. Keep making memories.` : 'Your favourite teammate. One more round together?'}</p>
+                <div className="profile-partner-actions">{onOpenFriends && <button type="button" className="profile-text-button" onClick={openFriends}>Open chat <ArrowRight size={16} aria-hidden="true" /></button>}<button type="button" className="profile-unlink" onClick={() => changeView('unlink')}>Unlink</button></div>
+              </> : <>
+                <h2 id="profile-person-title">Add your person.</h2>
+                <p className="profile-tile-copy">Every player one deserves a player two.</p>
+                <button type="button" className="profile-text-button" onClick={openInvite}>Invite your person <ArrowRight size={16} aria-hidden="true" /></button>
+              </>}
+            </section>
+
+            <section className="profile-circle" aria-labelledby="profile-circle-title">
+              <div className="profile-section-heading"><span className="profile-tile-icon"><MessageCircle aria-hidden="true" /></span><span className="profile-circle-count">{friends.length} {friends.length === 1 ? 'friend' : 'friends'}</span></div>
+              <h2 id="profile-circle-title">Your kind of people.</h2>
+              <p className="profile-tile-copy">A quick hello. A little catch-up. Your next game night.</p>
+              {onOpenFriends && <button type="button" className="profile-text-button" onClick={openFriends}>Friends & chat {unreadTotal > 0 && <span className="profile-unread" aria-label={`${unreadTotal} unread messages`}>{unreadTotal}</span>}<ArrowRight size={16} aria-hidden="true" /></button>}
+            </section>
           </div>
-          <button onClick={() => setView('edit')}
-            className="px-3 py-1.5 rounded-xl text-xs font-bold text-brand border-2 border-brand/20 bg-surface-2">
-            Edit
-          </button>
-        </div>
+          <section className="profile-account" aria-label="Your account">
+            <span className="profile-account-icon"><ShieldCheck aria-hidden="true" /></span>
+            <div className="profile-account-copy"><h2>{isGuest ? 'Playing as a guest' : 'Your connected account'}</h2><p>{isGuest ? 'Your profile and points stay in this browser.' : user?.email}</p></div>
+            <div className="profile-account-actions">
+              {isGuest && cloudAvailable && <button type="button" className="profile-button" disabled={busy} onClick={connectAccount}>{busy ? 'Opening...' : 'Save with Google'}</button>}
+              {user && <button type="button" className="profile-signout" onClick={() => changeView('signOut')}><LogOut size={16} aria-hidden="true" /> Sign out</button>}
+            </div>
+          </section>
+        </>}
 
-        {/* Heart Points */}
-        <div className="game-card p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-500" />
-            <span className="font-black text-ink text-base">{t.myHearts}</span>
+        {view === 'edit' && <form className="profile-edit-layout" onSubmit={saveProfile}>
+          <section className="profile-edit-preview" aria-label="Character preview">
+            <span className="profile-eyebrow">MEET YOUR GAME-NIGHT SELF</span>
+            <Avatar avatarId={editAvatar} size={150} />
+            <h2>{editName.trim() || 'Your name here'}</h2>
+            <span className="profile-character-tag">Team {getAvatar(editAvatar).name}</span>
+            <p>A little character.<br />A whole lot of you.</p>
+          </section>
+          <div className="profile-edit-fields">
+            <div className="profile-name-field"><label htmlFor="profile-name">{t.profileName}</label><input id="profile-name" name="displayName" autoComplete="nickname" maxLength={20} required value={editName} onChange={event => setEditName(event.target.value)} aria-describedby="profile-name-help" /><span id="profile-name-help">The name your person sees. <span>{editName.length}/20</span></span></div>
+            <div className="profile-character-field"><h2>{t.profileAvatar}</h2><p>Pick your little sidekick.</p><AvatarPicker selected={editAvatar} onChange={id => { setEditAvatar(id); sounds.playFlip(); }} /></div>
+            <div className="profile-form-actions"><button type="button" className="profile-button" onClick={() => changeView('main')}>Cancel</button><button type="submit" className="profile-button profile-primary" disabled={!editName.trim()}><Check size={17} aria-hidden="true" /> Save profile</button></div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-5xl font-black text-brand">{profile.heartPoints}</div>
-            <div className="space-y-0.5">
-              <p className="text-xs font-bold text-ink-2">Heart Points</p>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="tag text-[10px]" style={{ background: '#D1FAE5', color: '#065F46' }}>+15 correct guess</span>
-                <span className="tag text-[10px]" style={{ background: '#FEE2E2', color: '#991B1B' }}>-5 wrong guess</span>
-                <span className="tag text-[10px]" style={{ background: '#E0E7FF', color: '#3730A3' }}>+10 deck done</span>
-              </div>
-            </div>
+        </form>}
+
+        {(view === 'invite' || view === 'waiting') && <div className="profile-invite-layout">
+          <div className="profile-invite-art">
+            <span className="profile-eyebrow">GOOD TIMES COME IN TWOS</span>
+            <div className="profile-duo-art" aria-hidden="true"><Avatar avatarId={profile.avatarId} size={120} /><span><Heart size={30} /></span><Avatar avatarId="maple" size={120} /></div>
+            <h2>Your person.<br />{' '}Your next adventure.</h2>
+            <p>Send a link. Say hello.<br />Make a little memory.</p>
           </div>
-        </div>
-
-        {/* Partner Section */}
-        {partner ? (
-          <div className="game-card p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-black text-ink text-base">{t.partnerProfile}</span>
-              <span className="tag" style={{ background: '#EDE9FE', color: '#7C3AED' }}>
-                {relEmoji(partner.relationshipType)} {relLabel(partner.relationshipType)}
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Avatar avatarId={partner.avatarId} size={52} />
-              <div>
-                <p className="text-lg font-black text-ink">{partner.name}</p>
-                <p className="text-xs text-ink-3 capitalize font-semibold">{partner.avatarId}</p>
-              </div>
-            </div>
-            {/* Combined Heart Points Display */}
-            <div className="mt-4 p-4 rounded-3xl relative overflow-hidden group" style={{ background: 'linear-gradient(135deg, #FEF2F2 0%, #FCE7F3 100%)' }}>
-              <div className="absolute top-0 right-0 w-32 h-32 bg-pink-300/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="flex items-center gap-2 mb-2">
-                  <Heart className="w-5 h-5 text-pink-500 fill-pink-500 animate-pulse" />
-                  <p className="text-sm font-black text-pink-900 uppercase tracking-widest">Couple Points</p>
-                  <Heart className="w-5 h-5 text-pink-500 fill-pink-500 animate-pulse" />
-                </div>
-                <div className="flex items-end gap-2">
-                  <p className="text-5xl font-black text-pink-600 drop-shadow-sm">{couple ? couple.couple_points : 0}</p>
-                  <p className="text-lg font-bold text-pink-400 mb-1 pb-1">pts</p>
-                </div>
-                <p className="text-xs font-bold text-pink-800/60 mt-1 text-center">Earned together by {profile.name} & {partner.name}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                onClose();
-                onOpenFriends?.();
-              }}
-              className="w-full py-2.5 rounded-xl text-xs font-black text-pink-600 border-2 border-pink-200 bg-pink-50 hover:bg-pink-100 active:scale-95 transition flex items-center justify-center gap-1.5"
-            >
-              <MessageCircle className="w-4 h-4" /> Chat with {partner.name}
-            </button>
-            <button
-              onClick={() => setIsUnlinkOpen(true)}
-              className="w-full py-2.5 rounded-xl text-xs font-bold text-red-500 border-2 border-red-200 bg-red-50 active:scale-95 transition"
-            >
-              {t.unlinkPartner}
-            </button>
-
-            {/* Unlink Confirmation Modal */}
-            {isUnlinkOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl animate-pop-in">
-                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 mx-auto text-red-500">
-                    <Heart className="w-6 h-6" style={{ clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0 100%)' }} fill="currentColor" />
-                    <Heart className="w-6 h-6 -ml-3" style={{ clipPath: 'polygon(50% 0, 100% 0, 100% 100%, 50% 100%)' }} fill="currentColor" />
-                  </div>
-                  <h3 className="text-xl font-black text-ink text-center mb-2">Unlink Partner?</h3>
-                  <p className="text-sm font-semibold text-ink-3 text-center mb-6">
-                    Are you sure you want to unlink from {partner.name}? This will instantly disconnect both of you and reset your shared couple points.
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setIsUnlinkOpen(false)}
-                      className="flex-1 py-3 rounded-xl font-bold text-ink-3 border-2 border-surface-2 bg-surface hover:bg-surface-2 active:scale-95 transition"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleUnlink}
-                      className="flex-1 py-3 rounded-xl font-bold text-white border-2 border-red-500 bg-red-500 hover:bg-red-600 active:scale-95 transition shadow-lg shadow-red-500/30"
-                    >
-                      Unlink
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="profile-invite-form">
+            {view === 'invite' ? <>
+              <h2>Who is your player two?</h2><p>A bestie, a crush, your favourite human.</p>
+              <div className="profile-relationships" role="group" aria-label="Your relationship">{RELATIONSHIPS.map(option => <button type="button" key={option.type} aria-pressed={partnerRel === option.type} onClick={() => { setPartnerRel(option.type); setNotice(''); }}><UiSymbol kind={option.icon} /><span>{relLabel(option.type)}</span>{partnerRel === option.type && <Check size={15} aria-hidden="true" />}</button>)}</div>
+            </> : <>
+              <span className="profile-wait-icon"><Link2 size={28} aria-hidden="true" /></span><h2>A little hello is on its way.</h2><p>Once your person opens the link and accepts, you'll find each other in Friends & chat.</p>
+            </>}
+            <div className="profile-invite-actions"><button type="button" className="profile-button profile-primary" onClick={shareInvite}><Share2 size={17} aria-hidden="true" /> {view === 'waiting' ? 'Share again' : 'Share invite'}</button><button type="button" className="profile-button" onClick={copyInvite}><Copy size={17} aria-hidden="true" /> Copy link</button></div>
+            <label className="profile-link-label" htmlFor="profile-invite-link">Your invite link</label><input id="profile-invite-link" className="profile-invite-link" value={inviteLink} readOnly onFocus={event => event.target.select()} />
+            <p className="profile-invite-note"><Users size={16} aria-hidden="true" /> Keep both apps open while connecting.</p>
+            {view === 'waiting' && <button type="button" className="profile-text-button" onClick={() => changeView('main')}>Back to my profile <ArrowRight size={16} aria-hidden="true" /></button>}
           </div>
-        ) : (
-          <button
-            onClick={() => setView('addPartner')}
-            className="game-card w-full p-5 flex items-center justify-between active:scale-98 transition"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl"
-                style={{ background: '#EDE9FE' }}>
-                💗
-              </div>
-              <div className="text-left">
-                <p className="font-black text-ink text-sm">{t.addPartner}</p>
-                <p className="text-xs text-ink-3 font-semibold">Link profiles & track shared Heart Points</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-ink-3" />
-          </button>
-        )}
+        </div>}
 
-        {/* Friends & Circle */}
-        <button
-          onClick={() => {
-            onClose();
-            onOpenFriends?.();
-          }}
-          className="game-card w-full p-4 flex items-center justify-between active:scale-98 transition"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shadow-sm"
-              style={{ background: '#FCE7F3' }}>
-              💌
-            </div>
-            <div className="text-left">
-              <p className="font-black text-ink text-sm">Friends & Loved Ones</p>
-              <p className="text-xs text-ink-3 font-semibold">Direct chat, circle list & invite to play</p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-ink-3" />
-        </button>
+        {(view === 'signOut' || view === 'unlink') && <div className="profile-confirm">
+          <span className="profile-confirm-icon">{view === 'signOut' ? <LogOut aria-hidden="true" /> : <Heart aria-hidden="true" />}</span>
+          <h2>{view === 'signOut' ? 'Same time, next game?' : `Unlink from ${partner?.name ?? 'your partner'}?`}</h2>
+          <p>{view === 'signOut' ? (isGuest ? 'Your guest profile is stored in this browser. Signing out ends this guest session.' : 'You can sign back in with the same account when you are ready to play again.') : (couple ? 'This disconnects your partner profiles and resets your shared couple points.' : 'This removes the partner from your profile. Your saved chats stay in Friends.')}</p>
+          <div className="profile-form-actions"><button type="button" className="profile-button" disabled={busy} onClick={() => changeView('main')}>Cancel</button><button type="button" className="profile-button profile-danger" disabled={busy} onClick={view === 'signOut' ? leaveAccount : unlinkPartner}>{busy ? 'Please wait...' : view === 'signOut' ? 'Sign out' : 'Unlink partner'}<ArrowRight size={17} aria-hidden="true" /></button></div>
+        </div>}
 
-        {/* Sync / Login Section */}
-        <div className="game-card p-5 space-y-3">
-          <h3 className="font-black text-ink text-base">Cloud Sync</h3>
-          {user ? (
-            <>
-              <div className="space-y-3">
-                <p className="text-xs text-ink-3 font-semibold">Logged in as {user.email}</p>
-                <button
-                  onClick={() => setIsSignOutOpen(true)}
-                  className="w-full py-2.5 flex items-center justify-center gap-2 rounded-xl text-xs font-bold text-red-500 border-2 border-red-200 bg-red-50 active:scale-95 transition"
-                >
-                  <LogOut className="w-4 h-4" /> Sign Out
-                </button>
-              </div>
-
-              {/* Sign Out Confirmation Modal */}
-              {isSignOutOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                  <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in">
-                    <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                      <LogOut className="w-8 h-8 text-red-500" />
-                    </div>
-                    <h3 className="text-xl font-black text-ink mb-2">Sign Out?</h3>
-                    <p className="text-sm text-ink-3 mb-6">Your progress is saved in the cloud. You can sign back in anytime to continue where you left off.</p>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setIsSignOutOpen(false)}
-                        className="flex-1 py-3 rounded-2xl font-bold text-ink border-2 border-stone-200 bg-white hover:bg-stone-50 transition"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => { setIsSignOutOpen(false); signOut(); }}
-                        className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/30"
-                      >
-                        Sign Out
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-ink-3 font-semibold">Sign in to save your answered cards and points to the cloud.</p>
-              <button
-                onClick={() => signInWithGoogle().catch(console.error)}
-                className="w-full py-3 flex items-center justify-center gap-2 rounded-xl text-xs font-black text-ink border-2 border-gray-200 bg-white active:scale-95 transition"
-              >
-                <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
-                Continue with Google
-              </button>
-            </div>
-          )}
-        </div>
+        {notice && <p className="profile-feedback" role="status"><Check size={16} aria-hidden="true" /> {notice}</p>}
+        {error && <p className="profile-feedback profile-error" role="alert"><X size={16} aria-hidden="true" /> {error}</p>}
+        <footer className="profile-footer"><Heart size={13} aria-hidden="true" /> A little play. A little closer.</footer>
       </div>
-    </div>
-  </div>
+    </div>, document.body,
   );
-
-  // ---- EDIT PROFILE VIEW ----
-  if (view === 'edit') return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center bg-white">
-      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl flex flex-col h-full">
-        <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-stone-100">
-          <button onClick={() => setView('main')} className="text-sm font-bold text-ink-3">← Back</button>
-          <span className="font-black text-ink flex-1">Edit Profile</span>
-          <button onClick={handleSaveEdit}
-            className="px-4 py-1.5 rounded-xl text-xs font-black text-white bg-brand active:scale-95">Save</button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-5 no-scrollbar">
-        {/* Current Avatar Preview */}
-        <div className="flex justify-center">
-          <Avatar avatarId={editAvatar} size={80} showName />
-        </div>
-        <div className="space-y-2">
-          <p className="text-sm font-black text-ink">{t.profileAvatar}</p>
-          <AvatarPicker selected={editAvatar} onChange={setEditAvatar} />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-black text-ink">{t.profileName}</label>
-          <input type="text" maxLength={20} value={editName} onChange={e => setEditName(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl border-[3px] outline-none text-base font-bold text-ink"
-            style={{ borderColor: '#7C3AED', background: '#FAFAFA' }} />
-        </div>
-      </div>
-    </div>
-  </div>
-  );
-
-  // ---- ADD PARTNER VIEW ----
-  if (view === 'addPartner') return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center p-6 text-center animate-fade-in" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
-      <div className="w-full flex items-center justify-between mb-8">
-        <button onClick={() => setView('main')} className="text-white/70 hover:text-white flex items-center gap-1 font-bold">
-          &larr; Back
-        </button>
-        <h2 className="text-xl font-black text-white">Invite Partner</h2>
-        <div className="w-16"></div>
-      </div>
-
-      <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center shadow-2xl mb-6">
-        <span className="text-5xl">💌</span>
-      </div>
-
-      <h3 className="text-2xl font-black text-white mb-2">Send an Invite</h3>
-      <p className="text-white/80 font-medium mb-8">
-        Send a magical link to your partner. When they click it, your accounts will be linked instantly!
-      </p>
-
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-left">
-          <label className="block text-sm font-bold text-white/90 mb-3">What are you two?</label>
-          <div className="grid grid-cols-2 gap-3">
-            {RELATIONSHIP_OPTIONS.map(opt => (
-              <button
-                key={opt.type}
-                onClick={() => setPartnerRel(opt.type)}
-                className={`p-3 rounded-2xl border-2 flex items-center gap-2 font-bold transition-all ${
-                  partnerRel === opt.type 
-                    ? 'border-pink-400 bg-pink-500/20 text-pink-300' 
-                    : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
-                }`}
-              >
-                <span className="text-xl">{opt.emoji}</span>
-                <span className="text-sm capitalize">{relLabel(opt.type)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button onClick={() => { handleShareWhatsApp(); setView('waiting'); }} className="w-full btn-chunky btn-green py-4 mt-8">
-          <Share2 className="w-5 h-5" /> Send Invite Link
-        </button>
-      </div>
-    </div>
-  );
-
-  // ---- WAITING FOR PARTNER VIEW ----
-  if (view === 'waiting') return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center text-white" style={{ background: 'linear-gradient(160deg, #7C3AED 0%, #4F46E5 60%, #06B6D4 100%)' }}>
-      <button onClick={() => setView('main')} className="absolute top-5 left-5 w-10 h-10 flex items-center justify-center rounded-full bg-white/20 active:scale-95 transition">
-         <X className="w-5 h-5" />
-      </button>
-      <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-pulse shadow-lg">
-        <Heart className="w-12 h-12 text-pink-300" fill="currentColor" />
-      </div>
-      <h2 className="text-2xl font-black mb-2 text-center px-6">Waiting for Partner...</h2>
-      <p className="text-white/80 font-semibold text-center px-8 mb-8">Keep this screen open or explore the app. We'll pop up when they accept!</p>
-      
-      <div className="w-full max-w-[200px] h-2 bg-white/20 rounded-full overflow-hidden">
-        <div className="h-full bg-white animate-pulse" style={{ width: '100%' }} />
-      </div>
-    </div>
-  );
-
-  return null;
 };

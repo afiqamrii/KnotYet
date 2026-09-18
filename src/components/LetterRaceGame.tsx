@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'react';
+import { UiSymbol, RoundLabel } from './GameCardDesign';
+import { GiphyReaction } from './GiphyReaction';
+import React, { useState, useEffect, useCallback, useRef, Component, ErrorInfo } from 'react';
+import { readJson, readStringUnion, STORAGE_KEYS, writeJson } from '../utils/storage';
 import confetti from 'canvas-confetti';
-import { Trophy, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
@@ -39,17 +42,18 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const isMultiplayer = multiplayer.status === 'connected';
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
 
-  const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => (sessionStorage.getItem('letter_stage') as any) || 'wait');
+  const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => readStringUnion(sessionStorage, 'letter_stage', ['wait', 'countdown', 'race', 'winner'] as const, 'wait'));
   const [letter, setLetter] = useState<string | null>(() => sessionStorage.getItem('letter_char') || null);
   const [winner, setWinner] = useState<{name: string, word: string} | null>(() => {
     try {
-      return JSON.parse(sessionStorage.getItem('letter_winner') || 'null');
+      return readJson<{ name: string; word: string } | null>(sessionStorage, 'letter_winner', null);
     } catch { return null; }
   });
   
   const [countdown, setCountdown] = useState(3);
   const [inputValue, setInputValue] = useState('');
-  const [winGif, setWinGif] = useState<string | null>(null);
+  const countdownTimers = useRef<number[]>([]);
+  useEffect(() => () => countdownTimers.current.forEach(window.clearTimeout), []);
 
   useEffect(() => {
     sessionStorage.setItem('letter_stage', stage);
@@ -75,12 +79,12 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     setCountdown(3);
     sounds.playFlip();
 
-    setTimeout(() => { setCountdown(2); sounds.playFlip(); }, 1000);
-    setTimeout(() => { setCountdown(1); sounds.playFlip(); }, 2000);
-    setTimeout(() => { 
-      setStage('race'); 
-      sounds.playSuccess(); 
-    }, 3000);
+    countdownTimers.current.forEach(window.clearTimeout);
+    countdownTimers.current = [
+      window.setTimeout(() => { setCountdown(2); sounds.playFlip(); }, 1000),
+      window.setTimeout(() => { setCountdown(1); sounds.playFlip(); }, 2000),
+      window.setTimeout(() => { setStage('race'); sounds.playSuccess(); }, 3000),
+    ];
   };
 
   const handleWordSubmit = (e: React.FormEvent) => {
@@ -98,7 +102,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     setInputValue('');
   };
 
-  const processWin = async (winnerName: string, winningWord: string) => {
+  const processWin = (winnerName: string, winningWord: string) => {
     if (stage === 'winner') return; // Prevent double trigger
     
     setWinner({ name: winnerName, word: winningWord });
@@ -108,10 +112,6 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     
     if (multiplayer.status !== 'connected') incrementPlayCount('solo');
     addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
-
-    const { getWinMeme } = await import('../utils/memes');
-    const gif = await getWinMeme();
-    setWinGif(gif);
   };
 
   // Face to Face (Single Player) Tap logic
@@ -132,15 +132,16 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     setWinner(null);
     setStage('wait');
     setInputValue('');
-    setWinGif(null);
   }, []);
 
   // Desktop & Keyboard Shortcut Support
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      // Open dialogs own the keyboard; native controls keep their activation keys.
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return;
+      if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [role="dialog"], [role="alertdialog"]')) return;
 
       if (stage === 'wait') {
         if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
@@ -193,9 +194,9 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
       sessionStorage.removeItem('letter_stage');
       sessionStorage.removeItem('letter_letter');
       
-      const stored = JSON.parse(sessionStorage.getItem('knotyet_introShown') || '{}');
+      const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
       stored.letter = false;
-      sessionStorage.setItem('knotyet_introShown', JSON.stringify(stored));
+      writeJson(sessionStorage, STORAGE_KEYS.introShown, stored);
       
       window.location.reload();
     }
@@ -204,11 +205,11 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}
-      <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
+      <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm font-black text-sm"
             style={{ background: 'linear-gradient(135deg, #D946EF, #A855F7)' }}>
-            🔤
+            <UiSymbol kind="type" />
           </div>
           <div>
             <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Letter Race</h2>
@@ -219,14 +220,15 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
         </div>
         <button
           onClick={handleEndGame}
-          className="text-xs font-bold text-white/80 hover:text-white transition px-3 py-1.5 rounded-full bg-white/10 hover:bg-red-500/80 backdrop-blur-md border border-white/15 flex items-center gap-1 active:scale-95 shadow-sm"
+          className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full flex items-center gap-1 active:scale-95"
         >
           End Game
         </button>
       </div>
 
       {/* Game card fills remaining space */}
-      <div className="game-card flex-1 flex flex-col relative overflow-hidden bg-white p-3.5 sm:p-5 animate-pop-in">
+      <div className="game-card activity-card type-board flex-1 flex flex-col relative overflow-hidden bg-white p-3.5 sm:p-5 animate-pop-in">
+        <RoundLabel title="READY, SET, THINK" detail={'TWO PLAYERS'} kind="type" />
         
         {stage === 'wait' && (
           <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 space-y-4 sm:space-y-6 animate-pop-in z-10">
@@ -276,18 +278,19 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'race' && !isMultiplayer && (
-          <div className="absolute inset-0 flex flex-col">
+          <div className="letter-playing-field absolute inset-0 flex flex-col">
             {/* Top Half - Partner (Rotated 180deg) */}
             <button 
               onClick={() => handleFaceToFaceTap('top')}
-              className="flex-1 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 transition-colors flex items-center justify-center relative overflow-hidden group cursor-pointer"
+              style={{ background: '#ffb4c6' }}
+              className="letter-player-one flex-1 transition-colors flex items-center justify-center relative overflow-hidden group cursor-pointer"
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="rotate-180 text-white text-center">
                 <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
                 <span className="inline-flex items-center gap-1.5 text-xs sm:text-base md:text-lg font-black bg-black/25 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">
                   <span>TAP IF YOU GOT IT!</span>
-                  <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-white/20 text-white font-bold">Press [W] or [↑]</span>
+                  <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-white/50 text-ink font-bold">Press [W] or [↑]</span>
                 </span>
               </div>
             </button>
@@ -298,14 +301,15 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             {/* Bottom Half - Local User */}
             <button 
               onClick={() => handleFaceToFaceTap('bottom')}
-              className="flex-1 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 transition-colors flex items-center justify-center relative overflow-hidden group cursor-pointer"
+              style={{ background: '#c7b4ff' }}
+              className="letter-player-two flex-1 transition-colors flex items-center justify-center relative overflow-hidden group cursor-pointer"
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="text-white text-center">
                 <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
                 <span className="inline-flex items-center gap-1.5 text-xs sm:text-base md:text-lg font-black bg-black/25 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">
                   <span>TAP IF YOU GOT IT!</span>
-                  <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-white/20 text-white font-bold">Press [S], [↓] or [Space]</span>
+                  <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-white/50 text-ink font-bold">Press [S], [↓] or [Space]</span>
                 </span>
               </div>
             </button>
@@ -323,6 +327,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
               <input
                 type="text"
                 value={inputValue}
+                aria-label={`Word starting with ${letter}`}
                 onChange={(e) => setInputValue(e.target.value.toUpperCase())}
                 className={`w-full text-center text-2xl sm:text-3xl font-black text-fuchsia-600 bg-white border-3 rounded-2xl py-3 focus:outline-none transition-colors ${
                   inputValue && !inputValue.startsWith(letter!) ? 'border-red-400 focus:border-red-500' : 'border-fuchsia-200 focus:border-fuchsia-400'
@@ -348,15 +353,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
 
         {stage === 'winner' && winner && (
           <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 text-center animate-pop-in z-10">
-            {winGif ? (
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-lg mx-auto mb-3 sm:mb-4 shrink-0" style={{ border: '4px solid #FDE047' }}>
-                <img src={winGif} alt="Winner" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center animate-bounce-soft mb-3 sm:mb-4 border-4 border-yellow-200 shrink-0">
-                <Trophy className="w-10 h-10 text-yellow-500" />
-              </div>
-            )}
+            <GiphyReaction mood="win" seed={`letter-${letter}-${winner.name}`} compact />
             
             <h3 className="text-xl sm:text-2xl font-black text-ink mb-1.5">{winner.name} Wins!</h3>
             

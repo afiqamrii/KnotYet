@@ -1,0 +1,51 @@
+﻿.couple-lobby { width: 100%; color: #241d35; }
+.lobby-connection { display: flex; align-items: center; gap: 16px; padding: 22px; border: 2px solid #241d35; border-radius: 18px; background: #d5f578; box-shadow: 3px 4px 0 #241d35; }
+.lobby-avatars { display: flex; flex-shrink: 0; }
+.lobby-avatars > span { display: grid; place-items: center; width: 49px; height: 49px; background: #fffaf0; border: 2px solid #241d35; border-radius: 50%; font-size: 27px; }
+.lobby-avatars > span + span { margin-left: -12px; background: #ffd2dc; }
+.lobby-connection-copy { min-width: 0; }
+.lobby-connection-copy > span { display: flex; align-items: center; gap: 6px; font-size: 9px; letter-spacing: .8px; font-weight: 700; }
+.lobby-connection-copy i { width: 6px; height: 6px; border-radius: 50%; background: #456723; }
+.lobby-connection h2 { margin: 4px 0 0; font-size: 22px; font-weight: 700; overflow-wrap: anywhere; line-height: 1.2; }
+.lobby-connection h2 > span { color: #647a3e; }
+.lobby-role { display: flex; align-items: center; gap: 6px; margin-left: auto; border: 1px solid #241d35; border-radius: 25px; padding: 8px 11px; background: #fffaf0; font-size: 11px; white-space: nowrap; }
+.lobby-role svg { width: 15px; height: 15px; }
+.lobby-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin: 33px 0 25px; }
+.lobby-eyebrow { font-size: 9px; font-weight: 800; letter-spacing: 1.3px; color: #7650e8; }
+.lobby-heading h3 { font-size: 32px; font-weight: 750; margin: 7px 0; letter-spacing: -.8px; line-height: 1.1; }
+.lobby-heading h3 span { color: #7650e8; }
+.lobby-heading p { font-size: 12px; line-height: 1.6; color: #6c6479; }
+.lobby-heading > svg { width: 54px; height: 54px; fill: #ff829e; stroke: #241d35; transform: rotate(15deg); stroke-width: 1.3; margin-right: 13px; }
+.lobby-games { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
+.lobby-game { padding: 0; min-width: 0; display: flex; flex-direction: column; text-align: left; border: 1.5px solid #241d35; border-radius: 17px; background: #fffdf8; box-shadow: 3px 4px 0 #241d35; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease; }
+.lobby-game:hover:not(:disabled) { transform: translateY(-4px); box-shadow: 4px 8px 0 #241d35; }
+.lobby-game:disabled { opacity: .9; }
+.lobby-game-art { background: var(--lobby-color); width: 100%; border-bottom: 1.5px solid #241d35; }
+.lobby-game-copy { padding: 20px; display: flex; flex-direction: column; flex: 1; width: 100%; }
+.lobby-game-copy > span:first-child { font: 700 8px 'DM Sans',sans-serif; letter-spacing: .5px; color: #7a628e; }
+.lobby-game h4 { font-size: 22px; font-weight: 750; margin: 9px 0; line-height: 1.1; }
+.lobby-game p { font: 400 12px/1.6 'DM Sans',sans-serif; color: #6c6479; margin: 0 0 21px; }
+.lobby-game-action { margin-top: auto; display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; }
+.lobby-game-action svg { height: 27px; width: 27px; padding: 5px; background: var(--lobby-color); border: 1px solid #241d35; border-radius: 50%; }
+.lobby-bottom { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 23px; }
+.lobby-bottom p { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #6c6479; }
+.lobby-bottom p svg { color: #dc577d; }
+.lobby-bottom button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1px solid #241d35; border-radius: 10px; font-size: 12px; padding: 8px 14px; }
+@media (max-width: 850px) { .lobby-games { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 500px) {
+  .lobby-connection { gap: 10px; padding: 16px 12px; flex-wrap: wrap; }
+  .lobby-avatars > span { width: 37px; height: 37px; font-size: 23px; }
+  .lobby-connection-copy > span { font-size: 8px; }
+  .lobby-connection h2 { font-size: 19px; }
+  .lobby-role { padding: 5px 8px; font-size: 9px; }
+  .lobby-heading h3 { font-size: 29px; }
+  .lobby-heading > svg { width: 33px; height: 33px; flex-shrink: 0; margin: 0; }
+  .lobby-games { gap: 14px; }
+  .lobby-game-copy { padding: 14px 12px; }
+  .lobby-game-copy > span:first-child { font-size: 8px; line-height: 1.5; }
+  .lobby-game h4 { font-size: 21px; }
+  .lobby-game p { font-size: 11px; }
+  .lobby-game-action { font-size: 10px; }
+  .lobby-game-art .game-art { height: 115px; transform: scale(.65); }
+  .lobby-bottom { flex-wrap: wrap; }
+}

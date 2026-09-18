@@ -157,7 +157,7 @@ export const OnboardingScreen: React.FC = () => {
               onClick={handleFinish}
               disabled={!name.trim()}
             >
-              {t.onboardStart} ✨
+              {t.onboardStart}
             </button>
           </>
         )}
