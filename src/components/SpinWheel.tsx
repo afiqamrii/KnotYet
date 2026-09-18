@@ -109,6 +109,36 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
     }
   };
 
+  // Desktop keyboard controls
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      if (showModal) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setShowModal(false);
+        } else if (e.key === ' ' || e.key === 'Enter') {
+          if (multiplayer.status !== 'connected') {
+            e.preventDefault();
+            setShowModal(false);
+            sounds.playSuccess();
+          }
+        }
+        return;
+      }
+
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        spinTheWheel();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showModal, spinning, rotation, multiplayer.status]);
+
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
       {/* Standardized Game Header Bar */}

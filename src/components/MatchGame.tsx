@@ -195,6 +195,39 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     }
   };
 
+  // Desktop keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      if (pointsToast) {
+        if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleNext();
+          return;
+        }
+      }
+
+      if (stage === 'vote' && !myAnswer) {
+        const keyUpper = e.key.toUpperCase();
+        let index = -1;
+        if (e.key === '1' || keyUpper === 'A') index = 0;
+        else if (e.key === '2' || keyUpper === 'B') index = 1;
+        else if (e.key === '3' || keyUpper === 'C') index = 2;
+        else if (e.key === '4' || keyUpper === 'D') index = 3;
+
+        if (index >= 0 && index < currentQuiz.options.length) {
+          e.preventDefault();
+          handleSelect(currentQuiz.options[index]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pointsToast, stage, myAnswer, currentQuiz]);
+
 
 
   if (completed) {

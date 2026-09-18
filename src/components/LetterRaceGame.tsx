@@ -36,6 +36,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { profile, partner, addHeartPoints } = useGame();
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
+  const isMultiplayer = multiplayer.status === 'connected';
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
 
   const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => (sessionStorage.getItem('letter_stage') as any) || 'wait');
@@ -134,6 +135,42 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     setWinGif(null);
   }, []);
 
+  // Desktop & Keyboard Shortcut Support
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      if (stage === 'wait') {
+        if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+          e.preventDefault();
+          if (!isMultiplayer || multiplayer.isHost) {
+            startRace();
+          }
+        }
+      } else if (stage === 'race' && !isMultiplayer) {
+        if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          handleFaceToFaceTap('top');
+        } else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          handleFaceToFaceTap('bottom');
+        }
+      } else if (stage === 'winner') {
+        if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          if (!isMultiplayer || multiplayer.isHost) {
+            handleNextRound();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stage, isMultiplayer, multiplayer.isHost, multiplayer.status, letter]);
+
   useEffect(() => {
     if (multiplayer.status === 'connected') {
       multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
@@ -148,8 +185,6 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
       };
     }
   }, [multiplayer.status, multiplayer.messageListener, resetRound, stage]);
-
-  const isMultiplayer = multiplayer.status === 'connected';
 
   const handleEndGame = () => {
     if (onEndGame) {
@@ -211,14 +246,15 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             {(!isMultiplayer || multiplayer.isHost) ? (
               <button
                 onClick={startRace}
-                className="btn-chunky w-full py-3 sm:py-3.5 mt-2 text-sm sm:text-base"
+                className="btn-chunky w-full py-3 sm:py-3.5 mt-2 text-sm sm:text-base flex items-center justify-center gap-2 group cursor-pointer"
                 style={{
                   background: 'linear-gradient(135deg, #D946EF, #A855F7)',
                   color: 'white',
                   boxShadow: '0 5px 0 #C026D3, 0 8px 20px rgba(217,70,239,0.35)'
                 }}
               >
-                Start Race!
+                <span>Start Race!</span>
+                <span className="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-black/20 text-white font-bold">Space / Enter</span>
               </button>
             ) : (
               <div className="py-3 text-fuchsia-600 font-bold animate-pulse text-sm">
@@ -244,12 +280,15 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             {/* Top Half - Partner (Rotated 180deg) */}
             <button 
               onClick={() => handleFaceToFaceTap('top')}
-              className="flex-1 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 transition-colors flex items-center justify-center relative overflow-hidden group"
+              className="flex-1 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 transition-colors flex items-center justify-center relative overflow-hidden group cursor-pointer"
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="rotate-180 text-white text-center">
                 <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
-                <span className="block text-sm sm:text-lg font-bold bg-black/20 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">TAP IF YOU GOT IT!</span>
+                <span className="inline-flex items-center gap-1.5 text-xs sm:text-base md:text-lg font-black bg-black/25 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">
+                  <span>TAP IF YOU GOT IT!</span>
+                  <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-white/20 text-white font-bold">Press [W] or [↑]</span>
+                </span>
               </div>
             </button>
             
@@ -259,12 +298,15 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             {/* Bottom Half - Local User */}
             <button 
               onClick={() => handleFaceToFaceTap('bottom')}
-              className="flex-1 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 transition-colors flex items-center justify-center relative overflow-hidden group"
+              className="flex-1 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 transition-colors flex items-center justify-center relative overflow-hidden group cursor-pointer"
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="text-white text-center">
                 <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
-                <span className="block text-sm sm:text-lg font-bold bg-black/20 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">TAP IF YOU GOT IT!</span>
+                <span className="inline-flex items-center gap-1.5 text-xs sm:text-base md:text-lg font-black bg-black/25 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">
+                  <span>TAP IF YOU GOT IT!</span>
+                  <span className="hidden md:inline-block text-[11px] font-mono px-2 py-0.5 rounded bg-white/20 text-white font-bold">Press [S], [↓] or [Space]</span>
+                </span>
               </div>
             </button>
           </div>
@@ -326,14 +368,15 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             {(!isMultiplayer || multiplayer.isHost) ? (
               <button
                 onClick={handleNextRound}
-                className="btn-chunky w-full py-3 sm:py-3.5 text-sm sm:text-base"
+                className="btn-chunky w-full py-3 sm:py-3.5 text-sm sm:text-base flex items-center justify-center gap-2 group cursor-pointer"
                 style={{
                   background: 'linear-gradient(135deg, #D946EF, #A855F7)',
                   color: 'white',
                   boxShadow: '0 5px 0 #C026D3, 0 6px 18px rgba(217,70,239,0.35)'
                 }}
               >
-                Play Next Round
+                <span>Play Next Round</span>
+                <span className="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-black/20 text-white font-bold">Space / Enter</span>
               </button>
             ) : (
               <div className="py-3 text-fuchsia-600 font-bold animate-pulse text-sm">

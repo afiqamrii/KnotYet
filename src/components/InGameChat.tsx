@@ -56,6 +56,18 @@ export const InGameChat: React.FC = () => {
     clearUnreadChatCount();
   };
 
+  // Close on Escape key for desktop
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   // Show floating toast when a new message arrives and chat is closed
   useEffect(() => {
     if (!isOpen && latestIncomingMessage) {
@@ -144,9 +156,9 @@ export const InGameChat: React.FC = () => {
 
       {/* ── CHAT DRAWER / SHEET ── */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={handleClose}>
           <div
-            className="w-full max-w-md sm:max-w-lg md:max-w-xl h-[82vh] sm:h-[680px] md:h-[720px] bg-[#FAF9FF] rounded-t-[32px] sm:rounded-[36px] shadow-2xl flex flex-col overflow-hidden animate-pop-in border-t-2 sm:border-2 border-white/60"
+            className="w-full max-w-md sm:max-w-lg md:max-w-xl h-[85vh] sm:h-[min(680px,88vh)] bg-[#FAF9FF] rounded-t-[32px] sm:rounded-[36px] shadow-2xl flex flex-col overflow-hidden animate-pop-in border-t-2 sm:border-2 border-white/60"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

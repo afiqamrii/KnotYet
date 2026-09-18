@@ -79,6 +79,23 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
     }
   }, [view, selectedFriend, getConversation, friends]);
 
+  // Escape key support on desktop
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (view === 'chat' || view === 'add') {
+          setView('list');
+          setActiveChatFriendId(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, view, onClose, setActiveChatFriendId]);
+
   if (!isOpen || !profile) return null;
 
   const handleOpenChat = (friend: Friend) => {
@@ -159,7 +176,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
       <div
-        className="w-full max-w-md sm:max-w-xl md:max-w-2xl h-[90vh] sm:h-[760px] md:h-[820px] bg-[#FAF9FF] rounded-[32px] sm:rounded-[36px] shadow-2xl flex flex-col overflow-hidden animate-pop-in border-2 border-white/70"
+        className="w-full max-w-md sm:max-w-xl md:max-w-2xl h-[min(780px,92vh)] bg-[#FAF9FF] rounded-[28px] sm:rounded-[36px] shadow-2xl flex flex-col overflow-hidden animate-pop-in border-2 border-white/70"
         onClick={e => e.stopPropagation()}
       >
         {/* ── HEADER ── */}

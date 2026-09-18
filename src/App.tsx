@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layers, Dices, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, Hash, TextCursor, MessageCircle } from 'lucide-react';
+import { Layers, Dices, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, Hash, TextCursor, MessageCircle, X } from 'lucide-react';
 import { SWIPE_CARDS, CardCategory } from './data/questions';
 import { getShuffledSwipeCards, getSwipeCardsByIds, markQuestionAsSeen } from './utils/questionManager';
 import { SwipeCard } from './components/SwipeCard';
@@ -461,6 +461,69 @@ const AppInner: React.FC = () => {
     handleSwipe(direction);
   };
 
+  // Desktop keyboard shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input or textarea
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      // Close open modals on Escape
+      if (e.key === 'Escape') {
+        if (isEndGameModalOpen) { setIsEndGameModalOpen(false); return; }
+        if (isFriendsModalOpen) { setIsFriendsModalOpen(false); return; }
+        if (isRoomModalOpen) { setIsRoomModalOpen(false); return; }
+        if (isProfileOpen) { setIsProfileOpen(false); return; }
+        if (isMusicMenuOpen) { setIsMusicMenuOpen(false); return; }
+        if (isDisconnectModalOpen) { setIsDisconnectModalOpen(false); return; }
+        if (isSummaryOpen) { setIsSummaryOpen(false); return; }
+        return;
+      }
+
+      // If any modal is open, don't trigger game hotkeys
+      if (isFriendsModalOpen || isRoomModalOpen || isProfileOpen || isMusicMenuOpen || isDisconnectModalOpen || isEndGameModalOpen || isSummaryOpen) {
+        return;
+      }
+
+      // Mode switching (1-5)
+      if (multiplayer.status !== 'connected') {
+        if (e.key === '1') { handleTabClick('swipe'); return; }
+        if (e.key === '2') { handleTabClick('quiz'); return; }
+        if (e.key === '3') { handleTabClick('wheel'); return; }
+        if (e.key === '4') { handleTabClick('number'); return; }
+        if (e.key === '5') { handleTabClick('letter'); return; }
+      }
+
+      // In Swipe game:
+      if (currentTab === 'swipe' && introShown['swipe']) {
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleManualAction('right');
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          handleManualAction('left');
+        } else if (e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          setIsCardFlipped(prev => {
+            const next = !prev;
+            if (multiplayer.status === 'connected') {
+              multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: next });
+            }
+            sounds.playFlip();
+            return next;
+          });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isEndGameModalOpen, isFriendsModalOpen, isRoomModalOpen, isProfileOpen, 
+    isMusicMenuOpen, isDisconnectModalOpen, isSummaryOpen, multiplayer.status, 
+    currentTab, introShown, handleSwipe, handleTabClick, isCardFlipped
+  ]);
+
   const handleRestartDeck = () => {
     setCardIndex(0);
     setAnsweredCount(0);
@@ -505,7 +568,7 @@ const AppInner: React.FC = () => {
       </div>
 
       {/* Main Responsive Game Console */}
-      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl min-h-[100dvh] md:min-h-0 md:h-[880px] md:max-h-[95vh] rounded-none sm:rounded-[36px] md:rounded-[44px] flex flex-col relative shadow-2xl safe-pt flex-1 md:flex-initial overflow-hidden border-0 sm:border sm:border-white/20 transition-all duration-300"
+      <div className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl min-h-[100dvh] md:min-h-0 md:h-[min(880px,94vh)] rounded-none sm:rounded-[36px] md:rounded-[44px] flex flex-col relative shadow-2xl safe-pt flex-1 md:flex-initial overflow-hidden border-0 sm:border sm:border-white/20 transition-all duration-300 md:my-auto"
         style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(16px)' }}
       >
         {/* ====== HEADER ====== */}
@@ -660,78 +723,93 @@ const AppInner: React.FC = () => {
 
           {/* Game Mode Tabs - only visible in solo / local mode */}
           {multiplayer.status !== 'connected' && (
-            <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 p-1.5 rounded-2xl"
-              style={{ background: 'rgba(0,0,0,0.2)' }}>
+            <nav aria-label="Game Modes" className="flex items-center justify-center gap-1 sm:gap-2 md:gap-2.5 mt-2 sm:mt-3 p-1 sm:p-1.5 md:p-2 rounded-2xl md:rounded-3xl border border-white/10"
+              style={{ background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(10px)' }}>
               {/* Swipe tab */}
               <button
                 onClick={() => handleTabClick('swipe')}
-                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                title="Icebreaker Cards (Key 1)"
+                className="flex-1 min-w-0 py-1.5 sm:py-2 md:py-2.5 px-1 sm:px-2 md:px-2.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 text-[10px] sm:text-xs md:text-xs lg:text-sm font-black transition-all active:scale-95 hover:bg-white/10 text-center select-none"
                 style={currentTab === 'swipe' ? {
                   background: '#FF2D9B',
                   color: 'white',
                   boxShadow: '0 4px 0 #C41D77, 0 6px 16px rgba(255,45,155,0.4)',
-                } : { color: 'rgba(255,255,255,0.6)' }}
+                } : { color: 'rgba(255,255,255,0.75)' }}
               >
-                <Layers className="w-5 h-5 mb-0.5" />
-                <span>{t.tabSwipe}</span>
+                <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="hidden xl:inline whitespace-nowrap">{t.tabSwipe}</span>
+                <span className="inline xl:hidden whitespace-nowrap">Cards</span>
+                <span className="hidden md:inline-block text-[8px] font-mono px-1 py-0.2 rounded bg-black/25 text-white/80 ml-0.5">1</span>
               </button>
 
               {/* Quiz tab */}
               <button
                 onClick={() => handleTabClick('quiz')}
-                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                title="Guess My Heart (Key 2)"
+                className="flex-1 min-w-0 py-1.5 sm:py-2 md:py-2.5 px-1 sm:px-2 md:px-2.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 text-[10px] sm:text-xs md:text-xs lg:text-sm font-black transition-all active:scale-95 hover:bg-white/10 text-center select-none"
                 style={currentTab === 'quiz' ? {
                   background: '#06B6D4',
                   color: 'white',
                   boxShadow: '0 4px 0 #0E7490, 0 6px 16px rgba(6,182,212,0.4)',
-                } : { color: 'rgba(255,255,255,0.6)' }}
+                } : { color: 'rgba(255,255,255,0.75)' }}
               >
-                <Heart className="w-5 h-5 mb-0.5" />
-                <span>{t.tabQuiz}</span>
+                <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="hidden xl:inline whitespace-nowrap">{t.tabQuiz}</span>
+                <span className="inline xl:hidden whitespace-nowrap">Quiz</span>
+                <span className="hidden md:inline-block text-[8px] font-mono px-1 py-0.2 rounded bg-black/25 text-white/80 ml-0.5">2</span>
               </button>
 
               {/* Wheel tab */}
               <button
                 onClick={() => handleTabClick('wheel')}
-                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                title="Spin Wheel (Key 3)"
+                className="flex-1 min-w-0 py-1.5 sm:py-2 md:py-2.5 px-1 sm:px-2 md:px-2.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 text-[10px] sm:text-xs md:text-xs lg:text-sm font-black transition-all active:scale-95 hover:bg-white/10 text-center select-none"
                 style={currentTab === 'wheel' ? {
                   background: '#F59E0B',
                   color: 'white',
                   boxShadow: '0 4px 0 #B45309, 0 6px 16px rgba(245,158,11,0.4)',
-                } : { color: 'rgba(255,255,255,0.6)' }}
+                } : { color: 'rgba(255,255,255,0.75)' }}
               >
-                <Dices className="w-5 h-5 mb-0.5" />
-                <span>{t.tabWheel}</span>
+                <Dices className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="hidden xl:inline whitespace-nowrap">{t.tabWheel}</span>
+                <span className="inline xl:hidden whitespace-nowrap">Wheel</span>
+                <span className="hidden md:inline-block text-[8px] font-mono px-1 py-0.2 rounded bg-black/25 text-white/80 ml-0.5">3</span>
               </button>
 
               {/* Number tab */}
               <button
                 onClick={() => handleTabClick('number')}
-                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                title="Number Guesser (Key 4)"
+                className="flex-1 min-w-0 py-1.5 sm:py-2 md:py-2.5 px-1 sm:px-2 md:px-2.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 text-[10px] sm:text-xs md:text-xs lg:text-sm font-black transition-all active:scale-95 hover:bg-white/10 text-center select-none"
                 style={currentTab === 'number' ? {
                   background: '#6366F1',
                   color: 'white',
                   boxShadow: '0 4px 0 #4338CA, 0 6px 16px rgba(99,102,241,0.4)',
-                } : { color: 'rgba(255,255,255,0.6)' }}
+                } : { color: 'rgba(255,255,255,0.75)' }}
               >
-                <Hash className="w-5 h-5 mb-0.5" />
-                <span>{t.tabNumber || 'Number'}</span>
+                <Hash className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="hidden xl:inline whitespace-nowrap">{t.tabNumber || 'Number Guesser'}</span>
+                <span className="inline xl:hidden whitespace-nowrap">Number</span>
+                <span className="hidden md:inline-block text-[8px] font-mono px-1 py-0.2 rounded bg-black/25 text-white/80 ml-0.5">4</span>
               </button>
 
               {/* Letter tab */}
               <button
                 onClick={() => handleTabClick('letter')}
-                className="flex-1 min-w-[60px] py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 text-[10px] leading-[1.1] font-black transition active:scale-95 text-center"
+                title="Letter Race (Key 5)"
+                className="flex-1 min-w-0 py-1.5 sm:py-2 md:py-2.5 px-1 sm:px-2 md:px-2.5 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 md:gap-1.5 text-[10px] sm:text-xs md:text-xs lg:text-sm font-black transition-all active:scale-95 hover:bg-white/10 text-center select-none"
                 style={currentTab === 'letter' ? {
                   background: '#D946EF',
                   color: 'white',
                   boxShadow: '0 4px 0 #A21CAF, 0 6px 16px rgba(217,70,239,0.4)',
-                } : { color: 'rgba(255,255,255,0.6)' }}
+                } : { color: 'rgba(255,255,255,0.75)' }}
               >
-                <TextCursor className="w-5 h-5 mb-0.5" />
-                <span>{t.tabLetter || 'Letter'}</span>
+                <TextCursor className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="hidden xl:inline whitespace-nowrap">{t.tabLetter || 'Letter Race'}</span>
+                <span className="inline xl:hidden whitespace-nowrap">Letter</span>
+                <span className="hidden md:inline-block text-[8px] font-mono px-1 py-0.2 rounded bg-black/25 text-white/80 ml-0.5">5</span>
               </button>
-            </div>
+            </nav>
           )}
         </header>
         )}
@@ -749,7 +827,7 @@ const AppInner: React.FC = () => {
             <>
               {currentTab === 'swipe' && (
                 introShown['swipe'] ? (
-                  <div className="w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl flex-1 flex flex-col justify-between h-full space-y-2 sm:space-y-3 animate-fade-in mx-auto">
+                  <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full space-y-2 sm:space-y-3 animate-fade-in mx-auto">
                     {/* Standardized Game Header */}
                     <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm">
                       <div className="flex items-center gap-2.5">
@@ -796,7 +874,7 @@ const AppInner: React.FC = () => {
                     </div>
 
                     {/* Card Stack Area - Full Height Elastic */}
-                    <div className="relative w-full flex-1 min-h-[340px] sm:min-h-[380px] md:min-h-[440px] select-none my-auto flex items-center justify-center py-2">
+                    <div className="relative w-full flex-1 min-h-[300px] sm:min-h-[340px] md:min-h-[390px] lg:min-h-[430px] select-none my-auto flex items-center justify-center py-1 sm:py-2">
                       {fifthCard && <SwipeCard key={fifthCard.id} card={fifthCard} cardIndex={cardIndex + 4} stackDepth={4} onSwipe={handleSwipe} isTop={false} />}
                       {fourthCard && <SwipeCard key={fourthCard.id} card={fourthCard} cardIndex={cardIndex + 3} stackDepth={3} onSwipe={handleSwipe} isTop={false} />}
                       {thirdCard && <SwipeCard key={thirdCard.id} card={thirdCard} cardIndex={cardIndex + 2} stackDepth={2} onSwipe={handleSwipe} isTop={false} />}
@@ -840,17 +918,50 @@ const AppInner: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Next Button */}
-                    <div className="w-full shrink-0 pt-1">
-                      <button onClick={() => handleManualAction('right')} disabled={!currentCard}
-                        className="btn-chunky w-full text-sm py-3.5 flex items-center justify-center gap-2"
-                        style={{
-                          background: 'white',
-                          color: '#10B981',
-                          boxShadow: '0 4px 0 #E5E7EB, 0 6px 20px rgba(0,0,0,0.08)',
-                          borderRadius: '18px'
-                        }}>
-                        <Check className="w-4 h-4 stroke-[3]" /> Next Question
+                    {/* Bottom Action Bar: Skip, Flip (if flippable), and Pass */}
+                    <div className="w-full shrink-0 pt-1 flex items-center gap-2 sm:gap-3">
+                      {/* Skip button */}
+                      <button 
+                        onClick={() => handleManualAction('left')} 
+                        disabled={!currentCard}
+                        title="Skip Question (Left Arrow ←)"
+                        className="flex-1 py-3 sm:py-3.5 px-2 sm:px-4 rounded-2xl font-black text-xs sm:text-sm text-pink-600 bg-white/95 hover:bg-pink-50 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5 border border-pink-100 group"
+                      >
+                        <X className="w-4 h-4 stroke-[3] group-hover:scale-110 transition-transform text-pink-500" />
+                        <span>{t.skipLabel || 'Skip'}</span>
+                        <span className="hidden md:inline-block text-[9px] font-mono px-1.5 py-0.5 rounded bg-pink-100 text-pink-600 font-bold">←</span>
+                      </button>
+
+                      {/* Flip / Reveal button (if card is flippable) */}
+                      {currentCard && (multiplayer.status === 'connected' || currentCard.category === 'teka-teki') && (
+                        <button
+                          onClick={() => {
+                            setIsCardFlipped(!isCardFlipped);
+                            if (multiplayer.status === 'connected') {
+                              multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: !isCardFlipped });
+                            }
+                            sounds.playFlip();
+                          }}
+                          title="Flip Card / Reveal Answer (Spacebar)"
+                          className="flex-1 py-3 sm:py-3.5 px-2 sm:px-4 rounded-2xl font-black text-xs sm:text-sm text-violet-700 bg-white/95 hover:bg-violet-50 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5 border border-violet-100 group"
+                        >
+                          <RotateCw className="w-4 h-4 group-hover:rotate-180 transition-transform text-violet-600" />
+                          <span>{isCardFlipped ? (t.flipBack || 'Back') : (currentCard.category === 'teka-teki' ? t.revealAnswer : 'Answer')}</span>
+                          <span className="hidden md:inline-block text-[9px] font-mono px-1.5 py-0.5 rounded bg-violet-100 text-violet-600 font-bold">Space</span>
+                        </button>
+                      )}
+
+                      {/* Pass / Next button */}
+                      <button 
+                        onClick={() => handleManualAction('right')} 
+                        disabled={!currentCard}
+                        title="Pass / Next Question (Right Arrow →)"
+                        className="flex-1 py-3 sm:py-3.5 px-2 sm:px-4 rounded-2xl font-black text-xs sm:text-sm text-white bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5 group"
+                        style={{ boxShadow: '0 4px 0 #059669, 0 6px 16px rgba(16,185,129,0.35)' }}
+                      >
+                        <Check className="w-4 h-4 stroke-[3] group-hover:scale-110 transition-transform" />
+                        <span>{t.passLabel || 'Next'}</span>
+                        <span className="hidden md:inline-block text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-700 text-white font-bold">→</span>
                       </button>
                     </div>
                   </div>

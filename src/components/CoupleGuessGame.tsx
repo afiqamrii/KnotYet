@@ -235,6 +235,54 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     receiveGuess(option);
   };
 
+  // Desktop keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = document.activeElement?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      // Handle reveal / next modal
+      if (pointsToast) {
+        if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          handleNext();
+          return;
+        }
+      }
+
+      // Handle handover screen
+      if (stage === 'handover') {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          handleHandoverReady();
+          return;
+        }
+      }
+
+      // Handle picking options (keys 1-4 or A-D)
+      const keyUpper = e.key.toUpperCase();
+      let index = -1;
+      if (e.key === '1' || keyUpper === 'A') index = 0;
+      else if (e.key === '2' || keyUpper === 'B') index = 1;
+      else if (e.key === '3' || keyUpper === 'C') index = 2;
+      else if (e.key === '4' || keyUpper === 'D') index = 3;
+
+      if (index >= 0 && index < currentQuiz.options.length) {
+        const option = currentQuiz.options[index];
+        if (stage === 'secret') {
+          e.preventDefault();
+          handleSelectActual(option);
+        } else if (stage === 'guess' && !(multiplayer.status === 'connected' && isMySecret)) {
+          e.preventDefault();
+          handleSelectGuess(option);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stage, pointsToast, currentQuiz, isMySecret, multiplayer.status]);
+
 
 
   const percentage = Math.round((score / questions.length) * 100);
@@ -251,7 +299,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   if (completed) {
     const compatNote = percentage >= 80 ? t.quizCompatNote80 : percentage >= 50 ? t.quizCompatNote50 : t.quizCompatNote0;
     return (
-      <div className="w-full max-w-sm flex-1 flex flex-col justify-between h-full animate-fade-in">
+      <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in mx-auto">
         {/* Standardized Game Header */}
         <div className="w-full flex items-center justify-between px-3 py-2 bg-black/15 backdrop-blur-md rounded-2xl border border-white/10 shrink-0 shadow-sm mb-2">
           <div className="flex items-center gap-2.5">

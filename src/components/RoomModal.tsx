@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Copy, Check, Share2, Sparkles, X, KeyRound, Play, Loader2 } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { useGame } from '../store/GameContext';
@@ -18,6 +18,18 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'join'>(() => {
     return (error && !isHost) ? 'join' : 'create';
   });
+
+  // Desktop Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !profile) return null;
 
@@ -52,8 +64,8 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="modal-overlay centered" onClick={onClose}>
-      <div className="game-card w-full max-w-sm sm:max-w-md p-6 sm:p-7 space-y-5 animate-pop-in relative"
+    <div className="modal-overlay centered p-3 sm:p-4" onClick={onClose}>
+      <div className="game-card w-full max-w-sm sm:max-w-md p-5 sm:p-7 space-y-4 sm:space-y-5 animate-pop-in relative"
         onClick={e => e.stopPropagation()}>
         <button onClick={onClose}
           className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100">
