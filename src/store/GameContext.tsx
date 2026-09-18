@@ -65,6 +65,25 @@ const STORAGE_KEY_LANG = 'jodohdeck_lang';
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile: authProfile, progress, couple, refreshProgress, refreshCouple } = useAuth();
+  const answeredQuestionIds = React.useRef<Set<string>>(new Set());
+  const answeredQuestionUserId = React.useRef<string | null>(null);
+  const questionHistorySaveQueue = React.useRef<Promise<void>>(Promise.resolve());
+
+  React.useEffect(() => {
+    if (!user) {
+      answeredQuestionIds.current = new Set();
+      answeredQuestionUserId.current = null;
+      return;
+    }
+    if (answeredQuestionUserId.current !== user.id) {
+      answeredQuestionIds.current = new Set();
+      answeredQuestionUserId.current = user.id;
+    }
+    answeredQuestionIds.current = new Set([
+      ...answeredQuestionIds.current,
+      ...(progress?.answered_questions || []),
+    ]);
+  }, [progress?.answered_questions, user?.id]);
   
   const [profile, setProfileState] = useState<UserProfile | null>(() => {
     try {
@@ -172,10 +191,30 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const recordAnsweredQuestion = useCallback((questionId: string) => {
     if (user && progress) {
-      const answered = new Set(progress.answered_questions);
+      const answered = new Set([
+        ...answeredQuestionIds.current,
+        ...progress.answered_questions,
+      ]);
       if (!answered.has(questionId)) {
         answered.add(questionId);
-        supabase.from('user_progress').update({ answered_questions: Array.from(answered) }).eq('user_id', user.id).then(() => refreshProgress());
+        answeredQuestionIds.current = answered;
+        const ids = Array.from(answered);
+        localStorage.setItem('jodohdeck_answered', JSON.stringify(ids));
+        localStorage.setItem('knotyet_seen_questions', JSON.stringify(ids));
+        // Persist in order. Without a queue, a slower earlier write could
+        // replace a newer list when players move through prompts quickly.
+        questionHistorySaveQueue.current = questionHistorySaveQueue.current
+          .then(async () => {
+            const { error } = await supabase
+              .from('user_progress')
+              .update({ answered_questions: ids })
+              .eq('user_id', user.id);
+            if (error) throw error;
+            await refreshProgress();
+          })
+          .catch((error) => {
+            console.error('Unable to save question history:', error);
+          });
       }
     } else {
       // Offline fallback: save to localStorage

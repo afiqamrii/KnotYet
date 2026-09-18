@@ -68,6 +68,8 @@
 .chat-message-meta span { display: inline-flex; gap: 3px; align-items: center; }
 .chat-message-meta svg { width: 12px; height: 12px; }
 .chat-message-meta .is-failed { color: #a13856; }
+.chat-message-meta .is-read { color: #1484d1; font-weight: 700; }
+.chat-message-meta .is-read svg { color: #168de0; stroke-width: 2.7; }
 .chat-retry { padding: 0; border: 0; background: none; color: #7650e8; text-decoration: underline; font-size: 11px !important; }
 .chat-game-invite { background: #d5f578; border: 1.5px solid var(--chat-ink); border-radius: 18px; padding: 15px; display: flex; flex-direction: column; gap: 9px; max-width: 310px; }
 .chat-game-invite > span { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; letter-spacing: 1px; font-weight: 700; text-transform: uppercase; }

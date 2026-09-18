@@ -7,6 +7,7 @@ import { Trophy, HeartHandshake, RefreshCw, Sparkles } from 'lucide-react';
 import { MatchQuestion } from '../data/questions';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
+import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 import { Avatar } from './AvatarPicker';
 import { getShuffledMatchQuestions, getMatchQuestionsByIds, markQuestionAsSeen } from '../utils/questionManager';
@@ -42,6 +43,7 @@ class MatchGameErrorBoundary extends React.Component<{children: React.ReactNode}
 
 export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { profile, partner, addHeartPoints, recordAnsweredQuestion } = useGame();
+  const { progress } = useAuth();
   const multiplayer = useMultiplayer();
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
 
@@ -50,10 +52,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       const stored = sessionStorage.getItem('match_questions');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return getMatchQuestionsByIds(parsed.map(item => item.id), progress?.answered_questions);
       }
     } catch {}
-    return getShuffledMatchQuestions(10);
+    return getShuffledMatchQuestions(10, progress?.answered_questions);
   });
 
   const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('match_currentIndex')) || 0);
@@ -80,6 +82,15 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   const currentQuiz = questions[currentIndex] || questions[0] || { id: 'm-0', question: '', options: [], vibeText: '' };
 
+  // Treat a displayed prompt as seen so it cannot come back after a refresh,
+  // reconnect, or a session on another device.
+  useEffect(() => {
+    const shownQuestion = questions[currentIndex];
+    if (!shownQuestion || completed) return;
+    markQuestionAsSeen(shownQuestion.id);
+    recordAnsweredQuestion(shownQuestion.id);
+  }, [questions, currentIndex, completed, recordAnsweredQuestion]);
+
   // Host broadcasts the shuffled question deck to partner so both are 100% in sync
   useEffect(() => {
     if (multiplayer.status === 'connected' && multiplayer.isHost && questions.length > 0) {
@@ -105,7 +116,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [currentIndex, questions.length, addHeartPoints, multiplayer.status]);
 
   const handleRestart = useCallback((broadcast: boolean = true, newQList?: MatchQuestion[]) => {
-    const nextQuestions = newQList || getShuffledMatchQuestions(10);
+    const nextQuestions = newQList || getShuffledMatchQuestions(10, progress?.answered_questions);
     setQuestions(nextQuestions);
     setCurrentIndex(0); 
     setStage('vote'); 
@@ -121,7 +132,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         payload: { questionIds: nextQuestions.map(q => q.id) }
       });
     }
-  }, [multiplayer]);
+  }, [multiplayer, progress?.answered_questions]);
 
   const handleEndGame = () => {
     if (onEndGame) {
@@ -144,10 +155,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         } else if (msg.type === 'MATCH_NEXT') {
           executeNext();
         } else if (msg.type === 'MATCH_RESTART') {
-          const synced = msg.payload?.questionIds ? getMatchQuestionsByIds(msg.payload.questionIds) : undefined;
+          const synced = msg.payload?.questionIds ? getMatchQuestionsByIds(msg.payload.questionIds, progress?.answered_questions) : undefined;
           handleRestart(false, synced);
         } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'match') {
-          const synced = getMatchQuestionsByIds(msg.payload.questionIds);
+          const synced = getMatchQuestionsByIds(msg.payload.questionIds, progress?.answered_questions);
           if (synced.length > 0) setQuestions(synced);
         }
       };
@@ -236,6 +247,26 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [pointsToast, stage, myAnswer, currentQuiz]);
 
 
+
+  if (questions.length === 0) {
+    return (
+      <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-center gap-3 mx-auto animate-fade-in">
+        <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm" style={{ background: 'linear-gradient(135deg, #7C3AED, #A855F7)' }}><HeartHandshake className="w-4 h-4" /></div>
+            <h2 className="font-black text-white text-sm">Couple Match</h2>
+          </div>
+          <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full">End Game</button>
+        </div>
+        <div className="game-card activity-card text-center p-8 space-y-3">
+          <Sparkles className="w-10 h-10 text-brand mx-auto" />
+          <h3 className="text-xl font-black text-ink">You have explored every question!</h3>
+          <p className="text-sm font-semibold text-ink-3">Fresh prompts are being added soon. Pick another game for your next round together.</p>
+          <button onClick={handleEndGame} className="btn-chunky btn-pink mx-auto px-5 py-3">Choose another game</button>
+        </div>
+      </div>
+    );
+  }
 
   if (completed) {
     const pointsEarned = (score * 15) + ((questions.length - score) * 5) + HEART_POINTS.COMPLETE_QUIZ;

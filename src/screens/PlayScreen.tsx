@@ -36,7 +36,7 @@ const ACTIVE_TABS: readonly ActiveTab[] = ['swipe', 'quiz', 'wheel', 'match', 'n
 const isActiveTab = (value: string | null): value is ActiveTab => value !== null && ACTIVE_TABS.includes(value as ActiveTab);
 export const PlayScreen: React.FC = () => {
   const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
-  const { couple, isLoading, checkLimit, incrementPlayCount } = useAuth();
+  const { couple, progress, isLoading, checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const friends = useFriends();
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
@@ -53,6 +53,13 @@ export const PlayScreen: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>('all');
   const [cardIndex, setCardIndex] = useState(0);
   const [roundCounter, setRoundCounter] = useState(0);
+  // Keep the current deck stable while progress syncs in the background. A new
+  // round reads this ref, so previously shown cards are still excluded without
+  // removing the card that is already on screen.
+  const seenQuestionIdsRef = React.useRef<string[]>(progress?.answered_questions || []);
+  React.useEffect(() => {
+    seenQuestionIdsRef.current = progress?.answered_questions || [];
+  }, [progress?.answered_questions]);
   
   // Multiplayer SwipeCard states
   const [isCardFlipped, setIsCardFlipped] = useState(false);
@@ -192,11 +199,14 @@ export const PlayScreen: React.FC = () => {
 
   // ---- Filtered Cards (Dynamic Shuffle & Non-Repeating) ----
   const filteredCards = useMemo(() => {
+    // isLoading changing to false creates the first real deck from cloud
+    // history. After that, the ref keeps a round steady while answers sync.
+    const seenIds = isLoading ? seenQuestionIdsRef.current : (progress?.answered_questions || seenQuestionIdsRef.current);
     if (multiplayer.status === 'connected' && !multiplayer.isHost && syncedSwipeCardIds && syncedSwipeCardIds.length > 0) {
-      return getSwipeCardsByIds(syncedSwipeCardIds);
+      return getSwipeCardsByIds(syncedSwipeCardIds, seenIds);
     }
-    return getShuffledSwipeCards(selectedCategory, 15);
-  }, [selectedCategory, roundCounter, multiplayer.status, multiplayer.isHost, syncedSwipeCardIds]);
+    return getShuffledSwipeCards(selectedCategory, 15, seenIds);
+  }, [selectedCategory, roundCounter, multiplayer.status, multiplayer.isHost, syncedSwipeCardIds, isLoading]);
 
   // Host broadcasts the card deck to the joining player for synchronized cards
   React.useEffect(() => {
@@ -313,6 +323,14 @@ export const PlayScreen: React.FC = () => {
   }, [multiplayer.status, currentTab, multiplayer.messageListener, cardIndex, filteredCards.length, activeTab, multiplayer.activeGame]);
 
   const currentCard = filteredCards[cardIndex];
+
+  // A card counts as seen as soon as it is displayed. This avoids resurfacing
+  // an abandoned prompt after a refresh or on another device.
+  React.useEffect(() => {
+    if (currentTab !== 'swipe' || !currentCard || isSummaryOpen) return;
+    markQuestionAsSeen(currentCard.id);
+    recordAnsweredQuestion(currentCard.id);
+  }, [currentTab, currentCard?.id, isSummaryOpen, recordAnsweredQuestion]);
   const nextCard = filteredCards[cardIndex + 1];
   const thirdCard = filteredCards[cardIndex + 2];
   const fourthCard = filteredCards[cardIndex + 3];

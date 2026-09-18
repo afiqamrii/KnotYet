@@ -47,7 +47,7 @@ interface Props {
 
 const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { t, profile, partner, addHeartPoints, deductHeartPoints, recordAnsweredQuestion } = useGame();
-  const { checkLimit, incrementPlayCount } = useAuth();
+  const { checkLimit, incrementPlayCount, progress } = useAuth();
 
   const multiplayer = useMultiplayer();
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
@@ -57,10 +57,10 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       const stored = sessionStorage.getItem('guess_questions');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return getGuessQuestionsByIds(parsed.map(item => item.id), progress?.answered_questions);
       }
     } catch {}
-    return getShuffledGuessQuestions(10);
+    return getShuffledGuessQuestions(10, progress?.answered_questions);
   });
 
   const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('guess_currentIndex')) || 0);
@@ -89,6 +89,15 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   const currentQuiz = questions[currentIndex] || questions[0] || { id: 'gq-0', targetRole: 'Lelaki' as const, question: '', options: [], vibeText: '' };
   const isBoyTarget = currentQuiz.targetRole === 'Lelaki';
+
+  // Save a prompt when it reaches the player, rather than waiting for an
+  // answer. Leaving and returning to a round therefore cannot repeat it.
+  useEffect(() => {
+    const shownQuestion = questions[currentIndex];
+    if (!shownQuestion || completed) return;
+    markQuestionAsSeen(shownQuestion.id);
+    recordAnsweredQuestion(shownQuestion.id);
+  }, [questions, currentIndex, completed, recordAnsweredQuestion]);
 
   // Host broadcasts the shuffled question deck so both are in sync
   useEffect(() => {
@@ -125,7 +134,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer, executeNext]);
 
   const handleRestart = useCallback((broadcast: boolean = true, newQList?: GuessQuizItem[]) => {
-    const nextQuestions = newQList || getShuffledGuessQuestions(10);
+    const nextQuestions = newQList || getShuffledGuessQuestions(10, progress?.answered_questions);
     setQuestions(nextQuestions);
     setCurrentIndex(0); 
     setStage('secret'); 
@@ -142,7 +151,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         payload: { questionIds: nextQuestions.map(q => q.id) }
       });
     }
-  }, [multiplayer]);
+  }, [multiplayer, progress?.answered_questions]);
 
   const showToast = (text: string, positive: boolean) => {
     setPointsToast({ text, positive });
@@ -189,10 +198,10 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         } else if (msg.type === 'QUIZ_NEXT') {
           executeNext();
         } else if (msg.type === 'QUIZ_RESTART') {
-          const synced = msg.payload?.questionIds ? getGuessQuestionsByIds(msg.payload.questionIds) : undefined;
+          const synced = msg.payload?.questionIds ? getGuessQuestionsByIds(msg.payload.questionIds, progress?.answered_questions) : undefined;
           handleRestart(false, synced);
         } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'quiz') {
-          const synced = getGuessQuestionsByIds(msg.payload.questionIds);
+          const synced = getGuessQuestionsByIds(msg.payload.questionIds, progress?.answered_questions);
           if (synced.length > 0) setQuestions(synced);
         }
       };
@@ -302,6 +311,26 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     { border: '#F59E0B', bg: '#FEF3C7', text: '#92400E', num: '#F59E0B' },
     { border: '#10B981', bg: '#D1FAE5', text: '#047857', num: '#10B981' },
   ];
+
+  if (questions.length === 0) {
+    return (
+      <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-center gap-3 mx-auto animate-fade-in">
+        <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-sm" style={{ background: 'linear-gradient(135deg, #06B6D4, #3B82F6)' }}><Heart className="w-4 h-4 fill-white" /></div>
+            <h2 className="font-black text-white text-sm">Guess My Heart</h2>
+          </div>
+          <button onClick={handleEndGame} className="game-end-button text-xs font-bold transition px-3 py-1.5 rounded-full">End Game</button>
+        </div>
+        <div className="game-card activity-card text-center p-8 space-y-3">
+          <Sparkles className="w-10 h-10 text-brand mx-auto" />
+          <h3 className="text-xl font-black text-ink">You have explored every question!</h3>
+          <p className="text-sm font-semibold text-ink-3">Fresh prompts are being added soon. Pick another game for your next round together.</p>
+          <button onClick={handleEndGame} className="btn-chunky btn-pink mx-auto px-5 py-3">Choose another game</button>
+        </div>
+      </div>
+    );
+  }
 
   // ---- COMPLETED ----
   if (completed) {

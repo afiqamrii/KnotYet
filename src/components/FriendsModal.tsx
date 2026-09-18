@@ -31,7 +31,8 @@ const relationshipLabel = (type: string) => RELATIONSHIPS.find(item => item.type
 const ChatDoodle = () => <div className="chat-doodle" aria-hidden="true"><MessageCircle /><MessageCircle /><span /></div>;
 
 function DeliveryStatus({ message, retry }: { message: DirectMessage; retry: () => void }) {
-  if (message.status === 'delivered') return <span><CheckCheck /> Delivered</span>;
+  if (message.status === 'read') return <span className="is-read"><CheckCheck /> Read</span>;
+  if (message.status === 'delivered' || message.status === 'sent') return <span><Check /> Sent</span>;
   if (message.status === 'failed') return <><span className="is-failed" title={message.error}>Not delivered</span><button className="chat-retry" onClick={retry}>Retry</button></>;
   if (message.status === 'sending') return <span><Clock3 /> Sending</span>;
   return <span><Clock3 /> Waiting for partner</span>;

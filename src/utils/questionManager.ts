@@ -26,7 +26,7 @@ export function shuffleArray<T>(array: T[]): T[] {
 /**
  * Retrieve the set of all question IDs that the user has already seen/answered.
  */
-export function getSeenQuestionIds(): Set<string> {
+export function getSeenQuestionIds(additionalSeenIds?: Iterable<string>): Set<string> {
   const set = new Set<string>();
   try {
     const seenStored = localStorage.getItem(STORAGE_KEY_SEEN);
@@ -39,6 +39,9 @@ export function getSeenQuestionIds(): Set<string> {
     }
   } catch (e) {
     console.error('Error reading seen question IDs:', e);
+  }
+  if (additionalSeenIds) {
+    for (const id of additionalSeenIds) if (typeof id === 'string') set.add(id);
   }
   return set;
 }
@@ -91,102 +94,69 @@ export function resetSeenQuestionsForPrefix(prefix: string): void {
 // 1. COUPLE MATCH QUESTIONS
 // ==========================================
 
-export function getShuffledMatchQuestions(count: number = 10): MatchQuestion[] {
-  const seen = getSeenQuestionIds();
-  let available = MATCH_QUESTIONS.filter(q => !seen.has(q.id));
-
-  // If remaining unseen pool is too small, gracefully recycle the pool
-  if (available.length < Math.min(count, 5)) {
-    resetSeenQuestionsForPrefix('m-');
-    available = [...MATCH_QUESTIONS];
-  }
-
-  const shuffled = shuffleArray(available);
+export function getShuffledMatchQuestions(count: number = 10, additionalSeenIds?: Iterable<string>): MatchQuestion[] {
+  const seen = getSeenQuestionIds(additionalSeenIds);
+  const shuffled = shuffleArray(MATCH_QUESTIONS.filter(q => !seen.has(q.id)));
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-export function getMatchQuestionsByIds(ids: string[]): MatchQuestion[] {
+export function getMatchQuestionsByIds(ids: string[], additionalSeenIds?: Iterable<string>): MatchQuestion[] {
+  const seen = getSeenQuestionIds(additionalSeenIds);
   const map = new Map(MATCH_QUESTIONS.map(q => [q.id, q]));
   const result: MatchQuestion[] = [];
   for (const id of ids) {
     const q = map.get(id);
-    if (q) result.push(q);
+    if (q && !seen.has(q.id)) result.push(q);
   }
-  // Fallback if empty
-  return result.length > 0 ? result : getShuffledMatchQuestions(10);
+  return result;
 }
 
 // ==========================================
 // 2. GUESS MY HEART (QUIZ) QUESTIONS
 // ==========================================
 
-export function getShuffledGuessQuestions(count: number = 10): GuessQuizItem[] {
-  const seen = getSeenQuestionIds();
-  let available = GUESS_QUIZ_LIST.filter(q => !seen.has(q.id));
-
-  // If remaining unseen pool is too small, recycle the pool (from the 80 question dataset)
-  if (available.length < Math.min(count, 5)) {
-    resetSeenQuestionsForPrefix('gq-');
-    available = [...GUESS_QUIZ_LIST];
-  }
-
-  const shuffled = shuffleArray(available);
+export function getShuffledGuessQuestions(count: number = 10, additionalSeenIds?: Iterable<string>): GuessQuizItem[] {
+  const seen = getSeenQuestionIds(additionalSeenIds);
+  const shuffled = shuffleArray(GUESS_QUIZ_LIST.filter(q => !seen.has(q.id)));
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-export function getGuessQuestionsByIds(ids: string[]): GuessQuizItem[] {
+export function getGuessQuestionsByIds(ids: string[], additionalSeenIds?: Iterable<string>): GuessQuizItem[] {
+  const seen = getSeenQuestionIds(additionalSeenIds);
   const map = new Map(GUESS_QUIZ_LIST.map(q => [q.id, q]));
   const result: GuessQuizItem[] = [];
   for (const id of ids) {
     const q = map.get(id);
-    if (q) result.push(q);
+    if (q && !seen.has(q.id)) result.push(q);
   }
-  // Fallback if empty
-  return result.length > 0 ? result : getShuffledGuessQuestions(10);
+  return result;
 }
 
 // ==========================================
 // 3. ICEBREAKER (SWIPE) CARDS
 // ==========================================
 
-export function getShuffledSwipeCards(category: CardCategory | 'all', count: number = 15): SwipeCardItem[] {
-  const seen = getSeenQuestionIds();
+export function getShuffledSwipeCards(category: CardCategory | 'all', count: number = 15, additionalSeenIds?: Iterable<string>): SwipeCardItem[] {
+  const seen = getSeenQuestionIds(additionalSeenIds);
   
   let matching = SWIPE_CARDS;
   if (category !== 'all') {
     matching = matching.filter(c => c.category === category);
   }
 
-  let available = matching.filter(c => !seen.has(c.id));
-
-  // If remaining pool is depleted, recycle for this category
-  if (available.length < Math.min(count, 5)) {
-    const prefixMap: Record<string, string> = {
-      'teka-teki': 'tt-',
-      'vibe-check': 'vc-',
-      'taaruf-realiti': 'sm-',
-      'dare-santai': 'bc-',
-    };
-    if (category !== 'all' && prefixMap[category]) {
-      resetSeenQuestionsForPrefix(prefixMap[category]);
-    } else {
-      ['tt-', 'vc-', 'sm-', 'bc-'].forEach(p => resetSeenQuestionsForPrefix(p));
-    }
-    available = [...matching];
-  }
-
-  const shuffled = shuffleArray(available);
+  const shuffled = shuffleArray(matching.filter(c => !seen.has(c.id)));
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-export function getSwipeCardsByIds(ids: string[]): SwipeCardItem[] {
+export function getSwipeCardsByIds(ids: string[], additionalSeenIds?: Iterable<string>): SwipeCardItem[] {
+  const seen = getSeenQuestionIds(additionalSeenIds);
   const map = new Map(SWIPE_CARDS.map(c => [c.id, c]));
   const result: SwipeCardItem[] = [];
   for (const id of ids) {
     const card = map.get(id);
-    if (card) result.push(card);
+    if (card && !seen.has(card.id)) result.push(card);
   }
-  return result.length > 0 ? result : getShuffledSwipeCards('all', 15);
+  return result;
 }
 
 // ==========================================
