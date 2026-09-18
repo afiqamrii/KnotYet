@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
 import { sounds } from '../utils/audio';
@@ -147,7 +147,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return s;
     });
     if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
-    partnerLeftTimer.current = setTimeout(cleanup, 3000);
+    partnerLeftTimer.current = setTimeout(cleanup, 60000);
   }, [cleanup]);
 
   const handleConnection = useCallback((conn: DataConnection) => {
@@ -202,6 +202,26 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
     conn.on('error', () => { if (connRef.current === conn) handlePartnerLeft(); });
   }, [handlePartnerLeft, cleanup]);
+
+  useEffect(() => {
+    const resumeConnection = () => {
+      if (document.visibilityState === 'hidden' || state.status !== 'partner_left' || state.isHost || !state.roomCode) return;
+      const peer = peerRef.current;
+      if (!peer?.open || connRef.current?.open) return;
+      if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
+      partnerLeftTimer.current = null;
+      setState(current => ({ ...current, status: 'joining', error: null }));
+      handleConnection(peer.connect(getPeerId(state.roomCode), { reliable: true }));
+    };
+    window.addEventListener('focus', resumeConnection);
+    window.addEventListener('online', resumeConnection);
+    document.addEventListener('visibilitychange', resumeConnection);
+    return () => {
+      window.removeEventListener('focus', resumeConnection);
+      window.removeEventListener('online', resumeConnection);
+      document.removeEventListener('visibilitychange', resumeConnection);
+    };
+  }, [handleConnection, state.isHost, state.roomCode, state.status]);
 
   const hostRoom = useCallback((code: string, profile: UserProfile) => {
     cleanup();
@@ -342,3 +362,4 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     </MultiplayerContext.Provider>
   );
 };
+

@@ -7,8 +7,10 @@ class SoundEffects {
   private bgm: HTMLAudioElement | null = null;
   private lastTap = -Infinity;
   private lastTick = -Infinity;
-  public isMuted = false;
+  public effectsMuted = false;
+  public musicMuted = false;
   public effectVolume = .5;
+  public musicVolume = .12;
   public currentTrackIndex = 0;
   public tracks = [
     { name: 'Chill Lo-Fi', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
@@ -18,17 +20,30 @@ class SoundEffects {
   constructor() {
     try {
       const saved = JSON.parse(localStorage.getItem(SOUND_PREFERENCE) || '{}');
-      this.isMuted = saved.muted === true;
-      if (typeof saved.volume === 'number' && Number.isFinite(saved.volume)) this.effectVolume = Math.max(0, Math.min(1, saved.volume));
+      const legacyMuted = saved.muted === true;
+      this.effectsMuted = typeof saved.effectsMuted === 'boolean' ? saved.effectsMuted : legacyMuted;
+      this.musicMuted = typeof saved.musicMuted === 'boolean' ? saved.musicMuted : legacyMuted;
+      const effectVolume = typeof saved.effectVolume === 'number' ? saved.effectVolume : saved.volume;
+      if (typeof effectVolume === 'number' && Number.isFinite(effectVolume)) this.effectVolume = Math.max(0, Math.min(1, effectVolume));
+      if (typeof saved.musicVolume === 'number' && Number.isFinite(saved.musicVolume)) this.musicVolume = Math.max(0, Math.min(1, saved.musicVolume));
+      if (Number.isInteger(saved.track) && saved.track >= 0 && saved.track < this.tracks.length) this.currentTrackIndex = saved.track;
     } catch { /* Storage is optional. */ }
   }
 
   private save() {
-    try { localStorage.setItem(SOUND_PREFERENCE, JSON.stringify({ muted: this.isMuted, volume: this.effectVolume })); } catch { /* Storage is optional. */ }
+    try {
+      localStorage.setItem(SOUND_PREFERENCE, JSON.stringify({
+        effectsMuted: this.effectsMuted,
+        musicMuted: this.musicMuted,
+        effectVolume: this.effectVolume,
+        musicVolume: this.musicVolume,
+        track: this.currentTrackIndex,
+      }));
+    } catch { /* Storage is optional. */ }
   }
 
   private init() {
-    if (this.isMuted || this.effectVolume === 0 || typeof window === 'undefined') return false;
+    if (this.effectsMuted || this.effectVolume === 0 || typeof window === 'undefined') return false;
     if (!this.ctx) {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return false;
@@ -124,13 +139,22 @@ class SoundEffects {
   setEffectVolume(volume: number) {
     if (!Number.isFinite(volume)) return;
     this.effectVolume = Math.max(0, Math.min(1, volume));
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.isMuted ? 0 : this.effectVolume, this.ctx.currentTime, .015);
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.effectsMuted ? 0 : this.effectVolume, this.ctx.currentTime, .015);
+    this.save();
+  }
+
+  setMusicVolume(volume: number) {
+    if (!Number.isFinite(volume)) return;
+    this.musicVolume = Math.max(0, Math.min(1, volume));
+    if (this.bgm) this.bgm.volume = this.musicVolume;
+    if (this.musicVolume > 0 && !this.musicMuted) this.playBGM();
     this.save();
   }
 
   playBGM() {
-    if (typeof window === 'undefined' || this.isMuted) return;
-    if (!this.bgm) { this.bgm = new Audio(this.tracks[this.currentTrackIndex].url); this.bgm.loop = true; this.bgm.volume = .12; }
+    if (typeof window === 'undefined' || this.musicMuted || this.musicVolume === 0) return;
+    if (!this.bgm) { this.bgm = new Audio(this.tracks[this.currentTrackIndex].url); this.bgm.loop = true; this.bgm.volume = this.musicVolume; }
+    this.bgm.volume = this.musicVolume;
     if (this.bgm.src !== this.tracks[this.currentTrackIndex].url) { this.bgm.src = this.tracks[this.currentTrackIndex].url; this.bgm.load(); }
     void this.bgm.play().catch(() => undefined);
   }
@@ -141,15 +165,33 @@ class SoundEffects {
     if (this.bgm) {
       const wasPlaying = !this.bgm.paused;
       this.bgm.src = this.tracks[index].url; this.bgm.load();
-      if (wasPlaying && !this.isMuted) void this.bgm.play().catch(() => undefined);
+      if (wasPlaying && !this.musicMuted) void this.bgm.play().catch(() => undefined);
     }
-  }
-  toggleMute() {
-    this.isMuted = !this.isMuted;
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.isMuted ? 0 : this.effectVolume, this.ctx.currentTime, .01);
-    if (this.isMuted) this.stopBGM(); else this.playBGM();
     this.save();
-    return this.isMuted;
+  }
+  toggleEffectsMute() {
+    this.effectsMuted = !this.effectsMuted;
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.effectsMuted ? 0 : this.effectVolume, this.ctx.currentTime, .01);
+    this.save();
+    return this.effectsMuted;
+  }
+  toggleMusicMute() {
+    this.musicMuted = !this.musicMuted;
+    if (this.musicMuted) this.stopBGM(); else this.playBGM();
+    this.save();
+    return this.musicMuted;
+  }
+
+  // Kept for older call sites and saved sessions while the split controls roll out.
+  get isMuted() { return this.effectsMuted && this.musicMuted; }
+  toggleMute() {
+    const muteBoth = !(this.effectsMuted && this.musicMuted);
+    this.effectsMuted = muteBoth;
+    this.musicMuted = muteBoth;
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(muteBoth ? 0 : this.effectVolume, this.ctx.currentTime, .01);
+    if (muteBoth) this.stopBGM(); else this.playBGM();
+    this.save();
+    return muteBoth;
   }
 }
 

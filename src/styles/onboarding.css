@@ -1,4 +1,4 @@
-/* Player setup and partner rooms share the same playful, tactile game language. */
+﻿/* Player setup and partner rooms share the same playful, tactile game language. */
 .player-setup,
 .room-arcade-overlay {
   --setup-ink: #241d35;
@@ -94,7 +94,7 @@
 .setup-player-preview > svg { color: var(--setup-purple); flex-shrink: 0; }
 .setup-name-preview { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 20px 0; padding: 18px; border: 2px solid var(--setup-ink); border-radius: 18px; background: #ffdf85; }
 .setup-name-preview > span { font-family: 'Outfit', sans-serif; font-size: 23px; font-weight: 800; text-align: center; overflow-wrap: anywhere; max-width: 100%; }
-.setup-name-preview small { font-size: 8px; letter-spacing: 1.5px; font-weight: 800; }
+.setup-name-preview small { font-size: 10px; letter-spacing: 1.5px; font-weight: 800; }
 .setup-field-label { display: block; font-size: 12px; font-weight: 800; margin: 0 0 8px; }
 .setup-input { display: block; width: 100%; min-height: 54px; background: white; color: var(--setup-ink); border: 2px solid #b1a5bf; border-radius: 13px; padding: 13px 14px; font-size: 16px; font-weight: 700; outline: none; }
 .setup-input::placeholder { color: #96889e; font-weight: 500; }
@@ -166,7 +166,7 @@
   .setup-wordmark { font-size: 24px; }
   .setup-layout { display: block; max-width: 500px; margin-top: 4px; border-radius: 23px; box-shadow: 5px 5px 0 var(--setup-ink); }
   .setup-story { min-height: 125px; padding: 22px; border-right: 0; border-bottom: 2px solid var(--setup-ink); }
-  .setup-sticker { font-size: 8px; padding: 5px 8px; gap: 4px; }
+  .setup-sticker { font-size: 10px; padding: 5px 8px; gap: 4px; }
   .setup-sticker svg { width: 12px; height: 12px; }
   .setup-story h2 { font-size: 28px; margin: 15px 0 0; letter-spacing: -.8px; z-index: 1; }
   .setup-story > p, .setup-ticket { display: none; }
@@ -187,7 +187,7 @@
   .setup-story { padding: 20px 17px; }
   .setup-story h2 { font-size: 23px; }
   .setup-duo { right: -112px; transform: scale(.43); }
-  .setup-sticker { max-width: 164px; font-size: 7px; }
+  .setup-sticker { max-width: 164px; font-size: 10px; }
   .setup-step h1 { font-size: 30px; }
   .setup-avatar-grid { gap: 7px; }
   .setup-avatar-option { padding: 10px 0; }
@@ -202,7 +202,7 @@
   .room-arcade-body { padding: 19px 16px; }
   .room-arcade-banner { padding: 26px 20px 22px; }
   .room-arcade-banner h2 { font-size: 24px; }
-  .room-banner-kicker { justify-content: flex-start; letter-spacing: .9px; font-size: 8px; }
+  .room-banner-kicker { justify-content: flex-start; letter-spacing: .9px; font-size: 10px; }
   .room-arcade-tabs button { gap: 4px; font-size: 10px; }
   .room-arcade-tabs button svg { width: 14px; }
 }
@@ -210,3 +210,4 @@
   .player-setup *, .room-arcade-overlay * { animation: none !important; transition: none !important; }
   .setup-button:not(:disabled):hover, .setup-button:not(:disabled):active { transform: none; }
 }
+

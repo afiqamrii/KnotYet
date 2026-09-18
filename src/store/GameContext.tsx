@@ -100,7 +100,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfileState(p);
     localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(p));
     
-    if (user && !user.id.startsWith('guest-')) {
+    if (user) {
        supabase.from('profiles').upsert({
          id: user.id,
          name: p.name,
@@ -140,7 +140,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
 
-    if (user && !user.id.startsWith('guest-') && progress) {
+    if (user && progress) {
       supabase.from('user_progress').update({ heart_points: progress.heart_points + amount }).eq('user_id', user.id).then(() => refreshProgress());
     }
   }, [user, progress, couple, refreshProgress, refreshCouple]);
@@ -164,14 +164,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
 
-    if (user && !user.id.startsWith('guest-') && progress) {
+    if (user && progress) {
       const newPoints = Math.max(0, progress.heart_points - Math.abs(amount));
       supabase.from('user_progress').update({ heart_points: newPoints }).eq('user_id', user.id).then(() => refreshProgress());
     }
   }, [user, progress, couple, refreshProgress, refreshCouple]);
 
   const recordAnsweredQuestion = useCallback((questionId: string) => {
-    if (user && !user.id.startsWith('guest-') && progress) {
+    if (user && progress) {
       const answered = new Set(progress.answered_questions);
       if (!answered.has(questionId)) {
         answered.add(questionId);

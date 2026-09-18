@@ -4,7 +4,7 @@ import { ArrowLeft, Check, CheckCheck, Clock3, Copy, Link2, MessageCircle, Play,
 import { useFriends, Friend, DirectMessage } from '../store/FriendsContext';
 import { useGame, RelationshipType } from '../store/GameContext';
 import { useMultiplayer } from '../store/MultiplayerContext';
-import { Avatar, AvatarPicker } from './AvatarPicker';
+import { Avatar } from './AvatarPicker';
 import { UiSymbol } from './GameCardDesign';
 import { useChatDialog } from './useChatDialog';
 import { sounds } from '../utils/audio';
@@ -38,14 +38,12 @@ function DeliveryStatus({ message, retry }: { message: DirectMessage; retry: () 
 }
 
 export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onLaunchMultiplayer }) => {
-  const { friends, addFriend, removeFriend, getConversation, sendDirectMessage, retryDirectMessage, createInviteLink,
+  const { friends, removeFriend, getConversation, sendDirectMessage, retryDirectMessage, createInviteLink,
     activeChatFriendId, setActiveChatFriendId, myChatId, connectionStatus, connectionError } = useFriends();
   const { profile } = useGame();
   const multiplayer = useMultiplayer();
   const [view, setView] = useState<'list' | 'add' | 'chat'>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [friendName, setFriendName] = useState('');
-  const [friendAvatar, setFriendAvatar] = useState('sunny');
   const [friendRel, setFriendRel] = useState<Relationship>('lover');
   const [copiedLink, setCopiedLink] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
@@ -122,7 +120,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
   const shareLink = async (share: boolean) => {
     setError('');
     try {
-      const url = createInviteLink(friendRel);
+      const url = await createInviteLink(friendRel);
       setInviteUrl(url);
       if (share && navigator.share) {
         await navigator.share({ title: 'Join my KnotYet circle', text: 'A little chat. A little play. Just us.', url });
@@ -138,15 +136,11 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
       setError('Could not share automatically. You can select and copy the invite link below.');
     }
   };
-  const saveLocalFriend = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!friendName.trim()) return;
-    const friend = addFriend(friendName.trim(), friendAvatar, friendRel, friendRel === 'lover' || friendRel === 'spouse');
-    setFriendName(''); openChat(friend);
-  };
-  const removeSelectedFriend = () => {
+  const removeSelectedFriend = async () => {
     if (!selectedFriend) return;
-    removeFriend(selectedFriend.id); setSelectedId(null); backToList();
+    setError('');
+    try { await removeFriend(selectedFriend.id); setSelectedId(null); backToList(); }
+    catch { setError('This chat could not be removed from your account. Please try again.'); }
   };
 
   return createPortal(
@@ -164,10 +158,10 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
             : <div className="chat-friend-list">{friends.map(friend => <button key={friend.id} className="chat-friend" aria-current={view === 'chat' && selectedId === friend.id ? 'true' : undefined} onClick={() => openChat(friend)}>
                 <Avatar avatarId={friend.avatarId} size={43} /><span className="chat-friend-copy"><strong>{friend.name}</strong><small>{friend.lastMessage || (friend.linked ? 'Say a little hello' : 'Saved profile · invite to connect')}</small></span>{(friend.unreadCount || 0) > 0 ? <span className="chat-unread" aria-label={`${friend.unreadCount} unread messages`}>{friend.unreadCount! > 99 ? '99+' : friend.unreadCount}</span> : <span className={`chat-friend-label ${friend.linked && friend.isOnline ? 'is-linked' : ''}`} title={friend.linked ? friend.isOnline ? 'Online' : 'Offline' : 'Saved on this device'} />}
               </button>)}</div>}
-            <p className="chat-sidebar-note">Both open KnotYet for delivery.<br />Messages stay on this browser.</p>
+            <p className="chat-sidebar-note">Messages sync securely to your account.<br />Come back anytime on this device.</p>
           </aside>
           <section className="chat-main">
-            {view === 'list' && <div className="chat-welcome"><ChatDoodle /><h3>A little closer, even from afar.</h3><p>{friends.length ? 'Pick someone from your circle to say hello, swap a little banter, or invite them to a game.' : 'Send an invite, connect your browsers, and let the good conversations begin.'}</p><button className="chat-primary" onClick={openAdd}><UserPlus /> Invite someone</button><div className="chat-steps"><span><b>1</b>Share your link</span><span><b>2</b>They accept</span><span><b>3</b>Chat & play</span></div></div>}
+            {view === 'list' && <div className="chat-welcome"><ChatDoodle /><h3>A little closer, even from afar.</h3><p>{friends.length ? 'Pick someone from your circle to say hello, swap a little banter, or invite them to a game.' : 'Send an invite, connect your accounts, and let the good conversations begin.'}</p><button className="chat-primary" onClick={openAdd}><UserPlus /> Invite someone</button><div className="chat-steps"><span><b>1</b>Share your link</span><span><b>2</b>They accept</span><span><b>3</b>Chat & play</span></div></div>}
             {view === 'add' && <>
               <div className="chat-thread-header"><div className="chat-person"><button className="chat-icon-button chat-back" onClick={backToList} aria-label="Back to friends"><ArrowLeft /></button><h3>Make room for your person.</h3></div></div>
               <div className="chat-add-view"><p>Send them a link. Once they accept, you will appear in each other’s circle.</p>
@@ -175,18 +169,18 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
                   <fieldset className="chat-fieldset"><legend>They are my...</legend><div className="chat-relationships">{RELATIONSHIPS.map(item => <button key={item.type} type="button" aria-pressed={friendRel === item.type} onClick={() => { setFriendRel(item.type); setInviteUrl(''); setCopiedLink(false); }}>{item.icon} {item.label}</button>)}</div></fieldset>
                   <div className="chat-invite-actions"><button className="chat-primary" onClick={() => void shareLink(true)}><Share2 /> Share invite</button><button className="chat-secondary" onClick={() => void shareLink(false)}>{copiedLink ? <Check /> : <Copy />}{copiedLink ? 'Copied' : 'Copy link'}</button></div>
                   {inviteUrl && <div className="chat-link-preview" aria-label="Your invite link">{inviteUrl}</div>}
-                  <p>Keep KnotYet open while they accept. Your link connects this browser to theirs.</p>
+                  <p>Invite links are single-use and expire automatically for your safety.</p>
                 </div>
                 <div className="chat-steps"><span><b>1</b>Copy or share</span><span><b>2</b>They open & accept</span><span><b>3</b>Say hello here</span></div>
-                <details className="chat-manual"><summary>Playing on one screen? Save their profile.</summary><form onSubmit={saveLocalFriend}><p>A saved profile is only on this device. To message them on another device, use an invite link above.</p><label htmlFor="saved-friend-name">Their name<input id="saved-friend-name" maxLength={25} value={friendName} onChange={event => setFriendName(event.target.value)} placeholder="e.g. Sarah" required /></label><fieldset className="chat-fieldset"><legend>Their character</legend><AvatarPicker selected={friendAvatar} onChange={setFriendAvatar} /></fieldset><button className="chat-secondary" type="submit" disabled={!friendName.trim()}>Save profile on this device</button></form></details>
+                
               </div>
             </>}
             {view === 'chat' && selectedFriend && <>
               <div className="chat-thread-header"><div className="chat-person"><button className="chat-icon-button chat-back" onClick={backToList} aria-label="Back to friends"><ArrowLeft /></button><Avatar avatarId={selectedFriend.avatarId} size={40} /><div><h3>{selectedFriend.name}</h3><p>{relationshipLabel(selectedFriend.relationshipType)} · {selectedFriend.linked ? selectedFriend.isOnline ? 'Here with you' : 'Away right now' : 'Saved on this device'}</p></div></div><div className="chat-thread-actions"><button className="chat-primary" onClick={() => void createGameInvite(selectedFriend)} disabled={!selectedFriend.linked || sending} aria-label={`Invite ${selectedFriend.name} to play`}><Play /><span>Let’s play</span></button><button className="chat-icon-button" onClick={() => setConfirmRemove(true)} aria-label={`Remove ${selectedFriend.name} from your circle`} title="Remove from your circle"><Trash2 /></button></div></div>
-              {confirmRemove && <div className="chat-remove-confirm"><p>Remove {selectedFriend.name} and this chat from your browser?</p><div><button className="chat-secondary" onClick={() => setConfirmRemove(false)}>Keep them</button><button className="chat-secondary" onClick={removeSelectedFriend}>Remove chat</button></div></div>}
-              {!selectedFriend.linked ? <div className="chat-linked-notice"><Link2 /><span>This profile is saved on your device. Share an invite to connect your browsers and chat.</span></div>
+              {confirmRemove && <div className="chat-remove-confirm"><p>Remove {selectedFriend.name} and this chat from your account?</p><div><button className="chat-secondary" onClick={() => setConfirmRemove(false)}>Keep them</button><button className="chat-secondary" onClick={() => void removeSelectedFriend()}>Remove chat</button></div></div>}
+              {!selectedFriend.linked ? <div className="chat-linked-notice"><Link2 /><span>This profile is saved on your device. Share an invite to connect your accounts and chat.</span></div>
               : connectionStatus !== 'online' ? <div className="chat-linked-notice"><Clock3 /><span>{connectionStatus === 'connecting' ? 'Connecting your chat. Messages will wait here until you are connected.' : connectionError || 'Chat is reconnecting. Your messages will wait here.'}</span></div>
-              : !selectedFriend.isOnline && <div className="chat-linked-notice"><Clock3 /><span>They are away. New messages will wait here until you both have KnotYet open.</span></div>}
+              : !selectedFriend.isOnline && <div className="chat-linked-notice"><Clock3 /><span>They are away. Your message will be waiting in their account.</span></div>}
               <div className="chat-feed" ref={messagesRef} role="log" aria-live="polite" aria-label={`Conversation with ${selectedFriend.name}`}>
                 {chatMessages.length === 0 ? <div className="chat-welcome"><ChatDoodle /><h3>{selectedFriend.linked ? `Hey, ${selectedFriend.name}.` : 'One invite away.'}</h3><p>{selectedFriend.linked ? 'A sweet hello, a little banter, or “one more round?” Make the first move.' : 'A name and avatar do not connect two devices. Send your person an invite link to start chatting.'}</p>{!selectedFriend.linked && <button className="chat-primary" onClick={openAdd}><Link2 /> Get an invite link</button>}</div>
                 : chatMessages.map(message => {
@@ -206,3 +200,6 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
     </div>, document.body,
   );
 };
+
+
+

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+﻿import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useReducedMotion } from 'framer-motion';
 import { Pause, Play, Smile, Star } from 'lucide-react';
@@ -9,6 +9,7 @@ import '../styles/reactions.css';
 export function GiphyReaction({ mood, seed = '', compact = false }: { mood: ReactionMood; seed?: string; compact?: boolean }) {
   const reduceMotion = useReducedMotion();
   const [playOverride, setPlayOverride] = useState<boolean | null>(null);
+  const [externalMediaAllowed, setExternalMediaAllowed] = useState(false);
   const [loadedSrc, setLoadedSrc] = useState('');
   const [failedSrc, setFailedSrc] = useState('');
   const reaction = getReaction(mood, seed);
@@ -20,15 +21,15 @@ export function GiphyReaction({ mood, seed = '', compact = false }: { mood: Reac
 
   return (
     <figure className={`giphy-reaction ${compact ? 'giphy-reaction-compact' : ''}`}>
-      <div className="giphy-stage" aria-busy={!loaded && !failed}>
-        {(!loaded || failed) && <div className="giphy-placeholder"><ResultArt kind={fallback} /></div>}
-        {!failed && <img key={src} src={src} alt={reaction.alt} className={loaded ? 'is-loaded' : ''}
+      <div className="giphy-stage" aria-busy={externalMediaAllowed && !loaded && !failed}>
+        {(!externalMediaAllowed || !loaded || failed) && <div className="giphy-placeholder"><ResultArt kind={fallback} /></div>}
+        {externalMediaAllowed && !failed && <img key={src} src={src} alt={reaction.alt} className={loaded ? 'is-loaded' : ''}
           onLoad={() => setLoadedSrc(src)} onError={() => setFailedSrc(src)} />}
-        {failed && <span className="giphy-unavailable">The reaction is taking a break.</span>}
+        {externalMediaAllowed && failed && <span className="giphy-unavailable">The reaction is taking a break.</span>}
       </div>
       <figcaption>
         <a href={`https://giphy.com/gifs/${reaction.id}`} target="_blank" rel="noopener noreferrer">GIF via <strong>GIPHY</strong></a>
-        {!failed && <button type="button" onClick={() => setPlayOverride(!playing)} aria-label={playing ? 'Pause GIF' : 'Play GIF'}>
+        {!externalMediaAllowed ? <button type="button" onClick={() => setExternalMediaAllowed(true)} aria-label="Load GIF from GIPHY">Load GIF (GIPHY)</button> : !failed && <button type="button" onClick={() => setPlayOverride(!playing)} aria-label={playing ? 'Pause GIF' : 'Play GIF'}>
           {playing ? <Pause size={12} aria-hidden="true" /> : <Play size={12} aria-hidden="true" />} {playing ? 'Pause' : 'Play GIF'}
         </button>}
       </figcaption>
@@ -73,3 +74,4 @@ export function ReactionDialog({ positive, title, points, children }: { positive
     </div>, document.body
   );
 }
+

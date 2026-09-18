@@ -21,11 +21,12 @@ export function getChatIdentity(ownerId: string): ChatIdentity {
 
 export function parseFriendInvite(search: string): FriendInvite | null {
   const query = new URLSearchParams(search);
-  const id = query.get('cid');
-  const token = query.get('key');
+  const cloudToken = query.get('chat');
+  const id = query.get('cid') || 'cloud';
+  const token = cloudToken || query.get('key');
   const name = query.get('n')?.trim();
   const rel = query.get('r') || 'friend';
-  if (!id || !token || !VALID_ID.test(id) || !VALID_ID.test(token) || !name || !RELATIONSHIPS.includes(rel)) return null;
+  if (!token || (id !== 'cloud' && !VALID_ID.test(id)) || !VALID_ID.test(token) || !name || !RELATIONSHIPS.includes(rel)) return null;
   return { id, token, name: name.slice(0, 60), avatar: (query.get('a') || 'sunny').slice(0, 40), rel: rel as FriendInvite['rel'] };
 }
 
@@ -33,3 +34,5 @@ export function makeFriendInvite(identity: ChatIdentity, profile: { name: string
   const query = new URLSearchParams({ cid: identity.id, key: identity.token, n: profile.name, a: profile.avatarId, r: rel });
   return `${window.location.origin}/invite?${query}`;
 }
+
+

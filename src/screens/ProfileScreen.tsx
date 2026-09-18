@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Check, Copy, Gamepad2, Heart, Link2, LogOut, MessageCircle, Pencil, Share2, ShieldCheck, Star, Users, X } from 'lucide-react';
 import { useGame, HEART_POINTS, type RelationshipType } from '../store/GameContext';
@@ -21,12 +21,10 @@ const RELATIONSHIPS: { type: RelationshipType; icon: 'together' | 'smile' | 'hea
   { type: 'bestfriend', icon: 'together' }, { type: 'crush', icon: 'smile' },
   { type: 'lover', icon: 'heart' }, { type: 'spouse', icon: 'ring' },
 ];
-const cloudAvailable = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFriends }) => {
   const { profile, partner, setProfile, setPartner, t } = useGame();
   const { friends, unreadTotal, createInviteLink } = useFriends();
-  const { user, couple, signInWithGoogle, signOut, refreshCouple } = useAuth();
+  const { user, couple, signOut, refreshCouple } = useAuth();
   const [view, setView] = useState<ProfileView>('main');
   const [editName, setEditName] = useState(profile?.name ?? '');
   const [editAvatar, setEditAvatar] = useState(profile?.avatarId ?? 'sunny');
@@ -37,8 +35,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
   const invitedFrom = useRef(new Set<string>());
   const titleRef = useRef<HTMLHeadingElement>(null);
   const dialogRef = useChatDialog(true, () => { if (!busy) view === 'main' ? onClose() : changeView('main'); });
-  const isGuest = !user || user.id.startsWith('guest-');
-  const inviteLink = view === 'invite' || view === 'waiting' ? createInviteLink(partnerRel) : '';
+  const [inviteLink, setInviteLink] = useState('');
 
   function changeView(next: ProfileView) {
     setError('');
@@ -50,6 +47,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
     if (dialogRef.current) dialogRef.current.scrollTop = 0;
     titleRef.current?.focus({ preventScroll: true });
   }, [dialogRef, view]);
+  useEffect(() => {
+    if (view !== 'waiting' && view !== 'invite') return;
+    if (inviteLink) return;
+    let current = true;
+    setBusy(true);
+    setInviteLink('');
+    void createInviteLink(partnerRel)
+      .then(link => { if (current) setInviteLink(link); })
+      .catch(() => { if (current) setError('Your secure invite could not be created. Please try again.'); })
+      .finally(() => { if (current) setBusy(false); });
+    return () => { current = false; };
+  }, [createInviteLink, partnerRel, view]);
   useEffect(() => {
     if (view !== 'waiting' && view !== 'invite') return;
     const accepted = friends.find(friend => friend.linked && !invitedFrom.current.has(friend.id) && friend.relationshipType === partnerRel);
@@ -129,13 +138,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
     try { await signOut(); onClose(); }
     catch { setError('Sign out did not finish. Please try again.'); setBusy(false); }
   };
-  const connectAccount = async () => {
-    setBusy(true);
-    setError('');
-    try { await signInWithGoogle(); }
-    catch { setError('Sign-in could not open. Please try again.'); }
-    finally { setBusy(false); }
-  };
   const titles: Record<ProfileView, string> = {
     main: t.profileTitle, edit: 'Make it yours.', invite: 'Better as a duo.', waiting: 'Invite ready. Game on.', signOut: 'Heading out?', unlink: 'Unlink your person?',
   };
@@ -202,9 +204,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
           </div>
           <section className="profile-account" aria-label="Your account">
             <span className="profile-account-icon"><ShieldCheck aria-hidden="true" /></span>
-            <div className="profile-account-copy"><h2>{isGuest ? 'Playing as a guest' : 'Your connected account'}</h2><p>{isGuest ? 'Your profile and points stay in this browser.' : user?.email}</p></div>
+            <div className="profile-account-copy"><h2>Your connected account</h2><p>{user?.email}</p></div>
             <div className="profile-account-actions">
-              {isGuest && cloudAvailable && <button type="button" className="profile-button" disabled={busy} onClick={connectAccount}>{busy ? 'Opening...' : 'Save with Google'}</button>}
               {user && <button type="button" className="profile-signout" onClick={() => changeView('signOut')}><LogOut size={16} aria-hidden="true" /> Sign out</button>}
             </div>
           </section>
@@ -235,11 +236,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
           <div className="profile-invite-form">
             {view === 'invite' ? <>
               <h2>Who is your player two?</h2><p>A bestie, a crush, your favourite human.</p>
-              <div className="profile-relationships" role="group" aria-label="Your relationship">{RELATIONSHIPS.map(option => <button type="button" key={option.type} aria-pressed={partnerRel === option.type} onClick={() => { setPartnerRel(option.type); setNotice(''); }}><UiSymbol kind={option.icon} /><span>{relLabel(option.type)}</span>{partnerRel === option.type && <Check size={15} aria-hidden="true" />}</button>)}</div>
+              <div className="profile-relationships" role="group" aria-label="Your relationship">{RELATIONSHIPS.map(option => <button type="button" key={option.type} aria-pressed={partnerRel === option.type} onClick={() => { setPartnerRel(option.type); setInviteLink(''); setNotice(''); }}><UiSymbol kind={option.icon} /><span>{relLabel(option.type)}</span>{partnerRel === option.type && <Check size={15} aria-hidden="true" />}</button>)}</div>
             </> : <>
               <span className="profile-wait-icon"><Link2 size={28} aria-hidden="true" /></span><h2>A little hello is on its way.</h2><p>Once your person opens the link and accepts, you'll find each other in Friends & chat.</p>
             </>}
-            <div className="profile-invite-actions"><button type="button" className="profile-button profile-primary" onClick={shareInvite}><Share2 size={17} aria-hidden="true" /> {view === 'waiting' ? 'Share again' : 'Share invite'}</button><button type="button" className="profile-button" onClick={copyInvite}><Copy size={17} aria-hidden="true" /> Copy link</button></div>
+            <div className="profile-invite-actions"><button type="button" className="profile-button profile-primary" disabled={busy || !inviteLink} onClick={shareInvite}><Share2 size={17} aria-hidden="true" /> {view === 'waiting' ? 'Share again' : 'Share invite'}</button><button type="button" className="profile-button" disabled={busy || !inviteLink} onClick={copyInvite}><Copy size={17} aria-hidden="true" /> Copy link</button></div>
             <label className="profile-link-label" htmlFor="profile-invite-link">Your invite link</label><input id="profile-invite-link" className="profile-invite-link" value={inviteLink} readOnly onFocus={event => event.target.select()} />
             <p className="profile-invite-note"><Users size={16} aria-hidden="true" /> Keep both apps open while connecting.</p>
             {view === 'waiting' && <button type="button" className="profile-text-button" onClick={() => changeView('main')}>Back to my profile <ArrowRight size={16} aria-hidden="true" /></button>}
@@ -249,7 +250,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
         {(view === 'signOut' || view === 'unlink') && <div className="profile-confirm">
           <span className="profile-confirm-icon">{view === 'signOut' ? <LogOut aria-hidden="true" /> : <Heart aria-hidden="true" />}</span>
           <h2>{view === 'signOut' ? 'Same time, next game?' : `Unlink from ${partner?.name ?? 'your partner'}?`}</h2>
-          <p>{view === 'signOut' ? (isGuest ? 'Your guest profile is stored in this browser. Signing out ends this guest session.' : 'You can sign back in with the same account when you are ready to play again.') : (couple ? 'This disconnects your partner profiles and resets your shared couple points.' : 'This removes the partner from your profile. Your saved chats stay in Friends.')}</p>
+          <p>{view === 'signOut' ? 'You can sign back in with the same account when you are ready to play again.' : (couple ? 'This disconnects your partner profiles and resets your shared couple points.' : 'This removes the partner from your profile. Your saved chats stay in Friends.')}</p>
           <div className="profile-form-actions"><button type="button" className="profile-button" disabled={busy} onClick={() => changeView('main')}>Cancel</button><button type="button" className="profile-button profile-danger" disabled={busy} onClick={view === 'signOut' ? leaveAccount : unlinkPartner}>{busy ? 'Please wait...' : view === 'signOut' ? 'Sign out' : 'Unlink partner'}<ArrowRight size={17} aria-hidden="true" /></button></div>
         </div>}
 
@@ -260,3 +261,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
     </div>, document.body,
   );
 };
+
+
+
+
+

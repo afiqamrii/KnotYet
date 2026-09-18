@@ -1,25 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+﻿import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { AdModal } from '../components/AdModal';
-import { readJson } from '../utils/storage';
 
 const MULTIPLAYER_DAILY_LIMIT = 3;
 const SOLO_DAILY_LIMIT = 5;
-const GUEST_EMAIL = 'guest@knotyet.local';
-
-const isGuestUser = (user: User | null): boolean => user?.id.startsWith('guest-') === true;
-
-const createGuestUser = (id: string): User => ({
-  id,
-  email: GUEST_EMAIL,
-  aud: 'authenticated',
-  role: 'authenticated',
-  created_at: new Date().toISOString(),
-  app_metadata: { provider: 'guest', providers: ['guest'] },
-  user_metadata: { display_name: 'Guest Player' },
-});
-
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -27,8 +12,7 @@ interface AuthContextType {
   progress: UserProgress | null;
   couple: CoupleProgress | null;
   isLoading: boolean;
-  signInWithGoogle: () => Promise<void>;
-  signInAsGuest: () => void;
+  signInWithGoogle: (returnPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProgress: () => Promise<void>;
   refreshCouple: () => Promise<void>;
@@ -45,7 +29,6 @@ const AuthContext = createContext<AuthContextType>({
   couple: null,
   isLoading: true,
   signInWithGoogle: async () => {},
-  signInAsGuest: () => {},
   signOut: async () => {},
   refreshProgress: async () => {},
   refreshCouple: async () => {},
@@ -79,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshProgress = async () => {
-    if (!user || isGuestUser(user)) return;
+    if (!user) return;
     const { data, error } = await supabase
       .from('user_progress')
       .select('*')
@@ -111,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshCouple = async () => {
-    if (!user || isGuestUser(user)) return;
+    if (!user) return;
     const { data, error } = await supabase
       .from('couples')
       .select('*')
@@ -128,17 +111,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(session);
       if (session?.user) {
         setUser(session.user);
-      } else if (localStorage.getItem('knotyet_guest_active') === 'true') {
-        const guestId = localStorage.getItem('knotyet_guest_id') || 'guest-123';
-        const saved = readJson<Record<string, unknown> | null>(localStorage, 'jodohdeck_profile', null);
-        const name = typeof saved?.name === 'string' && saved.name.trim() ? saved.name : 'Guest Player';
-        const avatar = typeof saved?.avatarId === 'string' ? saved.avatarId : 'sunny';
-        const points = typeof saved?.heartPoints === 'number' && Number.isFinite(saved.heartPoints) ? Math.max(0, saved.heartPoints) : 320;
-        setUser(createGuestUser(guestId));
-        setProfile({ id: guestId, name, avatar_id: avatar, created_at: '' });
-        setProgress({ user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: points, answered_questions: [], last_reset_date: '', is_premium: false });
-        setIsLoading(false);
       } else {
+        localStorage.removeItem('knotyet_guest_active');
+        localStorage.removeItem('knotyet_guest_id');
         setUser(null);
         setIsLoading(false);
       }
@@ -160,11 +135,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!user) {
         setProfile(null);
         setProgress(null);
-        setIsLoading(false);
-        return;
-      }
-
-      if (isGuestUser(user)) {
         setIsLoading(false);
         return;
       }
@@ -235,41 +205,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { ignore = true; };
   }, [user]);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (returnPath?: string) => {
+    const safePath = returnPath === '/invite' ? '/invite' : '/';
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin.includes('localhost') 
-          ? window.location.origin 
-          : 'https://knotyetapp.me'
-      }
+      options: { redirectTo: `${window.location.origin}${safePath}` }
     });
     if (error) throw error;
   };
 
-  const signInAsGuest = () => {
-    const guestId = 'guest-' + Date.now();
-    localStorage.setItem('knotyet_guest_active', 'true');
-    localStorage.setItem('knotyet_guest_id', guestId);
-    const guestUser = createGuestUser(guestId);
-    const guestProf = { id: guestId, name: 'Guest Player', avatar_id: 'sunny', created_at: new Date().toISOString() };
-    const guestProg = { user_id: guestId, solo_play_count: 0, play_together_count: 0, heart_points: 320, answered_questions: [], last_reset_date: '', is_premium: false };
-    localStorage.setItem('jodohdeck_profile', JSON.stringify({ name: guestProf.name, avatarId: guestProf.avatar_id, heartPoints: guestProg.heart_points }));
-    setUser(guestUser);
-    setProfile(guestProf);
-    setProgress(guestProg);
-    setIsLoading(false);
-  };
-
   const signOut = async () => {
-    const shouldSignOutRemotely = !isGuestUser(user);
     localStorage.removeItem('knotyet_guest_active');
     localStorage.removeItem('knotyet_guest_id');
     setUser(null);
     setProfile(null);
     setProgress(null);
     try {
-      if (shouldSignOutRemotely) await supabase.auth.signOut();
+      await supabase.auth.signOut();
     } catch {
       // Ignore network errors when signing out
     }
@@ -307,14 +259,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signInAsGuest, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay, checkLimit }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay, checkLimit }}>
       {children}
       {isAdModalOpen && adLimitType && (
         <AdModal 
-          title={adLimitType === 'multiplayer' ? "Multiplayer Limit Reached" : "Daily Limit Reached"}
+          title={adLimitType === 'multiplayer' ? "Ready for one more together?" : "Ready for one more game?"}
           description={adLimitType === 'multiplayer' 
-            ? `You've used your ${MULTIPLAYER_DAILY_LIMIT} free multiplayer sessions for today.`
-            : `You've completed ${SOLO_DAILY_LIMIT} solo games today!`}
+            ? `You've enjoyed your ${MULTIPLAYER_DAILY_LIMIT} free multiplayer sessions today. A short ad unlocks another.`
+            : `You've completed ${SOLO_DAILY_LIMIT} solo games today. A short ad unlocks another.`}
           rewardText={adLimitType === 'multiplayer' ? "1 Multiplayer Session" : "1 Solo Game"}
           onClose={() => setIsAdModalOpen(false)}
           onRewardEarned={() => {
@@ -326,3 +278,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
+

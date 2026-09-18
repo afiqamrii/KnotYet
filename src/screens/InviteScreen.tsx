@@ -1,17 +1,16 @@
-import '../styles/invite.css';
+﻿import '../styles/invite.css';
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, MessageCircle, Users } from 'lucide-react';
 import { useAuth } from '../store/AuthContext';
-import { useGame } from '../store/GameContext';
 import { Avatar } from '../components/AvatarPicker';
 import { BrandMark } from '../components/ArcadeArt';
-import { ACCEPTED_INVITE_KEY, PENDING_INVITE_KEY, getChatIdentity, parseFriendInvite, type FriendInvite } from '../utils/friendInvites';
+import { PENDING_INVITE_KEY, parseFriendInvite, type FriendInvite } from '../utils/friendInvites';
+import { supabase } from '../lib/supabase';
 import { sounds } from '../utils/audio';
 
 export const InviteScreen: React.FC = () => {
-  const { user, signInWithGoogle, signInAsGuest, isLoading } = useAuth();
-  const { setProfile } = useGame();
+  const { user, signInWithGoogle, isLoading, refreshCouple } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -22,23 +21,26 @@ export const InviteScreen: React.FC = () => {
     if (location.search) return null;
     try { return JSON.parse(sessionStorage.getItem(PENDING_INVITE_KEY) || 'null'); } catch { return null; }
   });
-  const accept = async (google = false) => {
+  const accept = async () => {
     if (!invite || busy) return;
-    if (user && getChatIdentity(user.id).id === invite.id) { setError('This is your own invite. Send it to your person instead.'); return; }
     setError('');
-    sessionStorage.setItem(ACCEPTED_INVITE_KEY, JSON.stringify(invite));
-    if (google) {
+    if (!user) {
       setBusy(true);
-      try { await signInWithGoogle(); } catch { setError('Sign-in could not start. Try again or continue as a guest.'); setBusy(false); }
+      try { await signInWithGoogle('/invite'); } catch { setError('Sign-in could not start. Please try again.'); setBusy(false); }
       return;
     }
-    if (!user) {
-      signInAsGuest();
-      setProfile({ name: 'Guest Player', avatarId: 'sunny', heartPoints: 320 });
+    setBusy(true);
+    try {
+      const { error: acceptError } = await supabase.rpc('accept_chat_invite', { invite_token: invite.token });
+      if (acceptError) throw acceptError;
+      sounds.playSuccess();
+      sessionStorage.removeItem(PENDING_INVITE_KEY);
+      await refreshCouple();
+      navigate('/play');
+    } catch {
+      setError('This invite is invalid, expired, or was already used. Ask for a new link.');
+      setBusy(false);
     }
-    sounds.playSuccess();
-    sessionStorage.removeItem(PENDING_INVITE_KEY);
-    navigate('/play');
   };
   return (
     <main className="invite-page">
@@ -55,12 +57,18 @@ export const InviteScreen: React.FC = () => {
           <h1 id="invite-title">{invite.name} saved you a spot.</h1>
           <p>Accept their invite and make room for more chats, more games, and more good times together.</p>
           <div className="invite-perks"><span><Check size={18} /> Add each other to your circle</span><span><Check size={18} /> Chat and send game invites</span></div>
-          <p className="invite-note">Keep KnotYet open on both devices to connect. Chats are saved in this browser.</p>
+          <p className="invite-note">Your connection and chat history are securely saved to your account.</p>
           {error && <p role="alert" className="invite-error">{error}</p>}
-          <button className="btn-chunky btn-purple" disabled={busy} onClick={() => void accept()}>{user ? 'Accept & connect' : 'Accept as a guest'}<ArrowRight size={18} /></button>
-          {!user && <button className="invite-google" disabled={busy} onClick={() => void accept(true)}>{busy ? 'Opening sign-in...' : 'Or sign in with Google'}</button>}
+          <button className="btn-chunky btn-purple" disabled={busy} onClick={() => void accept()}>{busy ? 'Opening Google sign-inâ€¦' : user ? 'Accept & connect' : 'Sign in & accept invite'}<ArrowRight size={18} /></button>
+          {!user && <p className="invite-note">An account is required so your friendship and messages stay connected.</p>}
         </>}
       </section>
     </main>
   );
 };
+
+
+
+
+
+

@@ -1,5 +1,5 @@
 import React, { lazy, useMemo, useState } from 'react';
-import { Layers, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, MessageCircle, X, Gamepad2, Clock3, ArrowUpRight } from 'lucide-react';
+import { Layers, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, MessageCircle, X, Gamepad2, Clock3, ArrowUpRight, MousePointerClick } from 'lucide-react';
 import { SWIPE_CARDS, type CardCategory } from '../data/questions';
 import { getShuffledSwipeCards, getSwipeCardsByIds, markQuestionAsSeen } from '../utils/questionManager';
 import { SwipeCard } from '../components/SwipeCard';
@@ -16,6 +16,7 @@ import { EndGameModal } from '../components/EndGameModal';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { BrandMark } from '../components/ArcadeArt';
 import { GameModeNav } from '../components/GameModeNav';
+import { MultiplayerWaitingRoom } from '../components/MultiplayerWaitingRoom';
 import '../styles/play.css';
 import '../styles/play-layout.css';
 import { clearStorageKeys, GAME_SESSION_KEYS, readJson, STORAGE_KEYS, writeJson } from '../utils/storage';
@@ -69,9 +70,11 @@ export const PlayScreen: React.FC = () => {
     sessionStorage.setItem('knotyet_isProfileOpen', String(val));
   };
   const [isMusicMenuOpen, setIsMusicMenuOpen] = useState(false);
-  const [isMuted, setIsMuted] = useState(sounds.isMuted);
+  const [effectsMuted, setEffectsMuted] = useState(sounds.effectsMuted);
+  const [musicMuted, setMusicMuted] = useState(sounds.musicMuted);
   const [currentTrack, setCurrentTrack] = useState(sounds.currentTrackIndex);
   const [effectVolume, setEffectVolume] = useState(sounds.effectVolume);
+  const [musicVolume, setMusicVolume] = useState(sounds.musicVolume);
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
   const sessionRestoredRef = React.useRef(false);
 
@@ -195,7 +198,7 @@ export const PlayScreen: React.FC = () => {
     return getShuffledSwipeCards(selectedCategory, 15);
   }, [selectedCategory, roundCounter, multiplayer.status, multiplayer.isHost, syncedSwipeCardIds]);
 
-  // Host broadcasts the card deck to guest for synchronized cards
+  // Host broadcasts the card deck to the joining player for synchronized cards
   React.useEffect(() => {
     if (multiplayer.status === 'connected' && multiplayer.isHost && currentTab === 'swipe' && filteredCards.length > 0) {
       multiplayer.sendMessage({
@@ -414,54 +417,13 @@ export const PlayScreen: React.FC = () => {
 
   // ---- Multiplayer Waiting / Connecting Overlay ----
   if (multiplayer.status === 'hosting' || multiplayer.status === 'joining') {
-    return (
-      <div className="arcade-wait-screen min-h-[100dvh] p-4 sm:p-6 md:p-8 flex items-center justify-center relative overflow-hidden">
-        <div className="bg-blob w-96 h-96 -top-20 -left-20 bg-pink-500 opacity-20" />
-        <div className="bg-blob w-[500px] h-[500px] -bottom-40 -right-20 bg-cyan-400 opacity-20" />
-        
-        <div className="game-card w-full max-w-sm p-8 text-center space-y-6 relative z-10 animate-pop-in">
-          <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-white mb-2"
-            style={{ background: 'linear-gradient(135deg, #10B981, #059669)', boxShadow: '0 8px 24px rgba(16,185,129,0.4)' }}>
-            <Users className="w-8 h-8" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-ink">
-              {multiplayer.status === 'hosting' ? 'Hosting Room' : 'Joining Room'}
-            </h2>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-indigo-50 border-2 border-indigo-100 space-y-3">
-            {multiplayer.status === 'hosting' && (
-              <div className="py-4 space-y-3">
-                <div className="w-8 h-8 rounded-full border-4 border-brand border-t-transparent animate-spin mx-auto" />
-                <p className="text-sm font-bold text-brand mt-4">Waiting for partner...</p>
-                <div className="my-3">
-                  <span className="text-3xl font-black text-ink tracking-widest bg-white py-2 px-4 rounded-xl shadow-sm border border-indigo-100 inline-block">{multiplayer.roomCode}</span>
-                </div>
-                <p className="text-xs text-ink-3">Share this code with your partner</p>
-              </div>
-            )}
-            
-            {multiplayer.status === 'joining' && (
-              <div className="py-4 space-y-3">
-                <div className="w-8 h-8 rounded-full border-4 border-teal-500 border-t-transparent animate-spin mx-auto" />
-                <p className="text-sm font-bold text-teal-600 mt-4">Connecting to room...</p>
-              </div>
-            )}
-          </div>
-          
-          <button onClick={() => multiplayer.leaveRoom()} className="text-xs font-bold text-red-500 hover:text-red-600 transition">
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
+    return <MultiplayerWaitingRoom status={multiplayer.status} roomCode={multiplayer.roomCode} profile={profile} onCancel={() => multiplayer.leaveRoom()} />;
   }
 
   return (
     <div className="play-shell arcade-play" data-game={currentTab} data-playing={isPlayingGame}>
       <div className="arcade-play-decoration" aria-hidden="true">
-        <span className="arcade-decoration-star">✳</span>
+        <span className="arcade-decoration-star"><Sparkles /></span>
         <span className="arcade-decoration-heart"><Heart /></span>
       </div>
 
@@ -470,7 +432,8 @@ export const PlayScreen: React.FC = () => {
           <div className="arcade-play-brand"><BrandMark />KnotYet</div>
           <span className="arcade-brand-message">A little time. Just for you two.</span>
           <div className="arcade-session-controls">
-            {isPlayingGame && <button type="button" className="arcade-icon-button global-sound-toggle" aria-label={isMuted ? 'Unmute all sound' : 'Mute all sound'} title={isMuted ? 'Unmute all sound' : 'Mute all sound'} onClick={() => setIsMuted(sounds.toggleMute())}>{isMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</button>}
+            {isPlayingGame && <button type="button" className="arcade-icon-button global-sound-toggle" aria-label={musicMuted ? 'Turn music on' : 'Mute music'} title={musicMuted ? 'Turn music on' : 'Mute music'} onClick={() => setMusicMuted(sounds.toggleMusicMute())}>{musicMuted ? <VolumeX aria-hidden="true" /> : <Music aria-hidden="true" />}</button>}
+            {isPlayingGame && <button type="button" className="arcade-icon-button global-sound-toggle" aria-label={effectsMuted ? 'Turn tap sounds on' : 'Mute tap sounds'} title={effectsMuted ? 'Turn tap sounds on' : 'Mute tap sounds'} onClick={() => setEffectsMuted(sounds.toggleEffectsMute())}>{effectsMuted ? <VolumeX aria-hidden="true" /> : <MousePointerClick aria-hidden="true" />}</button>}
             {isPlayingGame && <button type="button" className="game-end-button global-end-game" onClick={handleEndGame}><X size={15} aria-hidden="true" /> End Game</button>}
             <span className="arcade-session-clock" aria-label={`Session time ${formatTime(sessionSeconds)}`}><Clock3 aria-hidden="true" /> {formatTime(sessionSeconds)}</span>
           </div>
@@ -498,20 +461,20 @@ export const PlayScreen: React.FC = () => {
                 </button>
                 <div className="arcade-music-control">
                   <button type="button" onClick={() => setIsMusicMenuOpen(!isMusicMenuOpen)} aria-label="Sound settings" aria-expanded={isMusicMenuOpen} title="Set the mood" className="arcade-icon-button">
-                    {isMuted ? <VolumeX aria-hidden="true" /> : <Music aria-hidden="true" />}
+                    {musicMuted && effectsMuted ? <VolumeX aria-hidden="true" /> : <Music aria-hidden="true" />}
                   </button>
                   {isMusicMenuOpen && (
                     <div className="arcade-music-menu">
-                      <div className="arcade-music-heading">
-                        <span>Sound & music</span>
-                        <button type="button" onClick={() => { const muted = sounds.toggleMute(); setIsMuted(muted); }} aria-label={isMuted ? 'Unmute all sound' : 'Mute all sound'} className="arcade-icon-button">
-                          {isMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-                        </button>
+                      <div className="arcade-music-heading"><span>Your sound mix</span><small>Set each one your way</small></div>
+                      <div className="sound-channel">
+                        <div className="sound-channel-head"><label htmlFor="music-volume"><Music aria-hidden="true" /> Music <span>{Math.round(musicVolume * 100)}%</span></label><button type="button" onClick={() => setMusicMuted(sounds.toggleMusicMute())} aria-label={musicMuted ? 'Turn music on' : 'Mute music'} aria-pressed={musicMuted}>{musicMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</button></div>
+                        <input id="music-volume" type="range" min="0" max="100" step="5" value={Math.round(musicVolume * 100)} onChange={event => { const value = Number(event.target.value) / 100; sounds.setMusicVolume(value); setMusicVolume(value); }} />
+                        <p>{musicMuted ? 'Music is paused.' : 'Background mood while you play.'}</p>
                       </div>
-                      <div className="sound-volume">
-                        <label htmlFor="effects-volume">Tap & game sounds <span>{Math.round(effectVolume * 100)}%</span></label>
+                      <div className="sound-channel">
+                        <div className="sound-channel-head"><label htmlFor="effects-volume"><MousePointerClick aria-hidden="true" /> Taps & game sounds <span>{Math.round(effectVolume * 100)}%</span></label><button type="button" onClick={() => setEffectsMuted(sounds.toggleEffectsMute())} aria-label={effectsMuted ? 'Turn tap sounds on' : 'Mute tap sounds'} aria-pressed={effectsMuted}>{effectsMuted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}</button></div>
                         <input id="effects-volume" type="range" min="0" max="100" step="5" value={Math.round(effectVolume * 100)} onChange={event => { const value = Number(event.target.value) / 100; sounds.setEffectVolume(value); setEffectVolume(value); }} onPointerUp={() => sounds.playFlip()} onKeyUp={() => sounds.playFlip()} />
-                        <p>{isMuted ? 'All sound is muted.' : 'Happy taps and little celebrations. Set to 0 for music only.'}</p>
+                        <p>{effectsMuted ? 'Tap sounds are muted.' : 'Cheerful taps, flips, and wins.'}</p>
                       </div>
                       {sounds.tracks.map((track, idx) => (
                         <button type="button" key={idx} onClick={() => { sounds.setTrack(idx); setCurrentTrack(idx); }} className="arcade-track-button" aria-pressed={currentTrack === idx}>

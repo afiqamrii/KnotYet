@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { AvatarPicker, Avatar } from '../components/AvatarPicker';
-import { Heart, Sparkles, UserCircle2 } from 'lucide-react';
+import { Heart, Sparkles } from 'lucide-react';
 
 export const OnboardingScreen: React.FC = () => {
   const { setProfile, t } = useGame();
@@ -65,21 +65,8 @@ export const OnboardingScreen: React.FC = () => {
               Continue with Google
             </button>
 
-            <div className="flex items-center gap-3 opacity-50 my-2">
-              <div className="flex-1 h-px bg-current"></div>
-              <span className="text-xs font-bold uppercase tracking-widest">OR</span>
-              <div className="flex-1 h-px bg-current"></div>
-            </div>
-
-            <button
-              onClick={() => setStep('avatar')}
-              className="btn-chunky btn-white w-full flex items-center justify-center gap-2 opacity-80"
-            >
-              <UserCircle2 className="w-5 h-5" />
-              Play as Guest (Local Only)
-            </button>
             <p className="text-xs text-center text-ink-3 font-semibold px-4 mt-2">
-              Guest progress will be lost if you clear your browser data.
+              Sign in to keep your profile, friends, points, and messages connected.
             </p>
           </div>
         ) : step === 'avatar' ? (

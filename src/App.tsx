@@ -16,7 +16,7 @@ const ProtectedRoute = ({ children, requireProfile = true }: { children: React.R
   const location = useLocation();
 
   if (isLoading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/" state={{ from: location }} replace />;
+  if (!user || user.id.startsWith('guest-')) return <Navigate to="/" state={{ from: location }} replace />;
   if (requireProfile && !profile) return <Navigate to="/setup" replace />;
   if (!requireProfile && profile) return <Navigate to="/play" replace />;
   return <>{children}</>;
@@ -27,7 +27,7 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { profile } = useGame();
 
   if (isLoading) return <LoadingScreen />;
-  if (user) return <Navigate to={profile ? '/play' : '/setup'} replace />;
+  if (user && !user.id.startsWith('guest-')) return <Navigate to={profile ? '/play' : '/setup'} replace />;
   return <>{children}</>;
 };
 

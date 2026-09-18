@@ -68,7 +68,7 @@ export const PrivacyPolicy = () => {
               <h3>Information collected automatically</h3>
               <ul>
                 <li><strong>Device and usage data.</strong> Our hosting, analytics, and advertising providers may receive information such as your IP address, browser and device type, pages viewed, referring page, approximate location derived from IP, and timestamps.</li>
-                <li><strong>Browser storage.</strong> We use local storage and session storage to remember guest sessions, preferences, profile details, game state, room codes, and progress on your device.</li>
+                <li><strong>Browser storage.</strong> We use local storage and session storage to remember preferences, profile details, game state, room codes, and progress on your device.</li>
                 <li><strong>Multiplayer connection data.</strong> When you use multiplayer features, technical connection identifiers and network information may be processed to establish a peer-to-peer connection. Game data sent during that session may travel directly between players.</li>
               </ul>
             </section>
@@ -110,7 +110,7 @@ export const PrivacyPolicy = () => {
             <section id={'choices'}>
               <h2>6. Your choices and privacy rights</h2>
               <ul>
-                <li>You can play as a guest without connecting a Google account.</li>
+                <li>You can sign out at any time and manage the Google account used to access KnotYet.</li>
                 <li>You can block or clear cookies, local storage, and session storage in your browser. Doing so may reset your progress or affect site features.</li>
                 <li>You can change advertising preferences using the links in the advertising section above.</li>
                 <li>You may request access to, correction of, or deletion of personal information associated with your account by contacting us.</li>
@@ -120,7 +120,7 @@ export const PrivacyPolicy = () => {
 
             <section id={'retention'}>
               <h2>7. Data retention and security</h2>
-              <p>We keep personal information only for as long as reasonably necessary to provide the service, meet legal obligations, resolve disputes, and protect our legitimate interests. Guest and session data stored in your browser remains until it expires or you clear it. Account data may remain until the account is deleted or the applicable retention period ends.</p>
+              <p>We keep personal information only for as long as reasonably necessary to provide the service, meet legal obligations, resolve disputes, and protect our legitimate interests. Session data stored in your browser remains until it expires or you clear it. Account data may remain until the account is deleted or the applicable retention period ends.</p>
               <p>We use reasonable technical and organisational safeguards designed to protect information. However, no internet transmission or storage system is completely secure, so we cannot guarantee absolute security.</p>
             </section>
 

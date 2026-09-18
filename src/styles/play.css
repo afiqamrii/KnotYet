@@ -38,7 +38,8 @@
   -webkit-backdrop-filter: none;
 }
 .arcade-play-decoration { position: absolute; inset: 0; overflow: hidden; z-index: -1; pointer-events: none; }
-.arcade-decoration-star { position: absolute; color: #d5f578; font-size: 300px; line-height: 1; left: -140px; top: 190px; -webkit-text-stroke: 2px #241d35; transform: rotate(14deg); }
+.arcade-decoration-star { position: absolute; left: -112px; top: 205px; width: 250px; height: 250px; display: grid; place-items: center; color: #d5f578; transform: rotate(14deg); }
+.arcade-decoration-star svg { width: 100%; height: 100%; fill: currentColor; stroke: #241d35; stroke-width: .8; vector-effect: non-scaling-stroke; }
 .arcade-decoration-heart { position: absolute; right: -100px; bottom: 40px; transform: rotate(20deg); color: #ff829e; }
 .arcade-decoration-heart svg { height: 270px; width: 270px; fill: currentColor; stroke: #241d35; stroke-width: .75; }
 .arcade-brand-strip { padding: 17px 28px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 2px solid #241d35; }
@@ -70,8 +71,13 @@
 .arcade-play .play-together-button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #241d35 !important; }
 .arcade-invite-button svg { width: 16px; height: 16px; }
 .arcade-music-control { position: relative; }
-.arcade-music-menu { position: absolute; top: 54px; right: 0; z-index: 50; width: 250px; max-width: calc(100vw - 32px); padding: 12px; border: 2px solid #241d35; border-radius: 20px; color: #241d35; background: #fffaf0; box-shadow: 5px 5px 0 #241d35; }
-.arcade-music-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font: 700 16px 'Outfit', sans-serif; }
+.arcade-music-menu { position: absolute; top: 54px; right: 0; z-index: 50; width: 310px; max-width: calc(100vw - 32px); padding: 15px; border: 2px solid #241d35; border-radius: 20px; color: #241d35; background: #fffaf0; box-shadow: 5px 5px 0 #241d35; }
+.arcade-music-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 11px; font: 750 17px 'Outfit', sans-serif; }.arcade-music-heading small { color: #81798c; font: 650 9px 'DM Sans',sans-serif; }
+.sound-channel { margin-bottom: 10px; padding: 11px; border: 1.5px solid #d8cfe2; border-radius: 13px; background: #fffdf8; }
+.sound-channel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sound-channel-head label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 750; }.sound-channel-head label > span { color: #7650e8; }.sound-channel-head label svg { width: 15px; height: 15px; }
+.sound-channel-head button { width: 31px; height: 31px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid #241d35; border-radius: 9px; background: #e9e0ff; }.sound-channel-head button[aria-pressed='true'] { background: #ffdae3; }.sound-channel-head button svg { width: 14px; height: 14px; }
+.sound-channel > input { width: 100%; min-height: 28px; accent-color: #7650e8; cursor: pointer; }.sound-channel > p { margin: 0; color: #786987; font: 500 9px/1.4 'DM Sans',sans-serif; }
 .arcade-track-button { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 44px; padding: 8px 10px; border-radius: 10px; color: #6c6479; font-size: 13px; text-align: left; }
 .arcade-track-button:hover { background: #eee6ff; }
 .arcade-track-button[aria-pressed='true'] { color: #4d2baa; background: #eee6ff; font-weight: 700; }
@@ -188,6 +194,9 @@
 
 @media (max-width: 1023px) {
   .arcade-play { padding: 20px 20px 30px; }
+  .arcade-decoration-star { left: -86px; top: 205px; width: 190px; height: 190px; }
+  .arcade-decoration-heart { right: -78px; bottom: 55px; }
+  .arcade-decoration-heart svg { width: 215px; height: 215px; }
   .arcade-play .play-console { box-shadow: 6px 6px 0 #241d35 !important; }
   .arcade-play .game-mode-tab { padding: 10px 8px; gap: 7px; }
   .arcade-play .game-mode-icon { flex-basis: 28px; width: 28px; }

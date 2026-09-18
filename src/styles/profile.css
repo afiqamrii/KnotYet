@@ -1,4 +1,4 @@
-/* Player profiles share the arcade's paper, ink, and candy-colour palette. */
+﻿/* Player profiles share the arcade's paper, ink, and candy-colour palette. */
 .profile-page {
   --profile-ink: #241d35;
   --profile-muted: #655d72;
@@ -44,7 +44,7 @@
 .profile-player-pass > p { margin-top: 8px; font-size: 12px; }
 .profile-pass-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: calc(100% + 40px); margin: auto -20px 0; padding: 19px 17px; border-top: 1.5px dashed #241d3566; background: #fffaf075; }
 .profile-pass-bottom > div { display: flex; flex-direction: column; gap: 3px; }
-.profile-pass-bottom > div > span { font-size: 8px; letter-spacing: .08em; font-weight: 750; }
+.profile-pass-bottom > div > span { font-size: 10px; letter-spacing: .08em; font-weight: 750; }
 .profile-pass-bottom strong { font-size: 16px; }
 .profile-pass-bottom .profile-button { padding-inline: 11px; font-size: 12px; }
 .profile-hearts { grid-column: span 2; padding: 20px 24px; background: #e9e0ff; }
@@ -172,7 +172,7 @@
   .profile-page { padding: 15px 15px 24px; }
   .profile-shell { padding: 20px 20px 0; border-radius: 22px; }
   .profile-header { align-items: flex-start; }
-  .profile-header .profile-eyebrow { max-width: 200px; font-size: 8px; }
+  .profile-header .profile-eyebrow { max-width: 200px; font-size: 10px; }
   .profile-header h1 { font-size: 30px; margin-top: 6px; }
   .profile-back span { display: none; }
   .profile-page .profile-back { min-width: 44px; padding: 10px; }
@@ -183,7 +183,7 @@
   .profile-avatar-stage { grid-row: 2 / 4; padding: 6px 0 16px; }
   .profile-avatar-stage > .flex > div { width: 82px !important; height: 82px !important; font-size: 48px !important; box-shadow: 3px 3px 0 var(--profile-ink); }
   .profile-avatar-star { top: -5px; right: -3px; width: 23px; height: 23px; }
-  .profile-ready-stamp { font-size: 7px; padding: 4px; bottom: 3px; white-space: nowrap; }
+  .profile-ready-stamp { font-size: 10px; padding: 4px; bottom: 3px; white-space: nowrap; }
   .profile-ready-stamp svg { width: 10px; height: 10px; }
   .profile-player-pass h2 { align-self: end; text-align: left; font-size: 28px; }
   .profile-player-pass > p { align-self: start; font-size: 11px; margin-top: 6px; }
@@ -192,7 +192,7 @@
   .profile-heart-total > strong { font-size: 59px; }
   .profile-heart-total b { font-size: 14px; }
   .profile-person, .profile-circle { padding: 15px; }
-  .profile-person .profile-eyebrow { font-size: 7px; }
+  .profile-person .profile-eyebrow { font-size: 10px; }
   .profile-person h2, .profile-circle h2 { font-size: 20px; }
   .profile-account { flex-wrap: wrap; }
   .profile-account-actions { margin-left: auto; }
@@ -253,3 +253,4 @@
 @media (prefers-reduced-motion: reduce) {
   .profile-page *, .profile-page *::before, .profile-page *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
