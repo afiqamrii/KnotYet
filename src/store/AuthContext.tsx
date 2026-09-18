@@ -110,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
+        void supabase.realtime.setAuth(session.access_token);
         setUser(session.user);
       } else {
         localStorage.removeItem('knotyet_guest_active');
@@ -122,6 +123,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
+        // Postgres Change subscriptions use the current JWT for RLS. Refresh it
+        // whenever Auth rotates the session so chat does not silently go stale.
+        void supabase.realtime.setAuth(session.access_token);
         setUser(session.user);
       }
     });

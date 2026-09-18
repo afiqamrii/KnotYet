@@ -2,6 +2,7 @@ import {
   MATCH_QUESTIONS, 
   GUESS_QUIZ_LIST, 
   SWIPE_CARDS, 
+  WHEEL_SEGMENTS,
   MatchQuestion, 
   GuessQuizItem, 
   SwipeCardItem, 
@@ -163,27 +164,17 @@ export function getSwipeCardsByIds(ids: string[], additionalSeenIds?: Iterable<s
 // 4. SPIN WHEEL PROMPTS
 // ==========================================
 
-export function getRandomUnseenWheelPromptIndex(segmentId: string, totalPrompts: number): number {
-  const key = `wheel_seen_${segmentId}`;
-  try {
-    const stored = sessionStorage.getItem(key);
-    let seenIndices: number[] = stored ? JSON.parse(stored) : [];
+export const getWheelPromptId = (segmentId: string, promptIndex: number) => `wheel:${segmentId}:${promptIndex}`;
 
-    // If all prompts in this segment have been seen, reset
-    if (seenIndices.length >= totalPrompts) {
-      seenIndices = [];
-    }
+export function getRandomUnseenWheelSelection(additionalSeenIds?: Iterable<string>): { segmentIndex: number; promptIndex: number; questionId: string } | null {
+  const seen = getSeenQuestionIds(additionalSeenIds);
+  const available = WHEEL_SEGMENTS.flatMap((segment, segmentIndex) =>
+    segment.prompts.map((_, promptIndex) => ({
+      segmentIndex,
+      promptIndex,
+      questionId: getWheelPromptId(segment.id, promptIndex),
+    })),
+  ).filter(item => !seen.has(item.questionId));
 
-    const available = [];
-    for (let i = 0; i < totalPrompts; i++) {
-      if (!seenIndices.includes(i)) available.push(i);
-    }
-
-    const chosen = available[Math.floor(Math.random() * available.length)] ?? 0;
-    seenIndices.push(chosen);
-    sessionStorage.setItem(key, JSON.stringify(seenIndices));
-    return chosen;
-  } catch {
-    return Math.floor(Math.random() * totalPrompts);
-  }
+  return available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
 }

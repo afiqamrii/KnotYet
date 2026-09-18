@@ -22,9 +22,44 @@ const REACTIONS: Record<ReactionMood, readonly { id: string; alt: string }[]> = 
   lower: [{ id: '4cuyucPeVWbNS', alt: 'A playful reaction: try a lower number' }],
 };
 
-export function getReaction(mood: ReactionMood, seed: string) {
-  const pool = REACTIONS[mood];
+const CAPTIONS: Record<ReactionMood, readonly string[]> = {
+  match: [
+    'Same brain cell. Shared custody.',
+    'Okay telepathy, calm down.',
+    'Suspiciously accurate. We love to see it.',
+  ],
+  miss: [
+    'Plot twist: the relationship lore just expanded.',
+    'Different answers, premium entertainment.',
+    'Relationship patch notes updated.',
+  ],
+  win: [
+    'Main-character couple energy unlocked.',
+    'Tiny game. Ridiculously big victory.',
+    'The crowd goes wild. The crowd is also you two.',
+  ],
+  higher: [
+    'The number said: take the elevator.',
+    'Aim higher, brave mathematician.',
+  ],
+  lower: [
+    'Bring it down a floor, number genius.',
+    'Too spicy. Dial that number down.',
+  ],
+};
+
+const hashSeed = (seed: string) => {
   let hash = 0;
   for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return pool[hash % pool.length];
+  return hash;
+};
+
+export function getReaction(mood: ReactionMood, seed: string) {
+  const pool = REACTIONS[mood];
+  return pool[hashSeed(seed) % pool.length];
+}
+
+export function getReactionCaption(mood: ReactionMood, seed: string) {
+  const pool = CAPTIONS[mood];
+  return pool[hashSeed(`${seed}:caption`) % pool.length];
 }

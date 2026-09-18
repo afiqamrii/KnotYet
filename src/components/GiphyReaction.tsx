@@ -2,34 +2,45 @@
 import { createPortal } from 'react-dom';
 import { useReducedMotion } from 'framer-motion';
 import { Pause, Play, Smile, Star } from 'lucide-react';
-import { getReaction, type ReactionMood } from '../utils/memes';
+import { getReaction, getReactionCaption, type ReactionMood } from '../utils/memes';
 import { ResultArt } from './GameCardDesign';
 import '../styles/reactions.css';
 
 export function GiphyReaction({ mood, seed = '', compact = false }: { mood: ReactionMood; seed?: string; compact?: boolean }) {
   const reduceMotion = useReducedMotion();
   const [playOverride, setPlayOverride] = useState<boolean | null>(null);
-  const [externalMediaAllowed, setExternalMediaAllowed] = useState(false);
   const [loadedSrc, setLoadedSrc] = useState('');
   const [failedSrc, setFailedSrc] = useState('');
+  const [retryNonce, setRetryNonce] = useState(0);
   const reaction = getReaction(mood, seed);
+  const caption = getReactionCaption(mood, seed);
   const playing = playOverride ?? !reduceMotion;
-  const src = `https://media.giphy.com/media/${reaction.id}/${playing ? 'giphy.gif' : 'giphy_s.gif'}`;
+  const baseSrc = `https://media.giphy.com/media/${reaction.id}/${playing ? 'giphy.gif' : 'giphy_s.gif'}`;
+  const src = retryNonce ? `${baseSrc}?retry=${retryNonce}` : baseSrc;
   const failed = failedSrc === src;
   const loaded = loadedSrc === src;
   const fallback = mood === 'win' ? 'trophy' : mood === 'match' ? 'together' : mood === 'higher' || mood === 'lower' ? mood : 'smile';
+  const sticker = mood === 'match' ? 'SAME BRAIN!' : mood === 'miss' ? 'PLOT TWIST!' : mood === 'win' ? 'BIG WIN!' : mood === 'higher' ? 'GO HIGHER!' : 'GO LOWER!';
+
+  const retry = () => {
+    setLoadedSrc('');
+    setFailedSrc('');
+    setRetryNonce(value => value + 1);
+  };
 
   return (
     <figure className={`giphy-reaction ${compact ? 'giphy-reaction-compact' : ''}`}>
-      <div className="giphy-stage" aria-busy={externalMediaAllowed && !loaded && !failed}>
-        {(!externalMediaAllowed || !loaded || failed) && <div className="giphy-placeholder"><ResultArt kind={fallback} /></div>}
-        {externalMediaAllowed && !failed && <img key={src} src={src} alt={reaction.alt} className={loaded ? 'is-loaded' : ''}
+      <div className="giphy-stage" aria-busy={!loaded && !failed}>
+        {(!loaded || failed) && <div className="giphy-placeholder"><ResultArt kind={fallback} /></div>}
+        {!failed && <img key={src} src={src} alt={reaction.alt} className={loaded ? 'is-loaded' : ''} loading="eager" decoding="async"
           onLoad={() => setLoadedSrc(src)} onError={() => setFailedSrc(src)} />}
-        {externalMediaAllowed && failed && <span className="giphy-unavailable">The reaction is taking a break.</span>}
+        <span className="giphy-mood-sticker" aria-hidden="true">{sticker}</span>
+        {failed && <span className="giphy-unavailable">GIF took a snack break. Local silliness activated.</span>}
       </div>
+      <p className="giphy-caption">{caption}</p>
       <figcaption>
         <a href={`https://giphy.com/gifs/${reaction.id}`} target="_blank" rel="noopener noreferrer">GIF via <strong>GIPHY</strong></a>
-        {!externalMediaAllowed ? <button type="button" onClick={() => setExternalMediaAllowed(true)} aria-label="Load GIF from GIPHY">Load GIF (GIPHY)</button> : !failed && <button type="button" onClick={() => setPlayOverride(!playing)} aria-label={playing ? 'Pause GIF' : 'Play GIF'}>
+        {failed ? <button type="button" onClick={retry} aria-label="Retry GIF from GIPHY">Try GIF again</button> : <button type="button" onClick={() => setPlayOverride(!playing)} aria-label={playing ? 'Pause GIF' : 'Play GIF'}>
           {playing ? <Pause size={12} aria-hidden="true" /> : <Play size={12} aria-hidden="true" />} {playing ? 'Pause' : 'Play GIF'}
         </button>}
       </figcaption>

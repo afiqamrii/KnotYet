@@ -113,13 +113,25 @@ export const FriendsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const markConversationRead = useCallback((friend: Friend) => {
     if (!user || !friend.conversationId) return;
     update(current => ({ ...current, friends: current.friends.map(item => item.id === friend.id ? { ...item, unreadCount: 0 } : item) }));
-    void supabase.from('chat_members').update({ last_read_at: new Date().toISOString() }).eq('conversation_id', friend.conversationId).eq('user_id', user.id);
+    const readAt = new Date().toISOString();
+    void supabase
+      .from('chat_members')
+      .update({ last_read_at: readAt })
+      .eq('conversation_id', friend.conversationId)
+      .eq('user_id', user.id)
+      .select('last_read_at')
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          setError('Read receipts are reconnecting. Your messages are still safe.');
+        }
+      });
   }, [update, user]);
 
-  const refreshContacts = useCallback(async () => {
+  const refreshContacts = useCallback(async (silent = false) => {
     if (!user || loading.current) return;
     loading.current = true;
-    setStatus('connecting');
+    if (!silent) setStatus('connecting');
     try {
       const contactsResult = await supabase.rpc('list_chat_contacts');
       if (contactsResult.error) throw contactsResult.error;
@@ -171,8 +183,10 @@ export const FriendsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setStatus('online');
       setError(null);
     } catch {
-      setStatus(navigator.onLine ? 'error' : 'offline');
-      setError('Cloud chat could not sync. Reconnect and try again.');
+      if (!silent) {
+        setStatus(navigator.onLine ? 'error' : 'offline');
+        setError('Cloud chat could not sync. Reconnect and try again.');
+      }
     } finally {
       loading.current = false;
     }
@@ -229,10 +243,14 @@ export const FriendsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       })
       .subscribe(status => {
         if (status === 'SUBSCRIBED') { setStatus('online'); setError(null); }
-        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { setStatus('error'); setError('Live updates paused. Messages refresh when you return.'); }
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { setStatus('error'); setError('Live updates paused. Reconnecting your chat now.'); }
       });
     const resume = () => { if (document.visibilityState !== 'hidden') void refreshContacts(); };
-    const refreshTimer = window.setInterval(resume, 15_000);
+    // Realtime remains the primary path. This quiet safety sync keeps a thread
+    // current through short laptop sleeps or a dropped WebSocket reconnect.
+    const refreshTimer = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden' && navigator.onLine) void refreshContacts(true);
+    }, 4_000);
     window.addEventListener('focus', resume);
     window.addEventListener('online', resume);
     document.addEventListener('visibilitychange', resume);

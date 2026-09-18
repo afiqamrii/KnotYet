@@ -1,9 +1,9 @@
-import { UiSymbol, RoundLabel } from './GameCardDesign';
+import { RoundLabel } from './GameCardDesign';
 import { GiphyReaction } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'react';
 import { readJson } from '../utils/storage';
 import confetti from 'canvas-confetti';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Minus, Plus, Sparkles, Target } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
@@ -72,6 +72,23 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     ? (isP1Turn ? multiplayer.isHost : !multiplayer.isHost) 
     : true; // In local mode, both players share the screen, so the input is always active.
 
+  const lowerBound = guesses.reduce(
+    (bound, guess) => guess.hint === 'higher' ? Math.max(bound, guess.value + 1) : bound,
+    MIN_NUM,
+  );
+  const upperBound = guesses.reduce(
+    (bound, guess) => guess.hint === 'lower' ? Math.min(bound, guess.value - 1) : bound,
+    MAX_NUM,
+  );
+  const latestGuess = guesses[0];
+  const parsedGuess = Number(inputValue);
+  const guessIsValid = Number.isInteger(parsedGuess)
+    && parsedGuess >= lowerBound
+    && parsedGuess <= upperBound
+    && !guesses.some(guess => guess.value === parsedGuess);
+  const lowerPercent = ((lowerBound - MIN_NUM) / (MAX_NUM - MIN_NUM)) * 100;
+  const upperPercent = ((upperBound - MIN_NUM) / (MAX_NUM - MIN_NUM)) * 100;
+
   // Generate secret number on mount if missing
   useEffect(() => {
     if (secretNumber === null && (multiplayer.status !== 'connected' || multiplayer.isHost)) {
@@ -132,6 +149,13 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     }
     processGuess(val, guesser || 'Player');
     setInputValue('');
+  };
+
+  const adjustGuess = (amount: number) => {
+    const fallback = Math.round((lowerBound + upperBound) / 2);
+    const nextGuess = inputValue !== '' && Number.isInteger(parsedGuess) ? parsedGuess + amount : fallback;
+    setInputValue(String(Math.min(upperBound, Math.max(lowerBound, nextGuess))));
+    sounds.playTick();
   };
 
   const handleNextRound = () => {
@@ -273,85 +297,107 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'guess' && (
-          <div className="w-full flex-1 flex flex-col justify-between animate-slide-up py-1">
-            <div className="text-center shrink-0 space-y-0.5">
-              <h3 className="text-lg sm:text-xl font-black text-ink">
-                {currentTurnName}'s Turn
-              </h3>
-              <p className="text-[11px] font-semibold text-ink-3">Guess the number between {MIN_NUM} and {MAX_NUM}.</p>
-            </div>
-
-            {/* Guess History */}
-            {guesses.length > 0 && (
-              <div className="bg-slate-50 rounded-xl p-2 max-h-24 overflow-y-auto space-y-1.5 no-scrollbar border-2 border-slate-100 my-1 shrink-0">
-                {guesses.map((g, i) => (
-                  <div key={i} className="flex items-center justify-between px-2.5 py-1 bg-white rounded-lg shadow-sm border border-slate-100">
-                    <span className="font-bold text-xs text-slate-700">
-                      <span className="font-black text-ink-3 mr-1">{g.guesser || 'Guessed'}:</span>
-                      {g.value}
-                    </span>
-                    <span className={`font-black text-[11px] flex items-center gap-1 ${g.hint === 'higher' ? 'text-indigo-500' : 'text-pink-500'}`}>
-                      {g.hint === 'higher' ? <><ArrowUp className="w-3.5 h-3.5"/> Higher</> : <><ArrowDown className="w-3.5 h-3.5"/> Lower</>}
-                    </span>
-                  </div>
-                ))}
+          <div className="number-game-stage w-full flex-1 animate-slide-up">
+            <section className="number-play-panel" aria-labelledby="number-turn-heading">
+              <div className="number-turn-copy">
+                <span className="number-turn-kicker"><Target aria-hidden="true" /> Find the secret number</span>
+                <h3 id="number-turn-heading">{isMyTurn ? `${currentTurnName}, take your shot!` : `${partnerName} is choosing…`}</h3>
+                <p>{guesses.length === 0 ? 'Start anywhere from 1 to 100. Every clue shrinks the range.' : `${upperBound - lowerBound + 1} possible numbers remain.`}</p>
               </div>
-            )}
 
-            <div className="number-guess-zone my-auto py-1 flex flex-col items-center justify-center w-full">
-              {hintPopup ? (
-                <div className="flex flex-col items-center justify-center p-1 animate-pop-in space-y-2">
-                  <h4 className={`text-2xl font-black ${hintPopup.hint === 'higher' ? 'text-indigo-600' : 'text-pink-600'}`}>
-                    {hintPopup.hint.toUpperCase()}!
-                  </h4>
-                  <GiphyReaction mood={hintPopup.hint} seed={`${round}-${guesses.length}`} compact />
+              <div className="number-range-card" aria-label={`Possible range is ${lowerBound} to ${upperBound}`}>
+                <div className="number-range-values">
+                  <span><small>LOW</small>{lowerBound}</span>
+                  <strong>{lowerBound === upperBound ? 'Only one choice!' : 'THE NUMBER IS IN HERE'}</strong>
+                  <span><small>HIGH</small>{upperBound}</span>
                 </div>
-              ) : (
-                isMyTurn ? (
-                  <form onSubmit={handleGuess} className="w-full max-w-md mx-auto space-y-2.5 sm:space-y-4 animate-fade-in">
-                    {multiplayer.status === 'connected' && (
-                      <div className="p-2 sm:p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center animate-bounce-soft mb-1">
-                        <p className="text-xs sm:text-sm font-black text-emerald-800 flex items-center justify-center gap-1.5">
-                          <span><UiSymbol kind="game" /></span> Your Turn! {partnerName} is waiting for your guess...
-                        </p>
-                      </div>
-                    )}
+                <div className="number-range-track" aria-hidden="true">
+                  <i style={{ left: `${lowerPercent}%`, right: `${100 - upperPercent}%` }} />
+                  {latestGuess && <b style={{ left: `${((latestGuess.value - MIN_NUM) / (MAX_NUM - MIN_NUM)) * 100}%` }} />}
+                </div>
+                <div className="number-range-scale"><span>{MIN_NUM}</span><span>{MAX_NUM}</span></div>
+              </div>
+
+              {latestGuess && (
+                <div className={`number-latest-clue number-clue-${latestGuess.hint}`} role="status" aria-live="polite">
+                  <span className="number-clue-icon">
+                    {latestGuess.hint === 'higher' ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />}
+                  </span>
+                  <div>
+                    <small>{latestGuess.guesser || 'Last guess'} tried {latestGuess.value}</small>
+                    <strong>Go {latestGuess.hint}!</strong>
+                  </div>
+                  {hintPopup && <Sparkles className="number-clue-sparkle" aria-hidden="true" />}
+                </div>
+              )}
+
+              {isMyTurn ? (
+                <form onSubmit={handleGuess} className="number-guess-form">
+                  <label htmlFor="number-guess-input">Your guess</label>
+                  <div className="number-stepper">
+                    <button type="button" onClick={() => adjustGuess(-1)} aria-label="Decrease guess" disabled={parsedGuess === lowerBound}>
+                      <Minus aria-hidden="true" />
+                    </button>
                     <input
+                      id="number-guess-input"
                       type="number"
-                      aria-label="Your guess, from 1 to 100"
-                      min={MIN_NUM}
-                      max={MAX_NUM}
+                      inputMode="numeric"
+                      min={lowerBound}
+                      max={upperBound}
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
-                      className="w-full text-center text-3xl sm:text-5xl font-black text-indigo-600 bg-indigo-50 border-3 border-indigo-100 rounded-2xl py-3 sm:py-4 focus:outline-none focus:border-indigo-300 shadow-inner"
-                      placeholder="?"
+                      aria-describedby="number-guess-help"
+                      placeholder={String(Math.round((lowerBound + upperBound) / 2))}
                       autoFocus
                     />
-                    <button
-                      type="submit"
-                      disabled={!inputValue || parseInt(inputValue) < MIN_NUM || parseInt(inputValue) > MAX_NUM}
-                      className="btn-chunky w-full py-3 text-sm disabled:opacity-50"
-                      style={{
-                        background: 'linear-gradient(135deg, #10B981, #059669)',
-                        color: 'white',
-                        boxShadow: '0 4px 0 #047857, 0 6px 16px rgba(16,185,129,0.35)'
-                      }}
-                    >
-                      Submit Guess!
+                    <button type="button" onClick={() => adjustGuess(1)} aria-label="Increase guess" disabled={parsedGuess === upperBound}>
+                      <Plus aria-hidden="true" />
                     </button>
-                  </form>
-                ) : (
-                   <div className="py-4 text-center animate-slide-up space-y-2 bg-indigo-50/80 border-2 border-indigo-200 rounded-2xl p-4 w-full">
-                     <p className="text-xs sm:text-sm font-black text-indigo-700 flex items-center justify-center gap-1.5">
-                       <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
-                       Waiting for {partnerName} to make a guess...
-                     </p>
-                     <p className="text-[10px] font-semibold text-ink-3">Pay attention to the higher / lower clues!</p>
-                     <div className="w-6 h-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mx-auto" />
-                   </div>
-                )
+                  </div>
+                  <p id="number-guess-help" className="number-guess-help">
+                    {inputValue && guesses.some(guess => guess.value === parsedGuess)
+                      ? 'That number was already tried — choose a fresh one.'
+                      : `Choose from ${lowerBound} to ${upperBound}.`}
+                  </p>
+                  <button type="submit" disabled={!guessIsValid} className="btn-chunky number-lock-button">
+                    Lock in {guessIsValid ? parsedGuess : 'my guess'} <Target aria-hidden="true" />
+                  </button>
+                </form>
+              ) : (
+                <div className="number-waiting-card" role="status">
+                  <span className="number-waiting-dots"><i /><i /><i /></span>
+                  <strong>{partnerName} is thinking</strong>
+                  <p>You’ll see their guess here instantly.</p>
+                </div>
               )}
-            </div>
+            </section>
+
+            <aside className="number-history-panel" aria-label="Guess history">
+              <div className="number-history-heading">
+                <div><span>Guess trail</span><strong>{guesses.length} {guesses.length === 1 ? 'try' : 'tries'}</strong></div>
+                {hintPopup && <GiphyReaction mood={hintPopup.hint} seed={`${round}-${guesses.length}`} compact />}
+              </div>
+              {guesses.length === 0 ? (
+                <div className="number-history-empty">
+                  <span>?</span>
+                  <strong>No guesses yet</strong>
+                  <p>Your clues will stack up here.</p>
+                </div>
+              ) : (
+                <ol className="number-history-list">
+                  {guesses.map((guess, index) => (
+                    <li key={`${guess.value}-${index}`}>
+                      <span>{guesses.length - index}</span>
+                      <div><strong>{guess.value}</strong><small>{guess.guesser || 'Player'}</small></div>
+                      <b className={`number-history-${guess.hint}`}>
+                        {guess.hint === 'higher' ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />}
+                        {guess.hint}
+                      </b>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </aside>
           </div>
         )}
 

@@ -7,15 +7,15 @@ import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
-import { getRandomUnseenWheelPromptIndex } from '../utils/questionManager';
+import { getRandomUnseenWheelSelection, getWheelPromptId, markQuestionAsSeen } from '../utils/questionManager';
 
 export interface Props {
   onEndGame?: () => void;
 }
 
 export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
-  const { t, partner, addHeartPoints } = useGame();
-  const { checkLimit, incrementPlayCount } = useAuth();
+  const { t, partner, addHeartPoints, recordAnsweredQuestion } = useGame();
+  const { checkLimit, incrementPlayCount, progress } = useAuth();
   const multiplayer = useMultiplayer();
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
   const [spinning, setSpinning] = useState(false);
@@ -25,6 +25,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   const [showModal, setShowModal] = useState(false);
   const [myAnswer, setMyAnswer] = useState<string | null>(null);
   const [partnerAnswer, setPartnerAnswer] = useState<string | null>(null);
+  const [allPromptsSeen, setAllPromptsSeen] = useState(false);
   const tickIntervalRef = useRef<number | null>(null);
   const spinTimeoutRef = useRef<number | null>(null);
   React.useEffect(() => () => {
@@ -70,9 +71,12 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
     spinTimeoutRef.current = window.setTimeout(() => {
       setSpinning(false);
       const landed = WHEEL_SEGMENTS[segmentIdx];
+      const questionId = getWheelPromptId(landed.id, promptIdx);
       setSelectedSegment(landed);
       setActivePrompt(landed.prompts[promptIdx]);
       setShowModal(true);
+      markQuestionAsSeen(questionId);
+      recordAnsweredQuestion(questionId);
       if (multiplayer.status !== 'connected') {
         incrementPlayCount('solo');
       }
@@ -89,13 +93,18 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
       return;
     }
     
+    const selection = getRandomUnseenWheelSelection(progress?.answered_questions);
+    if (!selection) {
+      setAllPromptsSeen(true);
+      return;
+    }
+    setAllPromptsSeen(false);
     const extraRotations = 360 * (5 + Math.floor(Math.random() * 4));
-    const randomSegmentIndex = Math.floor(Math.random() * numSegments);
+    const randomSegmentIndex = selection.segmentIndex;
     const targetDegree = 360 - (randomSegmentIndex * segmentAngle + segmentAngle / 2);
     const newRotation = rotation + extraRotations + (targetDegree - (rotation % 360));
     
-    const landed = WHEEL_SEGMENTS[randomSegmentIndex];
-    const promptIndex = getRandomUnseenWheelPromptIndex(landed.id, landed.prompts.length);
+    const promptIndex = selection.promptIndex;
 
     if (multiplayer.status === 'connected') {
       setMyAnswer(null);
@@ -231,7 +240,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
         </svg>
 
         {/* Center button */}
-        <button onClick={spinTheWheel} disabled={spinning}
+        <button onClick={spinTheWheel} disabled={spinning || allPromptsSeen}
           className="absolute z-10 flex flex-col items-center justify-center font-black text-[10px] uppercase tracking-tighter hover:scale-105 active:scale-95 transition text-white"
           style={{
             width: 64, height: 64, borderRadius: '50%',
@@ -241,19 +250,19 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
             boxShadow: '0 4px 0 rgba(0,0,0,0.2), 0 8px 20px rgba(255,45,155,0.4)',
           }}>
           <Dices className={`w-5 h-5 mb-0.5 ${spinning ? 'animate-spin' : ''}`} />
-          {spinning ? '...' : 'SPIN!'}
+          {spinning ? '...' : allPromptsSeen ? 'DONE' : 'SPIN!'}
         </button>
       </div>
 
       <RoundLabel title="LEAVE IT TO LUCK" detail="SPIN & TALK" kind="dice" />
       {/* Spin button */}
       <div className="w-full space-y-2">
-        <button onClick={spinTheWheel} disabled={spinning}
+        <button onClick={spinTheWheel} disabled={spinning || allPromptsSeen}
           className="btn-chunky btn-amber w-full text-sm disabled:opacity-60">
           <Dices className="w-4 h-4" />
-          {spinning ? t.wheelSpinning : t.wheelSpin}
+          {spinning ? t.wheelSpinning : allPromptsSeen ? 'All prompts explored' : t.wheelSpin}
         </button>
-        <p className="text-[10px] text-center text-ink-3 font-semibold">{t.wheelTip}</p>
+        <p className="text-[10px] text-center text-ink-3 font-semibold">{allPromptsSeen ? 'You have seen every wheel prompt. Try another game together!' : t.wheelTip}</p>
       </div>
 
       {/* Result Modal */}

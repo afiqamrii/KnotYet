@@ -205,11 +205,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // replace a newer list when players move through prompts quickly.
         questionHistorySaveQueue.current = questionHistorySaveQueue.current
           .then(async () => {
-            const { error } = await supabase
-              .from('user_progress')
-              .update({ answered_questions: ids })
-              .eq('user_id', user.id);
+            const { data, error } = await supabase.rpc('record_seen_question', {
+              p_question_id: questionId,
+            });
             if (error) throw error;
+            const savedIds = Array.isArray(data) ? data.filter((id): id is string => typeof id === 'string') : ids;
+            answeredQuestionIds.current = new Set([...answeredQuestionIds.current, ...savedIds]);
+            const mergedIds = Array.from(answeredQuestionIds.current);
+            localStorage.setItem('jodohdeck_answered', JSON.stringify(mergedIds));
+            localStorage.setItem('knotyet_seen_questions', JSON.stringify(mergedIds));
             await refreshProgress();
           })
           .catch((error) => {
@@ -224,9 +228,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!arr.includes(questionId)) {
           arr.push(questionId);
           localStorage.setItem('jodohdeck_answered', JSON.stringify(arr));
+          localStorage.setItem('knotyet_seen_questions', JSON.stringify(arr));
         }
       } catch {
         localStorage.setItem('jodohdeck_answered', JSON.stringify([questionId]));
+        localStorage.setItem('knotyet_seen_questions', JSON.stringify([questionId]));
       }
     }
   }, [user, progress, refreshProgress]);
