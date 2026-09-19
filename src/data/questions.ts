@@ -47,7 +47,24 @@ const getTargetRole = (index: number): 'Lelaki' | 'Perempuan' => {
   return index % 2 === 0 ? 'Lelaki' : 'Perempuan';
 };
 
-export const SWIPE_CARDS: SwipeCardItem[] = [
+const uniqueByText = <T,>(items: T[], text: (item: T) => string): T[] => {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = text(item).trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+// Repeated roleplays and challenges that require private access, a purchase, or
+// disruptive/unsafe real-world actions do not make useful playable cards.
+const excludedBonusIds = new Set([
+  'bc-3', 'bc-4', 'bc-6', 'bc-8', 'bc-9', 'bc-10', 'bc-12',
+  'bc-24', 'bc-27', 'bc-30', 'bc-31', 'bc-32',
+]);
+
+export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
   ...taarufData.teka_teki_bodoh.map((item, i) => ({
     id: `tt-${i}`,
     category: 'teka-teki' as CardCategory,
@@ -117,25 +134,28 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
     category: 'dare-santai' as CardCategory,
     categoryLabel: 'Bonus Challenge',
     badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
-    turn: getTurn(i),
+    turn: 'Dua-dua Serentak' as const,
     question: getBonusQuestion(item),
     flipContent: {
-      title: 'Cabaran:',
+      title: 'Cara main:',
       description: getBonusDescription(item),
       type: 'dare' as const
     }
-  }))
-];
+  })).filter(card =>
+    !excludedBonusIds.has(card.id) &&
+    !/^(?:Cabaran Komunikasi Pasangan Seri [0-9]+|Cabaran Pasangan Interaktif #[0-9]+)$/i.test(card.question)
+  )
+], card => card.question);
 
 const cleanOption = (opt: string) => opt.replace(/^[A-D]\.\s*/, '');
 
-export const GUESS_QUIZ_LIST: GuessQuizItem[] = taarufData.teka_hati_dia.map((item, i) => ({
+export const GUESS_QUIZ_LIST: GuessQuizItem[] = uniqueByText(taarufData.teka_hati_dia.map((item, i) => ({
   id: `gq-${i}`,
   targetRole: getTargetRole(i),
   question: item.soalan,
   options: item.pilihan.map(cleanOption),
   vibeText: item.kategori || 'Uji kefahaman hati pasangan!'
-}));
+})), item => item.question);
 
 export interface MatchQuestion {
   id: string;
@@ -148,7 +168,7 @@ export interface MatchQuestion {
 
 // Keep the gq-* IDs when these prompts appear in Couple Match. Shared IDs mean
 // playing a question here also removes it from future Guess My Heart decks.
-export const MATCH_QUESTIONS: MatchQuestion[] = [
+export const MATCH_QUESTIONS: MatchQuestion[] = uniqueByText([
   ...taarufData.compatibility_match_check.map((item, i) => ({
     id: `m-${i}`,
     question: item.soalan,
@@ -164,13 +184,13 @@ export const MATCH_QUESTIONS: MatchQuestion[] = [
     kind: 'spotlight' as const,
     targetPlayer: (i % 2 === 0 ? 'host' : 'partner') as 'host' | 'partner'
   }))
-];
+], item => item.question);
 
 const matureQuestionGroups = Object.entries(taarufData.soalan_matang_prakahwinan);
 
 const matureWheelPrompts = (categoryIndex: number) => {
   const [, questions] = matureQuestionGroups[categoryIndex];
-  return questions.map((item, index) => ({ id: `sm-${categoryIndex}-${index}`, text: item.soalan }));
+  return uniqueByText(questions.map((item, index) => ({ id: `sm-${categoryIndex}-${index}`, text: item.soalan })), item => item.text);
 };
 
 const BASE_WHEEL_SEGMENTS: Omit<WheelSegment, 'promptIds'>[] = [
@@ -254,7 +274,7 @@ const BASE_WHEEL_SEGMENTS: Omit<WheelSegment, 'promptIds'>[] = [
   }
 ];
 
-const vibeWheelPrompts = taarufData.vibe_check.map((item, index) => ({ id: `vc-${index}`, text: item.soalan }));
+const vibeWheelPrompts = uniqueByText(taarufData.vibe_check.map((item, index) => ({ id: `vc-${index}`, text: item.soalan })), item => item.text);
 const extraWheelPrompts: Record<string, { id: string; text: string }[]> = {
   'masa-depan': [...matureWheelPrompts(2), ...matureWheelPrompts(3)],
   'deep-talk': matureWheelPrompts(1),

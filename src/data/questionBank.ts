@@ -1,16 +1,21 @@
 import previous from '../../taaruf_game_final.json';
 import latestData from '../../taaruf_game_final-v7.json';
 
-const cleanSourceNotes = <T,>(value: T): T => {
-  if (typeof value === 'string') return value.replace(/\s*\[cite:\s*[\d,\s]+\]/g, '') as T;
-  if (Array.isArray(value)) return value.map(cleanSourceNotes) as T;
+const mapText = <T,>(value: T, transform: (text: string) => string): T => {
+  if (typeof value === 'string') return transform(value) as T;
+  if (Array.isArray(value)) return value.map(item => mapText(item, transform)) as T;
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cleanSourceNotes(item)])) as T;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapText(item, transform)])) as T;
   }
   return value;
 };
 
-const latest = cleanSourceNotes(latestData);
+const removeSourceNotes = (text: string) => text.replace(/\s*\[cite:\s*[\d,\s]+\]/g, '');
+const removeNumbering = (text: string) => text
+  .replace(/^(?:Vibe Check Soalan|Teka Hati Soalan|Soalan Matang[^#:]*|Soalan Random & Deep|Isu Uncomfortable Topics|Match Check Scenario|Aturan Tidak Bertulis Rumahtangga Malaysia)\s*#?\d+\s*:\s*/i, '')
+  .replace(/\s*\((?:Siri|Seri)\s*#?\d+\)\s*$/i, '');
+
+const latest = mapText(latestData, removeSourceNotes);
 
 // Keep old positions because saved progress and multiplayer use index-based IDs.
 const merge = <T extends object>(oldItems: T[], newItems: T[], text: (item: T) => string): T[] => {
@@ -47,10 +52,14 @@ export const bonusDescription = (item: BonusChallenge) => {
     .replace(/Aplikasi akan memberikan senarai rawak 5 barangan dapur yang perlu dicari dalam masa 5 minit\./i, 'Pilih bersama 5 barangan dapur untuk dicari dalam masa 5 minit.')
     .replace(/Di akhir minit, aplikasi akan memberikan plot twist mencabar!/i, 'Di akhir minit, beri pasangan satu plot twist untuk dijawab!')
     .replace(/Aplikasi akan memaparkan situasi:/i, 'Situasi:')
-    .replace(/sambil aplikasi memasang audio simulasi kesesakan lalu lintas yang dipenuhi dengan bunyi hon and orang menjerit kasar/i, 'dan bayangkan terperangkap dalam kesesakan lalu lintas');
+    .replace(/sambil aplikasi memasang audio simulasi kesesakan lalu lintas yang dipenuhi dengan bunyi hon and orang menjerit kasar/i, 'dan bayangkan terperangkap dalam kesesakan lalu lintas')
+    .replace(/Selepas lakonan selesai, buka kad 'Plot Twist':/i, 'Selepas lakonan, tambah plot twist:')
+    .replace(/Setiap orang diberikan bajet RM30 and senarai 3 barang masakan rahsia\./i, 'Tetapkan bajet RM30 seorang dan pilih 3 bahan masakan secara rahsia.')
+    .replace(/Aplikasi membacakan 5 soalan pantas;/i, 'Bergilir tanya 5 soalan pantas tentang diri masing-masing;')
+    .replace(/Semasa memandu, setiap pemain perlu/i, 'Semasa duduk bersama, setiap pemain perlu');
 };
 
-export const questionBank = {
+export const questionBank = mapText({
   teka_teki_bodoh: merge(previous.teka_teki_bodoh, latest.teka_teki_bodoh, item => item.soalan),
   vibe_check: merge(previous.vibe_check, latest.vibe_check, item => item.soalan),
   soalan_matang_prakahwinan: {
@@ -66,4 +75,4 @@ export const questionBank = {
   random_deep_questions: latest.random_deep_questions,
   soalan_realiti_pasangan: latest.soalan_realiti_pasangan,
   unspoken_rules_malaysia: latest.unspoken_rules_malaysia,
-};
+}, removeNumbering);
