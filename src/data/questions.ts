@@ -36,20 +36,7 @@ export interface WheelSegment {
 }
 
 
-// Keep the editable question bank at the project root as the single source of truth.
-import taarufData from '../../taaruf_game_final.json';
-
-type BonusChallenge = {
-  cabaran?: string;
-  cabaran_tajuk?: string;
-  tajuk?: string;
-  denda?: string;
-  deskripsi?: string;
-  arahan_game?: string;
-};
-
-const getBonusQuestion = (item: BonusChallenge) => item.cabaran || item.cabaran_tajuk || item.tajuk || '';
-const getBonusDescription = (item: BonusChallenge) => item.denda || item.deskripsi || item.arahan_game || 'Lakukan cabaran ini sekarang!';
+import { questionBank as taarufData, bonusTitle as getBonusQuestion, bonusDescription as getBonusDescription } from './questionBank';
 
 const getTurn = (index: number): 'Lelaki' | 'Perempuan' | 'Dua-dua Serentak' => {
   const turns: ('Lelaki' | 'Perempuan' | 'Dua-dua Serentak')[] = ['Lelaki', 'Perempuan', 'Dua-dua Serentak'];
@@ -98,10 +85,33 @@ export const SWIPE_CARDS: SwipeCardItem[] = [
       flipContent: {
         title: 'Topik Matang:',
         description: 'Bincangkan topik ini dengan jujur. Tiada jawapan salah atau betul.',
+        greenFlag: item.green_flag,
+        redFlag: item.red_flag,
         type: 'answer' as const
       }
     }))
   ),
+  ...taarufData.uncomfortable_topics.map((item, i) => ({
+    id: `ut-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Topik Sensitif',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i), question: item.soalan,
+    flipContent: { title: 'Kenapa bincang ini?', description: item.sebab_penting, greenFlag: item.green_flag, redFlag: item.red_flag, type: 'answer' as const }
+  })),
+  ...taarufData.random_deep_questions.map((item, i) => ({
+    id: `rd-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Deep Talk',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i), question: item.soalan,
+    flipContent: { title: 'Untuk dibincangkan:', description: item.tujuan, type: 'answer' as const }
+  })),
+  ...taarufData.soalan_realiti_pasangan.map((item, i) => ({
+    id: `rp-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Realiti Pasangan',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i), question: item.soalan,
+    flipContent: { title: 'Untuk dibincangkan:', description: item.tujuan, type: 'answer' as const }
+  })),
+  ...taarufData.unspoken_rules_malaysia.map((item, i) => ({
+    id: `ur-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Aturan Tak Tertulis',
+    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i),
+    question: `Apa pendapat awak tentang: ${item.aturan}?`,
+    flipContent: { title: 'Bahan perbincangan:', description: item.huraian, type: 'answer' as const }
+  })),
   ...taarufData.bonus_challenges.map((item, i) => ({
     id: `bc-${i}`,
     category: 'dare-santai' as CardCategory,
