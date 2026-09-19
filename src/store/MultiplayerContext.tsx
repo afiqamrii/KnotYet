@@ -88,8 +88,8 @@ interface MultiplayerState {
 }
 
 interface MultiplayerContextType extends MultiplayerState {
-  hostRoom: (code: string, profile: UserProfile) => void;
-  joinRoom: (code: string, profile: UserProfile) => void;
+  hostRoom: (code: string, profile: UserProfile, reconnect?: boolean) => void;
+  joinRoom: (code: string, profile: UserProfile, reconnect?: boolean) => void;
   leaveRoom: () => void;
   setGame: (game: GameMode) => void;
   sendMessage: (msg: MultiplayerMessage) => void;
@@ -111,15 +111,20 @@ const isMultiplayerMessage = (value: unknown): value is MultiplayerMessage => (
 );
 
 const getPeerId = (code: string) => `jodohdeck-v2-${code}`;
+const getRestoredGame = (): GameMode => {
+  const savedGame = sessionStorage.getItem('mp_activeGame');
+  return savedGame && ['lobby', 'swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race'].includes(savedGame)
+    ? savedGame as GameMode : 'lobby';
+};
 
 export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<MultiplayerState>({
     isConnected: false,
-    isHost: false,
+    isHost: sessionStorage.getItem('mp_isHost') === 'true',
     status: 'disconnected',
-    roomCode: null,
+    roomCode: sessionStorage.getItem('mp_roomCode'),
     remoteProfile: null,
-    activeGame: 'lobby',
+    activeGame: getRestoredGame(),
     error: null,
     chatMessages: [],
     unreadChatCount: 0,
@@ -137,10 +142,6 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       sessionStorage.setItem('mp_roomCode', state.roomCode || '');
       sessionStorage.setItem('mp_isHost', state.isHost.toString());
       sessionStorage.setItem('mp_activeGame', state.activeGame);
-    } else if (state.status === 'disconnected') {
-      sessionStorage.removeItem('mp_roomCode');
-      sessionStorage.removeItem('mp_isHost');
-      sessionStorage.removeItem('mp_activeGame');
     }
   }, [state.status, state.roomCode, state.isHost, state.activeGame]);
 
@@ -156,6 +157,11 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const cleanup = useCallback((preserveSession = false) => {
+    if (!preserveSession) {
+      sessionStorage.removeItem('mp_roomCode');
+      sessionStorage.removeItem('mp_isHost');
+      sessionStorage.removeItem('mp_activeGame');
+    }
     const connection = connRef.current;
     connRef.current = null;
     connection?.close();

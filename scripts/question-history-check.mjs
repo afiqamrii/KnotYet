@@ -3,7 +3,7 @@ import { chromium } from 'playwright-core';
 
 const base = process.env.SMOKE_URL || 'http://localhost:5174';
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
-const html = `<!doctype html><html><body><script type="module">import * as questions from '/src/utils/questionManager.ts';import { WHEEL_SEGMENTS, SWIPE_CARDS } from '/src/data/questions.ts';window.questionHistory=questions;window.questionData={ WHEEL_SEGMENTS, SWIPE_CARDS };document.body.textContent='ready';</script></body></html>`;
+const html = `<!doctype html><html><body><script type="module">import * as questions from '/src/utils/questionManager.ts';import { WHEEL_SEGMENTS, SWIPE_CARDS, MATCH_QUESTIONS } from '/src/data/questions.ts';window.questionHistory=questions;window.questionData={ WHEEL_SEGMENTS, SWIPE_CARDS, MATCH_QUESTIONS };document.body.textContent='ready';</script></body></html>`;
 
 try {
   const context = await browser.newContext();
@@ -17,6 +17,13 @@ try {
   await page.waitForFunction(() => Boolean(window.questionHistory));
   const result = await page.evaluate(() => {
     const api = window.questionHistory;
+    const fullMatchPool = api.getShuffledMatchQuestions(1000).map(item => item.id);
+    const firstMatchDeck = api.getShuffledMatchQuestions(10);
+    for (let i = 0; i < 25; i++) api.markQuestionAsSeen(`m-${i}`);
+    const remainingMatchPool = api.getShuffledMatchQuestions(1000).map(item => item.id);
+    api.markQuestionAsSeen('gq-0');
+    const afterSpotlightSeen = api.getShuffledMatchQuestions(1000).map(item => item.id);
+    localStorage.clear();
     const initialGuess = api.getShuffledGuessQuestions(10).map(item => item.id);
     const skippedMidway = initialGuess.slice(0, 4);
     localStorage.setItem('knotyet_seen_questions', JSON.stringify(skippedMidway));
@@ -44,8 +51,21 @@ try {
     const reservedSelection = api.getRandomUnseenWheelSelection(wheelIds.filter(id => id !== 'vc-2'));
     api.markQuestionAsSeen('vc-1');
     const swipeAfterWheel = api.getShuffledSwipeCards('all', 10_000).map(card => card.id);
-    return { skippedMidway, nextGuess, allGuessIds, exhaustedGuess, excludedSwipe, guessStored, wheelSeen, wheelIds, sharedIds, sharedCount: wheelIds.filter(id => swipeIds.has(id)).length, exhaustedWheel: wheelSelection, stored, swipeAfterWheel, reservedSelection };
+    return { fullMatchPool, firstMatchDeck, remainingMatchPool, afterSpotlightSeen, matchQuestions: window.questionData.MATCH_QUESTIONS, skippedMidway, nextGuess, allGuessIds, exhaustedGuess, excludedSwipe, guessStored, wheelSeen, wheelIds, sharedIds, sharedCount: wheelIds.filter(id => swipeIds.has(id)).length, exhaustedWheel: wheelSelection, stored, swipeAfterWheel, reservedSelection };
   });
+  assert.equal(result.fullMatchPool.length, 130, 'Couple Match loads 50 compatibility and 80 spotlight questions');
+  assert.equal(new Set(result.fullMatchPool).size, 130, 'Couple Match question IDs are unique');
+  assert.equal(result.firstMatchDeck.filter(question => question.kind === 'compatibility').length, 5, 'each full deck mixes five compatibility rounds');
+  assert.equal(result.firstMatchDeck.filter(question => question.kind === 'spotlight').length, 5, 'each full deck mixes five spotlight rounds');
+  assert.equal(result.fullMatchPool.filter(id => id.startsWith('m-')).length, 50, 'both compatibility sets are available');
+  assert.equal(result.fullMatchPool.filter(id => id.startsWith('gq-')).length, 80, 'all four-choice Guess My Heart prompts are available as spotlight rounds');
+  assert.equal(result.remainingMatchPool.length, 105, 'the rest of the pool remains after the first 25 compatibility questions are seen');
+  assert.equal(result.remainingMatchPool.some(id => id.startsWith('m-') && Number(id.slice(2)) < 25), false, 'seen Couple Match questions do not repeat');
+  assert.equal(result.afterSpotlightSeen.length, 104, 'spotlight history is shared with Guess My Heart');
+  assert.equal(result.afterSpotlightSeen.includes('gq-0'), false, 'a seen spotlight question is excluded from Couple Match');
+  assert.equal(result.matchQuestions.every(question => question.options.length === 4), true, 'every Couple Match prompt has four choices');
+  assert.equal(result.matchQuestions.filter(question => question.kind === 'spotlight' && question.targetPlayer === 'host').length, 40, 'spotlight rounds alternate the person being guessed');
+  assert.equal(result.matchQuestions.filter(question => question.kind === 'spotlight' && question.targetPlayer === 'partner').length, 40, 'both players get an equal share of spotlight rounds');
   assert.equal(result.nextGuess.some(id => result.skippedMidway.includes(id)), false, 'questions seen before abandoning a deck never return');
   assert.deepEqual(result.exhaustedGuess, [], 'an exhausted pool stays exhausted instead of recycling prompts');
   assert.deepEqual(result.guessStored, result.allGuessIds, 'guess exhaustion does not erase history');

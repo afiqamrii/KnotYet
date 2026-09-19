@@ -72,7 +72,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       // Turn-based Teka Teki
       isMyTurnToAsk = (cardIndex % 2 === 0) ? !!multiplayer.isHost : !multiplayer.isHost;
       canFlip = isMyTurnToAsk; // Only asker can reveal answer
-      canSwipe = isMyTurnToAsk; // Only asker can swipe next
+      canSwipe = isMyTurnToAsk && !!partnerAnswer && answerRevealedToPartner;
     } else {
       // Taaruf (Simultaneous Typing)
       canSwipe = !!(myAnswer && partnerAnswer); // Must both answer before swiping
@@ -127,7 +127,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
         className="swipe-card conversation-card w-full h-full relative transform-style-3d" style={{ '--card-tint': catColors.bg } as React.CSSProperties}>
         <div className="swipe-card-front conversation-face backface-hidden" aria-hidden={isFlipped}>
           <header className="conversation-top"><span className="conversation-category"><UiSymbol kind={catColors.icon} /> {card.categoryLabel}</span><span className="conversation-turn"><UiSymbol kind="users" />{card.turn === 'Dua-dua Serentak' ? 'You two' : card.turn}</span></header>
-          {isMultiplayer && card.category === 'teka-teki' && <p className="conversation-notice">{isMyTurnToAsk ? `Your turn: read to ${partnerName}` : `${partnerName} is asking you`}</p>}
+          {isMultiplayer && card.category === 'teka-teki' && <p className="conversation-notice">{isMyTurnToAsk ? (partnerAnswer ? `${partnerName} guessed: “${partnerAnswer}” — reveal together!` : `Ask ${partnerName} this riddle, then wait for their typed guess.`) : `${partnerName} is asking you — type your guess before the reveal.`}</p>}
           {isMultiplayer && partnerAnswer && !myAnswer && card.category !== 'teka-teki' && <p className="conversation-notice">{partnerName} has answered. Your turn to reply.</p>}
           <div className="conversation-question">
             <div className="conversation-index"><span>{catColors.label}</span><span>{String(cardIndex + 1).padStart(2, '0')}</span></div>
@@ -141,7 +141,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                   <label htmlFor={`riddle-guess-${card.id}`}>What is your guess?</label><input id={`riddle-guess-${card.id}`} name="guess" autoComplete="off" placeholder="Type your clever guess…" disabled={!isTop} required />
                   <button type="submit" className="card-reveal-button" disabled={!isTop}><UiSymbol kind="message" /> Lock in my guess <UiSymbol kind="next" /></button>
                 </form>
-            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' ? t.revealAnswer : 'Share your answers'}<UiSymbol kind="next" /></button>
+            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' && isMultiplayer ? 'Peek at the answer privately' : card.category === 'teka-teki' ? t.revealAnswer : 'Share your answers'}<UiSymbol kind="next" /></button>
             : <span className="conversation-prompt">No perfect answer. Just your answer.</span>}
             <div className="conversation-directions"><span><UiSymbol kind="back" /> {t.skipLeft}</span><span>{t.passRight} <UiSymbol kind="next" /></span></div>
           </footer>
@@ -151,7 +151,8 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
           <div className="conversation-answer-body">
             <span className="conversation-answer-label">{card.flipContent.title}</span>
             <p className="question-text answer-text">{card.flipContent.description}</p>
-            {isMultiplayer && card.category === 'teka-teki' && isMyTurnToAsk && !answerRevealedToPartner && <div className="conversation-response"><p className="conversation-notice">{partnerAnswer ? `${partnerName}'s guess: “${partnerAnswer}”` : `Give ${partnerName} a moment to make a guess.`}</p><button type="button" onClick={onRevealToPartner} className="card-reveal-button"><UiSymbol kind="together" /> Show the answer together <UiSymbol kind="next" /></button></div>}
+            {isMultiplayer && card.category === 'teka-teki' && isMyTurnToAsk && !answerRevealedToPartner && <div className="conversation-response"><p className="conversation-notice">{partnerAnswer ? `${partnerName}'s guess: “${partnerAnswer}”` : `Waiting for ${partnerName} to type a guess.`}</p><button type="button" onClick={onRevealToPartner} disabled={!partnerAnswer} className="card-reveal-button"><UiSymbol kind="together" /> Reveal to both of you <UiSymbol kind="next" /></button></div>}
+            {isMultiplayer && card.category === 'teka-teki' && answerRevealedToPartner && (myAnswer || partnerAnswer) && <div className="answer-note"><span>{isMyTurnToAsk ? `${partnerName}'s guess` : 'Your guess'}</span><p>{isMyTurnToAsk ? partnerAnswer : myAnswer}</p></div>}
             {isMultiplayer && onSubmitAnswer && card.category !== 'teka-teki' ? <div className="conversation-response">
               {partnerAnswer && !myAnswer && <p className="conversation-notice">{partnerName} has answered. What do you think?</p>}
               {!partnerAnswer && myAnswer && <div className="answer-note"><span>Your answer</span><p>{myAnswer}</p><small>Waiting for {partnerName} to answer...</small></div>}

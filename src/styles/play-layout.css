@@ -2,7 +2,15 @@
 .arcade-session-controls { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
 .arcade-play .global-end-game { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; background: #ffe3eb; border-radius: 11px; }
 .arcade-play[data-playing='true'] .game-toolbar .game-end-button { display: none; }
-.arcade-play[data-playing='true'] .arcade-play-main > div:not(.arcade-intro) { max-width: none; }
+.arcade-play[data-playing='true'] .arcade-play-main > div:not(.arcade-intro) {
+  width: min(100%, 840px);
+  max-width: 840px;
+  margin-inline: auto;
+}
+.arcade-play[data-playing='true'] .arcade-play-main > .arcade-card-game {
+  width: min(100%, 880px);
+  max-width: 880px;
+}
 .arcade-play[data-playing='true'] .game-toolbar { border: 0; border-bottom: 1px solid #ddd4e4; border-radius: 0; background: transparent; box-shadow: none; padding: 0 0 13px; }
 .arcade-play[data-playing='true'] .activity-card:not(.wheel-prompt) { border: 0; border-radius: 0; background: transparent; box-shadow: none; padding: 12px 0 0; }
 .arcade-play[data-playing='true'] .activity-card > .round-label { display: none; }
@@ -14,6 +22,7 @@
 .arcade-play[data-playing='true'] .arcade-card-game > div:last-child { width: 100%; max-width: 880px; margin-left: auto; margin-right: auto; }
 .arcade-play[data-playing='true'] .type-board { border-radius: 18px; }
 .arcade-play[data-playing='true'] .game-board > div:not(.round-label) { width: 100%; max-width: 640px; align-self: center; }
+.arcade-play[data-playing='true'] .game-board > .number-game-stage { max-width: 760px; margin-inline: auto; }
 .arcade-play .arcade-brand-strip { flex-shrink: 0; }
 .arcade-play .arcade-play-footer { flex-shrink: 0; }
 

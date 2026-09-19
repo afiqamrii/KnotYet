@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const GAME_SESSION_KEYS = [
+  'swipe_category', 'swipe_index', 'swipe_deck', 'swipe_flipped', 'swipe_myAnswer',
+  'swipe_partnerAnswer', 'swipe_riddleRevealed',
   'num_stage', 'num_secret', 'num_guesses', 'num_round', 'num_p1', 'num_p2',
   'letter_stage', 'letter_letter', 'letter_char', 'letter_winner',
   'guess_stage', 'guess_questions', 'guess_currentIndex', 'guess_actualAnswer',

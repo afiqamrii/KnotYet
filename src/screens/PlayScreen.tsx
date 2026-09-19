@@ -19,7 +19,7 @@ import { GameModeNav } from '../components/GameModeNav';
 import { MultiplayerWaitingRoom } from '../components/MultiplayerWaitingRoom';
 import '../styles/play.css';
 import '../styles/play-layout.css';
-import { clearStorageKeys, GAME_SESSION_KEYS, readJson, STORAGE_KEYS, writeJson } from '../utils/storage';
+import { clearStorageKeys, GAME_SESSION_KEYS, readJson, readStringUnion, STORAGE_KEYS, writeJson } from '../utils/storage';
 
 const CoupleGuessGame = lazy(() => import('../components/CoupleGuessGame').then((module) => ({ default: module.CoupleGuessGame })));
 const SpinWheel = lazy(() => import('../components/SpinWheel').then((module) => ({ default: module.SpinWheel })));
@@ -51,8 +51,10 @@ export const PlayScreen: React.FC = () => {
     setActiveTabState(tab);
     localStorage.setItem('knotyet_activeTab', tab);
   };
-  const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>('all');
-  const [cardIndex, setCardIndex] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>(() =>
+    readStringUnion(sessionStorage, 'swipe_category', ['all', 'teka-teki', 'vibe-check', 'taaruf-realiti', 'dare-santai'] as const, 'all')
+  );
+  const [cardIndex, setCardIndex] = useState(() => Number(sessionStorage.getItem('swipe_index')) || 0);
   const [roundCounter, setRoundCounter] = useState(0);
   // Keep the current deck stable while progress syncs in the background. A new
   // round reads this ref, so previously shown cards are still excluded without
@@ -63,10 +65,20 @@ export const PlayScreen: React.FC = () => {
   }, [progress?.answered_questions]);
   
   // Multiplayer SwipeCard states
-  const [isCardFlipped, setIsCardFlipped] = useState(false);
-  const [myCardAnswer, setMyCardAnswer] = useState<string | null>(null);
-  const [partnerCardAnswer, setPartnerCardAnswer] = useState<string | null>(null);
-  const [riddleAnswerRevealed, setRiddleAnswerRevealed] = useState(false);
+  const [isCardFlipped, setIsCardFlipped] = useState(() => sessionStorage.getItem('swipe_flipped') === 'true');
+  const [myCardAnswer, setMyCardAnswer] = useState<string | null>(() => sessionStorage.getItem('swipe_myAnswer'));
+  const [partnerCardAnswer, setPartnerCardAnswer] = useState<string | null>(() => sessionStorage.getItem('swipe_partnerAnswer'));
+  const [riddleAnswerRevealed, setRiddleAnswerRevealed] = useState(() => sessionStorage.getItem('swipe_riddleRevealed') === 'true');
+  React.useEffect(() => {
+    sessionStorage.setItem('swipe_category', selectedCategory);
+    sessionStorage.setItem('swipe_index', String(cardIndex));
+    sessionStorage.setItem('swipe_flipped', String(isCardFlipped));
+    sessionStorage.setItem('swipe_riddleRevealed', String(riddleAnswerRevealed));
+    if (myCardAnswer) sessionStorage.setItem('swipe_myAnswer', myCardAnswer);
+    else sessionStorage.removeItem('swipe_myAnswer');
+    if (partnerCardAnswer) sessionStorage.setItem('swipe_partnerAnswer', partnerCardAnswer);
+    else sessionStorage.removeItem('swipe_partnerAnswer');
+  }, [selectedCategory, cardIndex, isCardFlipped, riddleAnswerRevealed, myCardAnswer, partnerCardAnswer]);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(() => sessionStorage.getItem('knotyet_openRoom') === 'true');
@@ -130,7 +142,13 @@ export const PlayScreen: React.FC = () => {
     
     // Clear all game-specific session states
     clearStorageKeys(sessionStorage, GAME_SESSION_KEYS);
-    
+    setCardIndex(0);
+    setRoundCounter(value => value + 1);
+    setIsCardFlipped(false);
+    setMyCardAnswer(null);
+    setPartnerCardAnswer(null);
+    setRiddleAnswerRevealed(false);
+
     setIntroShown(stored);
 
     if (multiplayer.status === 'connected') {
@@ -172,10 +190,11 @@ export const PlayScreen: React.FC = () => {
     
     if (savedRoomCode && profile && multiplayer.status === 'disconnected') {
       sessionRestoredRef.current = true;
+      if (isActiveTab(savedActiveGame)) previousTab.current = savedActiveGame;
       if (savedIsHost === 'true') {
-        multiplayer.hostRoom(savedRoomCode, profile);
+        multiplayer.hostRoom(savedRoomCode, profile, true);
       } else {
-        multiplayer.joinRoom(savedRoomCode, profile);
+        multiplayer.joinRoom(savedRoomCode, profile, true);
       }
       setIsRoomModalOpen(true);
       if (savedActiveGame) {
@@ -200,7 +219,14 @@ export const PlayScreen: React.FC = () => {
     // isLoading changing to false creates the first real deck from cloud
     // history. After that, the ref keeps a round steady while answers sync.
     const seenIds = isLoading ? seenQuestionIdsRef.current : (progress?.answered_questions || seenQuestionIdsRef.current);
-    return getShuffledSwipeCards(selectedCategory, 15, seenIds);
+    const savedDeck = readJson<{ category: string; ids: string[] } | null>(sessionStorage, 'swipe_deck', null);
+    if (roundCounter === 0 && savedDeck?.category === selectedCategory && Array.isArray(savedDeck.ids) && savedDeck.ids.length > 0) {
+      const restored = getSwipeCardsByIds(savedDeck.ids);
+      if (restored.length === savedDeck.ids.length) return restored;
+    }
+    const fresh = getShuffledSwipeCards(selectedCategory, 15, seenIds);
+    writeJson(sessionStorage, 'swipe_deck', { category: selectedCategory, ids: fresh.map(card => card.id) });
+    return fresh;
   }, [selectedCategory, roundCounter, isLoading]);
   const filteredCards = useMemo(() => {
     if (multiplayer.status === 'connected' && !multiplayer.isHost) {
@@ -241,12 +267,15 @@ export const PlayScreen: React.FC = () => {
     }
     
     // Fallback if Match Game is active but we are offline
-    if (multiplayer.status !== 'connected' && activeTab === 'match') {
+    if (multiplayer.status !== 'connected' && !sessionRestoredRef.current && activeTab === 'match') {
       setActiveTab('swipe');
     }
     
+    if (multiplayer.status === 'disconnected' && !sessionStorage.getItem('mp_roomCode')) {
+      sessionRestoredRef.current = false;
+    }
     if (multiplayer.status === 'connected') previousTab.current = multiplayer.activeGame;
-    else if (multiplayer.status === 'disconnected') previousTab.current = 'lobby';
+    else if (multiplayer.status === 'disconnected' && !sessionRestoredRef.current) previousTab.current = 'lobby';
   }, [multiplayer.status, multiplayer.activeGame, activeTab, incrementPlayCount]);
 
 
@@ -305,6 +334,13 @@ export const PlayScreen: React.FC = () => {
           const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
           stored[currentTabToReset] = false;
           writeJson(sessionStorage, STORAGE_KEYS.introShown, stored);
+          clearStorageKeys(sessionStorage, GAME_SESSION_KEYS);
+          setCardIndex(0);
+          setRoundCounter(value => value + 1);
+          setIsCardFlipped(false);
+          setMyCardAnswer(null);
+          setPartnerCardAnswer(null);
+          setRiddleAnswerRevealed(false);
           setIntroShown(stored);
         } else if (msg.type === 'SWIPE_ACTION' && currentTab === 'swipe') {
           executeSwipe(msg.payload.direction);
@@ -317,6 +353,16 @@ export const PlayScreen: React.FC = () => {
     }
   }, [multiplayer.status, currentTab, multiplayer.subscribeMessage, cardIndex, filteredCards, activeTab, multiplayer.activeGame]);
 
+  // A refreshed peer can rejoin after the original answer packet was sent.
+  // Re-send the local commitment once the shared deck is available again.
+  React.useEffect(() => {
+    if (multiplayer.status !== 'connected' || currentTab !== 'swipe' || !filteredCards[cardIndex]) return;
+    if (myCardAnswer) multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: myCardAnswer });
+    if (riddleAnswerRevealed && filteredCards[cardIndex].category === 'teka-teki') {
+      multiplayer.sendMessage({ type: 'RIDDLE_REVEAL' });
+    }
+  }, [multiplayer.status, currentTab, filteredCards, cardIndex, myCardAnswer, riddleAnswerRevealed]);
+
   const currentCard = filteredCards[cardIndex];
   const isRiddleAsker = currentCard?.category === 'teka-teki'
     ? ((cardIndex % 2 === 0) ? !!multiplayer.isHost : !multiplayer.isHost)
@@ -324,16 +370,16 @@ export const PlayScreen: React.FC = () => {
   const canAdvanceCurrentCard = !currentCard || multiplayer.status !== 'connected'
     ? true
     : currentCard.category === 'teka-teki'
-      ? isRiddleAsker
+      ? isRiddleAsker && Boolean(partnerCardAnswer) && riddleAnswerRevealed
       : Boolean(myCardAnswer && partnerCardAnswer);
 
   // A card counts as seen as soon as it is displayed. This avoids resurfacing
   // an abandoned prompt after a refresh or on another device.
   React.useEffect(() => {
-    if (currentTab !== 'swipe' || !currentCard || isSummaryOpen) return;
+    if (currentTab !== 'swipe' || !introShown.swipe || !currentCard || isSummaryOpen) return;
     markQuestionAsSeen(currentCard.id);
     recordAnsweredQuestion(currentCard.id);
-  }, [currentTab, currentCard?.id, isSummaryOpen, recordAnsweredQuestion]);
+  }, [currentTab, introShown.swipe, currentCard?.id, isSummaryOpen, recordAnsweredQuestion]);
   const nextCard = filteredCards[cardIndex + 1];
   const thirdCard = filteredCards[cardIndex + 2];
   const fourthCard = filteredCards[cardIndex + 3];
@@ -409,6 +455,7 @@ export const PlayScreen: React.FC = () => {
   ]);
 
   const handleRestartDeck = () => {
+    sessionStorage.removeItem('swipe_deck');
     setCardIndex(0);
     setAnsweredCount(0);
     setSkippedCount(0);
@@ -418,6 +465,11 @@ export const PlayScreen: React.FC = () => {
 
   const handleCategoryChange = (cat: CardCategory | 'all') => {
     sounds.playFlip();
+    sessionStorage.removeItem('swipe_deck');
+    setIsCardFlipped(false);
+    setMyCardAnswer(null);
+    setPartnerCardAnswer(null);
+    setRiddleAnswerRevealed(false);
     setSelectedCategory(cat);
     setCardIndex(0);
     setAnsweredCount(0);
@@ -792,16 +844,17 @@ export const PlayScreen: React.FC = () => {
 
         {/* Partner Left Modal */}
         {multiplayer.status === 'partner_left' && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in border-4 border-red-500">
-              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-                <Users className="w-8 h-8 text-red-500" />
+          <div className="partner-away-overlay" role="presentation">
+            <section className="partner-away-card" role="alertdialog" aria-modal="true" aria-labelledby="partner-away-title" aria-describedby="partner-away-description">
+              <div className="partner-away-icon" aria-hidden="true"><Users /></div>
+              <span className="partner-away-kicker">A LITTLE PAUSE</span>
+              <h3 id="partner-away-title">Your partner disconnected</h3>
+              <p id="partner-away-description">Keep this room open if they are coming back. Your game can continue when you reconnect.</p>
+              <div className="partner-away-status"><span aria-hidden="true" /> Waiting for your person</div>
+              <div className="partner-away-actions">
+                <button type="button" className="partner-away-leave" onClick={() => multiplayer.leaveRoom()}>Leave room</button>
               </div>
-              <h3 className="text-xl font-black text-ink mb-2">Partner Disconnected</h3>
-              <p className="text-sm font-bold text-red-500 mb-2">The connection paused or your partner left. Keep this tab open if they are coming back.</p>
-              <p className="text-xs text-ink-3 mb-4">If you opened WhatsApp, return here to continue playing.</p>
-              <button type="button" className="btn-chunky btn-white px-5 py-2" onClick={() => multiplayer.leaveRoom()}>Leave room</button>
-            </div>
+            </section>
           </div>
         )}
 

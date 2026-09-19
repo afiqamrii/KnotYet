@@ -36,7 +36,8 @@ export interface WheelSegment {
 }
 
 
-import taarufData from './taaruf_game_final.json';
+// Keep the editable question bank at the project root as the single source of truth.
+import taarufData from '../../taaruf_game_final.json';
 
 type BonusChallenge = {
   cabaran?: string;
@@ -131,14 +132,29 @@ export interface MatchQuestion {
   question: string;
   options: string[];
   vibeText: string;
+  kind: 'compatibility' | 'spotlight';
+  targetPlayer?: 'host' | 'partner';
 }
 
-export const MATCH_QUESTIONS: MatchQuestion[] = taarufData.compatibility_match_check.map((item, i) => ({
-  id: `m-${i}`,
-  question: item.soalan,
-  options: item.pilihan.map(cleanOption),
-  vibeText: item.tip_perbincangan || 'Match Score check!'
-}));
+// Keep the gq-* IDs when these prompts appear in Couple Match. Shared IDs mean
+// playing a question here also removes it from future Guess My Heart decks.
+export const MATCH_QUESTIONS: MatchQuestion[] = [
+  ...taarufData.compatibility_match_check.map((item, i) => ({
+    id: `m-${i}`,
+    question: item.soalan,
+    options: item.pilihan.map(cleanOption),
+    vibeText: item.tip_perbincangan || 'Match Score check!',
+    kind: 'compatibility' as const
+  })),
+  ...GUESS_QUIZ_LIST.map((item, i) => ({
+    id: item.id,
+    question: item.question,
+    options: item.options,
+    vibeText: item.vibeText,
+    kind: 'spotlight' as const,
+    targetPlayer: (i % 2 === 0 ? 'host' : 'partner') as 'host' | 'partner'
+  }))
+];
 
 const matureQuestionGroups = Object.entries(taarufData.soalan_matang_prakahwinan);
 

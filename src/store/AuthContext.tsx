@@ -5,6 +5,16 @@ import { AdModal } from '../components/AdModal';
 
 const MULTIPLAYER_DAILY_LIMIT = 3;
 const SOLO_DAILY_LIMIT = 5;
+const clearAccountCache = () => {
+  [
+    'knotyet_guest_active',
+    'knotyet_guest_id',
+    'jodohdeck_profile',
+    'jodohdeck_partner',
+    'jodohdeck_answered',
+    'knotyet_seen_questions',
+  ].forEach(key => localStorage.removeItem(key));
+};
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -120,13 +130,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       if (session?.user) {
         // Postgres Change subscriptions use the current JWT for RLS. Refresh it
         // whenever Auth rotates the session so chat does not silently go stale.
         void supabase.realtime.setAuth(session.access_token);
         setUser(session.user);
+      } else {
+        if (event === 'SIGNED_OUT') clearAccountCache();
+        setUser(null);
+        setProfile(null);
+        setProgress(null);
+        setCouple(null);
       }
     });
 
@@ -213,22 +229,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const safePath = returnPath === '/invite' ? '/invite' : '/';
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}${safePath}` }
+      options: {
+        redirectTo: `${window.location.origin}${safePath}`,
+        queryParams: { prompt: 'select_account' },
+      }
     });
     if (error) throw error;
   };
 
   const signOut = async () => {
-    localStorage.removeItem('knotyet_guest_active');
-    localStorage.removeItem('knotyet_guest_id');
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    clearAccountCache();
+    setSession(null);
     setUser(null);
     setProfile(null);
     setProgress(null);
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore network errors when signing out
-    }
+    setCouple(null);
   };
   
   const incrementPlayCount = async (type: 'solo' | 'multiplayer') => {

@@ -3,3 +3,4 @@
 await import('./chat-room-ui-check.mjs');
 await import('./chat-check.mjs');
 await import('./multiplayer-ux-check.mjs');
+await import('./room-refresh-check.mjs');

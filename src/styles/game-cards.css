@@ -59,6 +59,9 @@
 .arcade-play .activity-card .btn-white { background: #fffaf0 !important; color: #241d35; }
 .arcade-play .activity-card input { border: 1.5px solid #241d35; border-radius: 13px; background: #f2edfa; color: #241d35; font-family: 'Outfit',sans-serif; box-shadow: none; }
 .arcade-play .number-guess-zone input[type='number'] { background: #e0f1b5; font-size: 64px; font-weight: 600; padding-block: 22px; box-shadow: 4px 5px 0 #241d35; }
+.number-setup-stage { max-width: 640px; min-height: 0; gap: clamp(16px, 3vh, 26px); margin-inline: auto; padding: 12px 0; overflow-y: auto; }
+.number-setup-fields { flex: 0 0 auto; }
+.number-setup-stage > div:last-child { flex: 0 0 auto; }
 .number-game-stage { display: grid; grid-template-columns: minmax(0,1fr) 190px; gap: 14px; min-height: 0; color: #241d35; }
 .number-play-panel { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1.5px solid #241d35; border-radius: 18px; background: #f5ffd9; }
 .number-turn-copy { text-align: left; }.number-turn-copy h3 { margin: 3px 0 2px; line-height: 1.1; }.number-turn-copy p { color: #6b5a73; font-size: 11px; line-height: 1.4; }

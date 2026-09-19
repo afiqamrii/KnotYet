@@ -262,12 +262,12 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
       <div className="game-card activity-card game-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
         <RoundLabel title="THE NUMBER DUEL" detail={`ROUND ${round}`} kind="game" />
         {stage === 'setup' && (
-          <div className="w-full flex-1 flex flex-col justify-between items-center animate-slide-up py-1">
+          <div className="number-setup-stage w-full flex-1 flex flex-col items-center justify-center animate-slide-up">
             <div className="text-center space-y-1 shrink-0">
               <h3 className="text-xl font-black text-ink">Who is playing?</h3>
               <p className="text-xs text-ink-3">Enter names for Player 1 and Player 2.</p>
             </div>
-            <div className="w-full space-y-2.5 my-auto py-2">
+            <div className="number-setup-fields w-full space-y-2.5">
               <div>
                 <label htmlFor="number-player-one" className="block text-[11px] font-black uppercase tracking-wider text-indigo-700 mb-1">Player 1</label>
                 <input

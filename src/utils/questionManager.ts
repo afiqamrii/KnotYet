@@ -97,8 +97,26 @@ export function resetSeenQuestionsForPrefix(prefix: string): void {
 
 export function getShuffledMatchQuestions(count: number = 10, additionalSeenIds?: Iterable<string>): MatchQuestion[] {
   const seen = getSeenQuestionIds(additionalSeenIds);
-  const shuffled = shuffleArray(MATCH_QUESTIONS.filter(q => !seen.has(q.id)));
-  return shuffled.slice(0, Math.min(count, shuffled.length));
+  const available = MATCH_QUESTIONS.filter(question => !seen.has(question.id));
+  const compatibility = shuffleArray(available.filter(question => question.kind === 'compatibility'));
+  const hostSpotlight = shuffleArray(available.filter(question => question.kind === 'spotlight' && question.targetPlayer === 'host'));
+  const partnerSpotlight = shuffleArray(available.filter(question => question.kind === 'spotlight' && question.targetPlayer === 'partner'));
+  const spotlight: MatchQuestion[] = [];
+  while (hostSpotlight.length || partnerSpotlight.length) {
+    const first = hostSpotlight.shift();
+    const second = partnerSpotlight.shift();
+    if (first) spotlight.push(first);
+    if (second) spotlight.push(second);
+  }
+
+  const selected: MatchQuestion[] = [];
+  while (selected.length < count && (compatibility.length || spotlight.length)) {
+    const next = selected.length % 2 === 0
+      ? compatibility.shift() || spotlight.shift()
+      : spotlight.shift() || compatibility.shift();
+    if (next) selected.push(next);
+  }
+  return selected;
 }
 
 export function getMatchQuestionsByIds(ids: string[]): MatchQuestion[] {

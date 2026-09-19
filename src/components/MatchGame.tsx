@@ -4,13 +4,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { readStringUnion } from '../utils/storage';
 import confetti from 'canvas-confetti';
 import { Trophy, HeartHandshake, RefreshCw, Sparkles } from 'lucide-react';
-import { MatchQuestion } from '../data/questions';
+import { MATCH_QUESTIONS, MatchQuestion } from '../data/questions';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
 import { Avatar } from './AvatarPicker';
-import { getShuffledMatchQuestions, getMatchQuestionsByIds, markQuestionAsSeen } from '../utils/questionManager';
+import { getShuffledMatchQuestions, getMatchQuestionsByIds, getSeenQuestionIds, markQuestionAsSeen, shuffleArray } from '../utils/questionManager';
 
 interface Props {
   onEndGame?: () => void;
@@ -88,7 +88,9 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     sessionStorage.setItem('match_completed', completed.toString());
   }, [questions, currentIndex, stage, myAnswer, partnerAnswer, score, completed]);
 
-  const currentQuiz = questions[currentIndex] || questions[0] || { id: 'm-0', question: '', options: [], vibeText: '' };
+  const currentQuiz: MatchQuestion = questions[currentIndex] || questions[0] || { id: 'm-0', question: '', options: [], vibeText: '', kind: 'compatibility' };
+  const spotlightIsMe = currentQuiz.targetPlayer === (multiplayer.isHost ? 'host' : 'partner');
+  const spotlightName = spotlightIsMe ? (profile?.name || 'You') : partnerName;
 
   // Treat a displayed prompt as seen so it cannot come back after a refresh,
   // reconnect, or a session on another device.
@@ -148,6 +150,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     }
   };
 
+  const handleReviewQuestions = () => {
+    handleRestart(true, shuffleArray(MATCH_QUESTIONS).slice(0, 10));
+  };
+
   const handleNext = useCallback(() => {
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'MATCH_NEXT' });
@@ -175,6 +181,12 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       });
     }
   }, [multiplayer.status, multiplayer.subscribeMessage, executeNext, handleRestart]);
+
+  useEffect(() => {
+    if (multiplayer.status === 'connected' && questions.length > 0 && myAnswer) {
+      multiplayer.sendMessage({ type: 'MATCH_SELECT', payload: myAnswer });
+    }
+  }, [multiplayer.status, questions, currentIndex, myAnswer]);
 
   useEffect(() => {
     if (myAnswer && partnerAnswer && stage === 'vote') {
@@ -260,6 +272,9 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
 
 
   if (questions.length === 0) {
+    const waitingForHost = multiplayer.status === 'connected' && !multiplayer.isHost;
+    const seen = getSeenQuestionIds(progress?.answered_questions);
+    const seenCount = MATCH_QUESTIONS.filter(question => seen.has(question.id)).length;
     return (
       <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-center gap-3 mx-auto animate-fade-in">
         <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
@@ -271,9 +286,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         </div>
         <div className="game-card activity-card text-center p-8 space-y-3">
           <Sparkles className="w-10 h-10 text-brand mx-auto" />
-          <h3 className="text-xl font-black text-ink">{multiplayer.status === 'connected' && !multiplayer.isHost ? 'Getting your shared questions...' : 'You have explored every question!'}</h3>
-          <p className="text-sm font-semibold text-ink-3">{multiplayer.status === 'connected' && !multiplayer.isHost ? 'Your partner’s question deck is syncing now.' : 'Fresh prompts are being added soon. Pick another game for your next round together.'}</p>
-          {multiplayer.status !== 'connected' || multiplayer.isHost ? <button onClick={handleEndGame} className="btn-chunky btn-pink mx-auto px-5 py-3">Choose another game</button> : null}
+          <h3 className="text-xl font-black text-ink">{waitingForHost ? 'Getting your shared questions...' : 'No new Couple Match prompts right now'}</h3>
+          <p className="text-sm font-semibold text-ink-3">{waitingForHost ? 'Your partner’s question deck is syncing now.' : `This game has ${MATCH_QUESTIONS.length} prompts. Your saved history marks ${seenCount} as seen.`}</p>
+          {!waitingForHost && <button onClick={handleReviewQuestions} className="btn-chunky btn-pink mx-auto px-5 py-3">Replay earlier questions together</button>}
+          {!waitingForHost && <button onClick={handleEndGame} className="mx-auto text-sm font-bold text-ink-3 underline">Choose another game</button>}
         </div>
       </div>
     );
@@ -353,7 +369,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
               <span>Question {currentIndex + 1} / {questions.length}</span>
               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-purple-500/80 text-white text-[9px] font-black">
-                Compatibility
+                {currentQuiz.kind === 'spotlight' ? 'Spotlight' : 'Compatibility'}
               </span>
             </div>
           </div>
@@ -367,7 +383,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       <div className="game-card activity-card together-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
         <RoundLabel title="COUPLE MATCH" detail={`ROUND ${currentIndex + 1} / ${questions.length}`} kind="together" />
         {pointsToast && (
-          <ReactionDialog positive={pointsToast.positive} title={pointsToast.positive ? 'Great minds, same answer!' : 'Opposites keep it fun!'} points={pointsToast.text}>
+          <ReactionDialog positive={pointsToast.positive} title={pointsToast.positive ? (currentQuiz.kind === 'spotlight' ? 'You know each other!' : 'Great minds, same answer!') : (currentQuiz.kind === 'spotlight' ? 'A new thing to learn!' : 'Opposites keep it fun!')} points={pointsToast.text}>
             <div className="reaction-answers">
               <div><small>You</small><p>{myAnswer}</p></div>
               <div><small>{multiplayer.remoteProfile?.name || 'Partner'}</small><p>{partnerAnswer}</p></div>
@@ -390,8 +406,13 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       <div className="question-panel">
         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black text-white mx-auto mb-2"
           style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)', boxShadow: '0 2px 8px rgba(255,45,155,0.3)' }}>
-          <HeartHandshake className="w-3 h-3" /> Compatibility Test
+          <HeartHandshake className="w-3 h-3" /> {currentQuiz.kind === 'spotlight' ? `About ${spotlightName}` : 'Compatibility Test'}
         </div>
+        {currentQuiz.kind === 'spotlight' && (
+          <p className="text-[11px] sm:text-xs font-semibold text-ink-3 mb-1.5">
+            {spotlightIsMe ? 'Pick your real answer. Your partner is guessing!' : `Guess ${spotlightName}'s answer. Both choices reveal together!`}
+          </p>
+        )}
         <h3 className={`question-text ${currentQuiz.question.length > 140 ? 'question-long' : ''}`}>
           {currentQuiz.question}
         </h3>
