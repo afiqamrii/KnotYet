@@ -365,21 +365,19 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
           </button>
         </div>
 
-        <div className="game-card activity-card summary-board w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
-          <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto shadow-btn-pink animate-float mt-2"
-            style={{ background: 'linear-gradient(135deg, #FF2D9B, #7C3AED)', boxShadow: '0 8px 24px rgba(255,45,155,0.4)' }}>
-            <Trophy className="w-10 h-10 text-white" />
+        <div className="game-card activity-card summary-board completion-inline w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
+          <div className="completion-symbol completion-symbol-pink">
+            <Trophy aria-hidden="true" />
           </div>
           <div>
-            <span className="tag" style={{ background: '#FCE7F3', color: '#FF2D9B', border: '2px solid #FBCFE8' }}>
+            <span className="completion-pill">
               {t.quizSummaryTitle}
             </span>
-            <h2 className="text-4xl font-black text-ink mt-2">{percentage}%</h2>
+            <h2 className="completion-title">{percentage}%</h2>
             <p className="text-sm text-ink-3 font-semibold">Green Flag!</p>
             <p className="text-xs text-ink-3 mt-1">{t.quizSummaryScore(score, questions.length)}</p>
           </div>
-          <div className="p-4 rounded-2xl text-left text-xs text-ink-2 leading-relaxed space-y-2"
-            style={{ background: '#F5F3FF', border: '2px solid #DDD6FE' }}>
+          <div className="completion-note">
             <div className="font-black text-brand flex items-center gap-1.5">
               <Heart className="w-4 h-4 fill-brand text-brand" /> Compatibility Note:
             </div>
@@ -388,7 +386,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
 
           {/* Partners display */}
           {profile && partner && (
-            <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
+            <div className="completion-partners">
               <div className="text-center">
                 <Avatar avatarId={profile.avatarId} size={40} />
                 <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
@@ -403,7 +401,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
           
           <GiphyReaction mood="win" seed={`summary-${score}`} compact />
 
-          <button onClick={() => handleRestart(true)} className="btn-chunky btn-pink w-full text-sm py-3.5">
+          <button onClick={() => handleRestart(true)} className="completion-button completion-button-primary">
             <RefreshCw className="w-4 h-4" /> {t.quizRestart}
           </button>
         </div>

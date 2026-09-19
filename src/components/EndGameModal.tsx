@@ -34,7 +34,7 @@ export const EndGameModal: React.FC<EndGameModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div className="completion-overlay">
       <div
         ref={dialogRef}
         role="dialog"
@@ -60,42 +60,42 @@ export const EndGameModal: React.FC<EndGameModalProps> = ({
             first.focus();
           }
         }}
-        className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in relative border border-stone-100"
+        className="completion-sheet completion-confirm"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close icon in corner */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 w-11 h-11 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100 transition"
+          className="completion-close"
           aria-label="Close"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Warning Icon Badge */}
-        <div className="w-16 h-16 rounded-3xl bg-rose-100 flex items-center justify-center mx-auto mb-4 border-2 border-rose-200 shadow-sm animate-bounce-soft">
+        <div className="completion-symbol completion-symbol-pink">
           <AlertTriangle className="w-8 h-8 text-rose-500" />
         </div>
 
         {/* Title */}
-        <h3 id="end-game-title" className="text-xl font-black text-ink mb-2">
+        <h3 id="end-game-title" className="completion-title">
           End {gameTitle || 'Game'}?
         </h3>
 
         {/* Subtitle / Description */}
-        <p id="end-game-description" className="text-xs sm:text-sm text-ink-3 mb-6 leading-relaxed">
+        <p id="end-game-description" className="completion-description">
           {isMultiplayer 
             ? 'Are you sure you want to end? You and your partner will return to the lobby and progress in this round will be reset.' 
             : 'Are you sure you want to end the game? Your current round progress will be reset.'}
         </p>
 
         {/* Action Buttons */}
-        <div className="flex gap-3">
+        <div className="completion-actions completion-actions-row">
           <button
             ref={cancelButtonRef}
             type="button"
             onClick={onClose}
-            className="flex-1 py-3.5 rounded-2xl font-black text-sm text-ink-3 bg-stone-100 hover:bg-stone-200 active:scale-95 transition"
+            className="completion-button completion-button-secondary"
           >
             Keep Playing
           </button>
@@ -104,7 +104,7 @@ export const EndGameModal: React.FC<EndGameModalProps> = ({
               onClose();
               onConfirm();
             }}
-            className="flex-1 py-3.5 rounded-2xl font-black text-sm text-white bg-rose-500 hover:bg-rose-600 active:scale-95 transition shadow-lg shadow-rose-500/30"
+            className="completion-button completion-button-danger"
           >
             Yes, End Game
           </button>

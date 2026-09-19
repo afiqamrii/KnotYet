@@ -256,7 +256,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
                 }}
               >
                 <span>Start Race!</span>
-                <span className="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-black/20 text-white font-bold">Space / Enter</span>
+                <span className="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-[#241d35] text-white font-bold">Space / Enter</span>
               </button>
             ) : (
               <div className="py-3 text-fuchsia-600 font-bold animate-pulse text-sm">
@@ -352,12 +352,12 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'winner' && winner && (
-          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 text-center animate-pop-in z-10">
+          <div className="completion-reveal flex-1 flex flex-col items-center justify-center p-3 sm:p-6 text-center animate-pop-in z-10">
             <GiphyReaction mood="win" seed={`letter-${letter}-${winner.name}`} compact />
             
             <h3 className="text-xl sm:text-2xl font-black text-ink mb-1.5">{winner.name} Wins!</h3>
             
-            <div className="bg-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-2xl shadow-sm border-2 border-fuchsia-100 mb-4 sm:mb-6 inline-block">
+            <div className="completion-word mb-4 sm:mb-6">
               <p className="text-xs text-ink-3 font-semibold mb-0.5">Winning word for '{letter}':</p>
               <p className="text-xl sm:text-2xl font-black text-fuchsia-600">{winner.word}</p>
             </div>
@@ -365,15 +365,10 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             {(!isMultiplayer || multiplayer.isHost) ? (
               <button
                 onClick={handleNextRound}
-                className="btn-chunky w-full py-3 sm:py-3.5 text-sm sm:text-base flex items-center justify-center gap-2 group cursor-pointer"
-                style={{
-                  background: 'linear-gradient(135deg, #D946EF, #A855F7)',
-                  color: 'white',
-                  boxShadow: '0 5px 0 #C026D3, 0 6px 18px rgba(217,70,239,0.35)'
-                }}
+                className="completion-button completion-button-primary group"
               >
                 <span>Play Next Round</span>
-                <span className="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-black/20 text-white font-bold">Space / Enter</span>
+                <span className="hidden md:inline-block text-[10px] font-mono px-2 py-0.5 rounded bg-[#241d35] text-white font-bold">Space / Enter</span>
               </button>
             ) : (
               <div className="py-3 text-fuchsia-600 font-bold animate-pulse text-sm">

@@ -316,13 +316,13 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
           </button>
         </div>
 
-        <div className="game-card activity-card summary-board w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
-          <div className="w-20 h-20 bg-brand text-white rounded-full mx-auto flex items-center justify-center animate-bounce-soft" style={{ boxShadow: '0 8px 32px rgba(124,58,237,0.4)' }}>
-            <Trophy className="w-10 h-10" />
+        <div className="game-card activity-card summary-board completion-inline w-full flex-1 flex flex-col justify-between p-6 text-center space-y-4 animate-pop-in overflow-y-auto no-scrollbar">
+          <div className="completion-symbol completion-symbol-purple">
+            <Trophy aria-hidden="true" />
           </div>
           <div>
-            <h2 className="text-3xl font-black text-ink">Match Score: {score}/{questions.length}</h2>
-            <div className="inline-flex items-center gap-1 mt-3 px-3 py-1 rounded-full text-xs font-black text-white bg-green-500" style={{ boxShadow: '0 4px 12px rgba(34,197,94,0.3)' }}>
+            <h2 className="completion-title">Match Score: {score}/{questions.length}</h2>
+            <div className="completion-pill">
               <Sparkles className="w-3 h-3" /> +{pointsEarned} Points Earned!
             </div>
             <p className="text-sm font-semibold text-ink-3 mt-4 mb-2">
@@ -332,7 +332,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
           
           {/* Partners display */}
           {profile && partner && (
-            <div className="flex items-center justify-center gap-4 p-3 rounded-2xl" style={{ background: '#FFF0F9' }}>
+            <div className="completion-partners">
               <div className="text-center">
                 <Avatar avatarId={profile.avatarId} size={40} />
                 <p className="text-[10px] font-black text-ink mt-1">{profile.heartPoints} pts</p>
@@ -347,7 +347,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
 
           <GiphyReaction mood="win" seed={`summary-${score}`} compact />
 
-          <button onClick={() => handleRestart()} className="btn-chunky btn-pink w-full text-sm py-3.5">
+          <button onClick={() => handleRestart()} className="completion-button completion-button-primary">
             <RefreshCw className="w-4 h-4" /> Play Again
           </button>
         </div>

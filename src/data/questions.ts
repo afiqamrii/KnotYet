@@ -143,7 +143,7 @@ export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
     }
   })).filter(card =>
     !excludedBonusIds.has(card.id) &&
-    !/^(?:Cabaran Komunikasi Pasangan Seri [0-9]+|Cabaran Pasangan Interaktif #[0-9]+)$/i.test(card.question)
+    !/^(?:Cabaran Komunikasi Pasangan|Cabaran Pasangan Interaktif)$/i.test(card.question)
   )
 ], card => card.question);
 

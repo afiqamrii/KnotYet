@@ -1,0 +1,84 @@
+/* Shared finish states use the same ink outlines and pastel surfaces as gameplay. */
+.completion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(36, 29, 53, .55);
+  backdrop-filter: blur(5px);
+}
+.completion-sheet,
+.arcade-play[data-playing='true'] .activity-card.completion-inline {
+  width: min(100%, 680px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  border: 2px solid #241d35;
+  border-radius: 25px;
+  background: #fffaf0;
+  box-shadow: 6px 7px 0 #241d35;
+  color: #241d35;
+}
+.completion-sheet { width: min(100%, 470px); padding: clamp(22px, 4vw, 36px); }
+.completion-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left; }
+.completion-kicker { display: inline-flex; align-items: center; gap: 7px; color: #6947b5; font: 800 10px/1.2 'Outfit', sans-serif; letter-spacing: .12em; }
+.completion-kicker svg { width: 15px; height: 15px; }
+.completion-symbol { display: grid; place-items: center; width: 66px; height: 66px; border: 2px solid #241d35; border-radius: 19px; color: #241d35; box-shadow: 4px 4px 0 #241d35; transform: rotate(-5deg); }
+.completion-symbol svg { width: 32px; height: 32px; stroke-width: 1.8; }
+.completion-symbol-pink { background: #ffb4c6; }
+.completion-symbol-purple { background: #c7b4ff; }
+.completion-symbol-green { background: #d5f578; }
+.completion-heading h2, .completion-title, .completion-inline .completion-title { margin: 2px 0 0; color: #241d35; font: 750 clamp(28px, 5vw, 38px)/1.08 'Outfit', sans-serif; letter-spacing: -.035em; }
+.completion-heading p, .completion-description { margin: 0; color: #6c6479; font: 550 14px/1.55 'DM Sans', sans-serif; }
+.completion-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; margin: 25px 0 15px; }
+.completion-stat { min-width: 0; padding: 15px 17px; border: 1.5px solid #241d35; border-radius: 16px; text-align: left; }
+.completion-stat-green { background: #d5f578; }
+.completion-stat-purple { background: #eee6ff; }
+.completion-stat span { display: flex; align-items: center; gap: 5px; color: #4c405e; font: 700 11px/1.3 'DM Sans', sans-serif; }
+.completion-stat span svg { width: 14px; height: 14px; }
+.completion-stat strong { display: block; margin-top: 9px; color: #241d35; font: 750 32px/1 'Outfit', sans-serif; }
+.completion-note { margin: 0 0 22px; padding: 15px 17px; border-left: 4px solid #7650e8; border-radius: 0 12px 12px 0; background: #eee6ff; color: #51475d; font: 550 13px/1.55 'DM Sans', sans-serif; text-align: left; }
+.completion-actions { display: grid; gap: 10px; width: 100%; }
+.completion-actions-row { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 23px; }
+.completion-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 49px; padding: 11px 16px; border: 2px solid #241d35; border-radius: 13px; color: #241d35; background: #fffdf8; box-shadow: 3px 4px 0 #241d35; font: 700 14px/1.25 'Outfit', sans-serif; text-align: center; }
+.completion-button svg { width: 17px; height: 17px; flex-shrink: 0; }
+.completion-button:hover { transform: translateY(-2px); box-shadow: 3px 6px 0 #241d35; }
+.completion-button:active { transform: translate(2px, 2px); box-shadow: 1px 2px 0 #241d35; }
+.completion-button-primary { background: #c7b4ff; }
+.completion-button-secondary { background: #fffdf8; }
+.completion-button-danger { background: #ffb4c6; }
+.completion-share { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 44px; border: 0; color: #6040a8; background: transparent; font: 700 12px 'Outfit', sans-serif; }
+.completion-share svg { width: 15px; height: 15px; }
+.completion-confirm { position: relative; }
+.completion-confirm > .completion-symbol { margin: 10px 0 22px; }
+.completion-confirm .completion-description { margin-top: 12px; }
+.completion-close { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #b9adca; border-radius: 12px; background: #fffdf8; color: #241d35; }
+.completion-close:hover { background: #eee6ff; }
+.completion-close svg { width: 18px; height: 18px; }
+.arcade-play[data-playing='true'] .activity-card.completion-inline { min-height: 0; padding: clamp(20px, 3vw, 32px); gap: 17px; }
+.completion-inline .completion-symbol { margin-inline: auto; }
+.completion-inline .completion-pill { display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; border: 1.5px solid #241d35; border-radius: 999px; background: #d5f578; color: #241d35; font: 750 12px 'Outfit', sans-serif; }
+.completion-inline .completion-partners { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 11px 18px; border: 1.5px solid #241d35; border-radius: 16px; background: #eee6ff; }
+.completion-inline .completion-note { margin: 0; width: 100%; }
+.completion-inline .completion-button { margin-top: auto; }
+@media (max-width: 480px) {
+  .completion-overlay { padding: 13px; }
+  .completion-sheet { padding: 22px 20px; box-shadow: 4px 5px 0 #241d35; }
+  .completion-stats { margin-top: 19px; }
+  .completion-actions-row { grid-template-columns: 1fr; }
+  .completion-stat { padding: 12px; }
+}
+
+.completion-reveal {
+  min-height: 0;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1.5px solid #241d35;
+  border-radius: 18px;
+  background: #fffaf0;
+}
+.completion-reveal h3 { color: #241d35; font: 750 clamp(24px, 4vw, 34px)/1.1 'Outfit', sans-serif; }
+.completion-reveal p { color: #62576e; }
+.completion-reveal .completion-word { display: inline-block; padding: 12px 20px; border: 1.5px solid #241d35; border-radius: 14px; background: #eee6ff; }
+.completion-reveal .completion-word p:last-child { color: #5632b1; }
+.completion-reveal > .w-full:last-child { max-width: 360px; }

@@ -13,7 +13,52 @@ const mapText = <T,>(value: T, transform: (text: string) => string): T => {
 const removeSourceNotes = (text: string) => text.replace(/\s*\[cite:\s*[\d,\s]+\]/g, '');
 const removeNumbering = (text: string) => text
   .replace(/^(?:Vibe Check Soalan|Teka Hati Soalan|Soalan Matang[^#:]*|Soalan Random & Deep|Isu Uncomfortable Topics|Match Check Scenario|Aturan Tidak Bertulis Rumahtangga Malaysia)\s*#?\d+\s*:\s*/i, '')
-  .replace(/\s*\((?:Siri|Seri)\s*#?\d+\)\s*$/i, '');
+  .replace(/\s*\((?:Soalan|Siri|Seri)\s*#?\d+\)\s*$/i, '')
+  .replace(/\s+(?:Siri|Seri)\s*#?\d+\s*$/i, '')
+  .replace(/\b(Cabaran Pasangan Interaktif)\s*#\d+\s*$/i, '')
+  .replace(/\s*\(Seksyen\s+\d+\s+Akta\s+\d+\)/gi, '')
+  .replace(/\bSeksyen\b/gi, 'Bahagian');
+
+const standardizePronouns = (text: string) => {
+  const normalized = text
+    .replace(/I am bored, can I see your phone\?/gi, 'Saya bosan, boleh saya tengok telefon awak?')
+    .replace(/\bI['’]m\b/gi, 'saya')
+    .replace(/\bI['’]ve\b/gi, 'saya sudah')
+    .replace(/\bI['’]ll\b/gi, 'saya akan')
+    .replace(/\bI['’]d\b/gi, 'saya akan')
+    .replace(/\byou['’]re\b/gi, 'awak')
+    .replace(/\byou['’]ve\b/gi, 'awak sudah')
+    .replace(/\byou['’]ll\b/gi, 'awak akan')
+    .replace(/\byou['’]d\b/gi, 'awak akan')
+    .replace(/\bif I\b/gi, 'kalau saya')
+    .replace(/\bif you\b/gi, 'kalau awak')
+    .replace(/\baku\b/gi, 'saya')
+    .replace(/\bkau\b/gi, 'awak')
+    .replace(/\bI\b/g, 'saya')
+    .replace(/\byou\b/gi, 'awak');
+  const phrased = normalized
+    .replace(/\bwhat kalau saya\b/gi, 'bagaimana jika saya')
+    .replace(/\bwhat kalau awak\b/gi, 'bagaimana jika awak')
+    .replace(/\bhow do awak\b/gi, 'bagaimana awak')
+    .replace(/\bwhat do awak\b/gi, 'apa yang awak')
+    .replace(/\bwhere do awak\b/gi, 'di mana awak')
+    .replace(/\bdo awak\b/gi, 'adakah awak')
+    .replace(/\bare awak\b/gi, 'adakah awak')
+    .replace(/\bcan awak\b/gi, 'bolehkah awak')
+    .replace(/\bawak prefer\b/gi, 'awak lebih suka')
+    .replace(/\bsaya prefer\b/gi, 'saya lebih suka')
+    .replace(/\bsaya have\b/gi, 'saya ada')
+    .replace(/\bsaya am\b/gi, 'saya')
+    .replace(/\bawak don't\b/gi, 'awak tak')
+    .replace(/\bsaya don't\b/gi, 'saya tak')
+    .replace(/\bawak asleep\b/gi, 'awak sedang tidur');
+  return phrased
+    .replace(/(^|[.!?]\s+)(saya|awak)\b/g, (_match, prefix: string, word: string) =>
+      prefix + word[0].toUpperCase() + word.slice(1))
+    .replace(/^\p{L}/u, letter => letter.toUpperCase());
+};
+
+const cleanPlayableText = (text: string) => standardizePronouns(removeNumbering(text));
 
 const latest = mapText(latestData, removeSourceNotes);
 
@@ -56,7 +101,12 @@ export const bonusDescription = (item: BonusChallenge) => {
     .replace(/Selepas lakonan selesai, buka kad 'Plot Twist':/i, 'Selepas lakonan, tambah plot twist:')
     .replace(/Setiap orang diberikan bajet RM30 and senarai 3 barang masakan rahsia\./i, 'Tetapkan bajet RM30 seorang dan pilih 3 bahan masakan secara rahsia.')
     .replace(/Aplikasi membacakan 5 soalan pantas;/i, 'Bergilir tanya 5 soalan pantas tentang diri masing-masing;')
-    .replace(/Semasa memandu, setiap pemain perlu/i, 'Semasa duduk bersama, setiap pemain perlu');
+    .replace(/Semasa memandu, setiap pemain perlu/i, 'Semasa duduk bersama, setiap pemain perlu')
+    .replace(/\band\b/gi, 'dan')
+    .replace(/\bor\b/gi, 'atau')
+    .replace(/\bplayer\b/gi, 'pemain')
+    .replace(/\bdismissive\b/gi, 'sambil lewa')
+    .replace(/\bfirst date\b/gi, 'janji temu pertama');
 };
 
 export const questionBank = mapText({
@@ -75,4 +125,4 @@ export const questionBank = mapText({
   random_deep_questions: latest.random_deep_questions,
   soalan_realiti_pasangan: latest.soalan_realiti_pasangan,
   unspoken_rules_malaysia: latest.unspoken_rules_malaysia,
-}, removeNumbering);
+}, cleanPlayableText);

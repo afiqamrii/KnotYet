@@ -19,6 +19,7 @@ import { GameModeNav } from '../components/GameModeNav';
 import { MultiplayerWaitingRoom } from '../components/MultiplayerWaitingRoom';
 import '../styles/play.css';
 import '../styles/play-layout.css';
+import '../styles/completion.css';
 import { clearStorageKeys, GAME_SESSION_KEYS, readJson, readStringUnion, STORAGE_KEYS, writeJson } from '../utils/storage';
 
 const CoupleGuessGame = lazy(() => import('../components/CoupleGuessGame').then((module) => ({ default: module.CoupleGuessGame })));

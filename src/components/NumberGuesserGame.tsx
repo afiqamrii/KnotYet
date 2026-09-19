@@ -413,7 +413,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'reveal' && (
-          <div className="w-full flex-1 flex flex-col justify-between items-center text-center animate-pop-in py-2">
+          <div className="completion-reveal w-full flex-1 flex flex-col justify-between items-center text-center animate-pop-in py-2">
             <div className="my-auto space-y-4 flex flex-col items-center">
               <GiphyReaction mood="win" seed={`number-${round}`} compact />
               <div>
@@ -425,12 +425,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="w-full shrink-0">
               <button
                 onClick={handleNextRound}
-                className="btn-chunky w-full py-4"
-                style={{
-                  background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
-                  color: 'white',
-                  boxShadow: '0 6px 0 #4338CA, 0 8px 24px rgba(99,102,241,0.4)'
-                }}
+                className="completion-button completion-button-primary"
               >
                 Play Next Round
               </button>
