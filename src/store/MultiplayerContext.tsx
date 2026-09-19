@@ -3,7 +3,23 @@ import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
 import { sounds } from '../utils/audio';
 
-export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
+export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter' | 'secret-race';
+
+export type SecretRaceOperation = '+' | '−' | '×';
+export type SecretRaceRole = 'host' | 'partner' | 'tie';
+export type SecretRacePhase = 'picking' | 'countdown' | 'answering' | 'result' | 'complete';
+
+export interface SecretRaceState {
+  matchId: string;
+  round: number;
+  operation: SecretRaceOperation;
+  phase: SecretRacePhase;
+  hostLocked: boolean;
+  partnerLocked: boolean;
+  scores: { host: number; partner: number };
+  equation?: { hostNumber: number; partnerNumber: number; answer: number };
+  winner?: SecretRaceRole;
+}
 
 export interface ChatMessage {
   id: string;
@@ -21,6 +37,7 @@ export type MultiplayerMessage =
   | { type: 'SWIPE_ACTION'; payload: { direction: 'left' | 'right' } }
   | { type: 'SWIPE_FLIP'; payload: boolean }
   | { type: 'CARD_SUBMIT'; payload: string }
+  | { type: 'RIDDLE_REVEAL' }
   | { type: 'QUIZ_ACTUAL'; payload: string }
   | { type: 'QUIZ_GUESS'; payload: string }
   | { type: 'QUIZ_NEXT' }
@@ -34,6 +51,15 @@ export type MultiplayerMessage =
   | { type: 'NUM_SET_SECRET'; payload: number }
   | { type: 'NUM_GUESS'; payload: { val: number; name?: string } | number }
   | { type: 'NUM_NEXT' }
+  | { type: 'SECRET_RACE_START'; payload: SecretRaceState }
+  | { type: 'SECRET_RACE_STATE'; payload: SecretRaceState }
+  | { type: 'SECRET_RACE_LOCK'; payload: { matchId: string; number: number } }
+  | { type: 'SECRET_RACE_GO'; payload: { matchId: string; equation: NonNullable<SecretRaceState['equation']> } }
+  | { type: 'SECRET_RACE_ANSWER'; payload: { matchId: string; answer: number } }
+  | { type: 'SECRET_RACE_WRONG'; payload: { matchId: string; delayMs: number } }
+  | { type: 'SECRET_RACE_RESULT'; payload: SecretRaceState }
+  | { type: 'SECRET_RACE_NEXT'; payload: { matchId: string } }
+  | { type: 'SECRET_RACE_RESTART'; payload: { matchId: string } }
   | { type: 'LETTER_START'; payload: string }
   | { type: 'LETTER_WORD_SUBMIT'; payload: string }
   | { type: 'LETTER_NEXT' }

@@ -7,6 +7,14 @@ import { sounds } from '../utils/audio';
 import '../styles/chat.css';
 
 const QUICK_REPLIES = ['Love that', 'You know me so well!', 'Wait, what?!', 'My turn!', 'Good game!', 'One more round?'];
+const REACTIONS = [
+  { emoji: '😂', label: 'That is hilarious' },
+  { emoji: '🫶', label: 'Sending love' },
+  { emoji: '🤯', label: 'Mind blown' },
+  { emoji: '😈', label: 'Feeling cheeky' },
+  { emoji: '🥹', label: 'That is sweet' },
+  { emoji: '🔥', label: 'That was great' },
+];
 const DESKTOP_CHAT = '(min-width: 1440px)';
 
 export const InGameChat: React.FC = () => {
@@ -92,10 +100,11 @@ export const InGameChat: React.FC = () => {
         {chatMessages.length === 0 ? <div className="chat-welcome"><div className="chat-doodle" aria-hidden="true"><MessageCircle /><MessageCircle /><span /></div><h3>Talk while<br />you play.</h3><p>Tease a guess, celebrate a win, or send a sweet note. This chat stays beside your game.</p></div>
         : chatMessages.map(message => {
           const mine = message.senderId === 'me';
-          return <div className={`chat-message ${mine ? 'is-mine' : ''}`} key={message.id}>{!mine && <Avatar avatarId={message.senderAvatar} size={28} />}<div className="chat-message-body"><div className="chat-bubble">{message.text}</div><div className="chat-message-meta"><time dateTime={new Date(message.timestamp).toISOString()}>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>{mine && <span><Check /> Sent</span>}</div></div></div>;
+          return <div className={`chat-message ${mine ? 'is-mine' : ''}`} key={message.id}>{!mine && <Avatar avatarId={message.senderAvatar} size={28} />}<div className={`chat-message-body`}><div className={`chat-bubble ${message.isQuickReaction && REACTIONS.some(reaction => reaction.emoji === message.text) ? 'chat-reaction-bubble' : ''}`}>{message.text}</div><div className="chat-message-meta"><time dateTime={new Date(message.timestamp).toISOString()}>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>{mine && <span><Check /> Sent</span>}</div></div></div>;
         })}
       </div>
       {error && <p className="chat-error" role="alert">{error}</p>}
+      <div className="chat-reaction-strip" aria-label="Send a quick reaction">{REACTIONS.map(reaction => <button type="button" key={reaction.emoji} onClick={() => sendText(reaction.emoji, true)} aria-label={reaction.label} title={reaction.label}>{reaction.emoji}</button>)}</div>
       <div className="chat-quick-replies" aria-label="Quick replies">{QUICK_REPLIES.map(text => <button type="button" key={text} onClick={() => sendText(text, true)}>{text}</button>)}</div>
       <form className="chat-composer" onSubmit={event => { event.preventDefault(); sendText(inputText); }}><input aria-label={`Message ${partnerName}`} value={inputText} onChange={event => setInputText(event.target.value)} placeholder={`Message ${partnerName}...`} maxLength={500} autoComplete="off" /><button type="submit" aria-label="Send message" disabled={!inputText.trim()}><Send /></button></form>
     </aside>}

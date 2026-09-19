@@ -25,6 +25,14 @@ const RELATIONSHIPS: { type: Relationship; label: string; icon: React.ReactNode 
   { type: 'friend', label: 'Friend', icon: <UiSymbol kind="star" /> },
 ];
 const QUICK_REPLIES = ['Hey, you!', 'Ready to play?', 'Thinking of you', 'You know me so well!', 'One more round?'];
+const CHAT_REACTIONS = [
+  { emoji: '😂', label: 'That is hilarious' },
+  { emoji: '🫶', label: 'Sending love' },
+  { emoji: '🤯', label: 'Mind blown' },
+  { emoji: '😈', label: 'Feeling cheeky' },
+  { emoji: '🥹', label: 'That is sweet' },
+  { emoji: '🔥', label: 'That was great' },
+];
 const timeOf = (timestamp: number) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const relationshipLabel = (type: string) => RELATIONSHIPS.find(item => item.type === type)?.label ?? 'Friend';
 
@@ -187,12 +195,12 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
                 : chatMessages.map(message => {
                   const mine = message.senderId === myChatId;
                   return <div className={`chat-message ${mine ? 'is-mine' : ''}`} key={message.id}>{!mine && <Avatar avatarId={message.senderAvatar} size={28} />}<div className="chat-message-body">
-                    {message.gameInvite ? <div className="chat-game-invite"><span><UiSymbol kind="game" /> Your next good time</span><strong>#{message.gameInvite.roomCode}</strong><p>{message.text}</p><button className="chat-primary" onClick={() => { if (mine) launchRoom(message.gameInvite!.roomCode); else { multiplayer.joinRoom(message.gameInvite!.roomCode, profile); closeModal(); } }}><Play />{mine ? 'Open your room' : 'Join their room'}</button></div> : <div className="chat-bubble">{message.text}</div>}
+                    {message.gameInvite ? <div className="chat-game-invite"><span><UiSymbol kind="game" /> Your next good time</span><strong>#{message.gameInvite.roomCode}</strong><p>{message.text}</p><button className="chat-primary" onClick={() => { if (mine) launchRoom(message.gameInvite!.roomCode); else { multiplayer.joinRoom(message.gameInvite!.roomCode, profile); closeModal(); } }}><Play />{mine ? 'Open your room' : 'Join their room'}</button></div> : <div className={`chat-bubble ${message.isQuickReaction && CHAT_REACTIONS.some(reaction => reaction.emoji === message.text) ? 'chat-reaction-bubble' : ''}`}>{message.text}</div>}
                     <div className="chat-message-meta"><time dateTime={new Date(message.timestamp).toISOString()}>{timeOf(message.timestamp)}</time>{mine && <DeliveryStatus message={message} retry={() => void retry(message)} />}</div>
                   </div></div>;
                 })}
               </div>
-              {selectedFriend.linked && <><div className="chat-quick-replies" aria-label="Quick replies">{QUICK_REPLIES.map(text => <button key={text} disabled={sending} onClick={() => void sendText(text, true)}>{text}</button>)}</div><form className="chat-composer" onSubmit={event => { event.preventDefault(); void sendText(inputText); }}><input aria-label={`Message ${selectedFriend.name}`} value={inputText} onChange={event => setInputText(event.target.value)} placeholder={`A little note for ${selectedFriend.name}...`} maxLength={500} autoComplete="off" /><button type="submit" disabled={!inputText.trim() || sending} aria-label="Send message"><Send /></button></form></>}
+              {selectedFriend.linked && <><div className="chat-reaction-strip" aria-label="Send a quick reaction">{CHAT_REACTIONS.map(reaction => <button type="button" key={reaction.emoji} disabled={sending} onClick={() => void sendText(reaction.emoji, true)} aria-label={reaction.label} title={reaction.label}>{reaction.emoji}</button>)}</div><div className="chat-quick-replies" aria-label="Quick replies">{QUICK_REPLIES.map(text => <button key={text} disabled={sending} onClick={() => void sendText(text, true)}>{text}</button>)}</div><form className="chat-composer" onSubmit={event => { event.preventDefault(); void sendText(inputText); }}><input aria-label={`Message ${selectedFriend.name}`} value={inputText} onChange={event => setInputText(event.target.value)} placeholder={`A little note for ${selectedFriend.name}...`} maxLength={500} autoComplete="off" /><button type="submit" disabled={!inputText.trim() || sending} aria-label="Send message"><Send /></button></form></>}
             </>}
             {error && <p className="chat-error" role="alert">{error}</p>}
           </section>

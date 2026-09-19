@@ -25,6 +25,7 @@ const CoupleGuessGame = lazy(() => import('../components/CoupleGuessGame').then(
 const SpinWheel = lazy(() => import('../components/SpinWheel').then((module) => ({ default: module.SpinWheel })));
 const MatchGame = lazy(() => import('../components/MatchGame').then((module) => ({ default: module.MatchGame })));
 const NumberGuesserGame = lazy(() => import('../components/NumberGuesserGame').then((module) => ({ default: module.NumberGuesserGame })));
+const SecretNumberRaceGame = lazy(() => import('../components/SecretNumberRaceGame').then((module) => ({ default: module.SecretNumberRaceGame })));
 const LetterRaceGame = lazy(() => import('../components/LetterRaceGame').then((module) => ({ default: module.LetterRaceGame })));
 const FriendsModal = lazy(() => import('../components/FriendsModal').then((module) => ({ default: module.FriendsModal })));
 const ProfileScreen = lazy(() => import('./ProfileScreen').then((module) => ({ default: module.ProfileScreen })));
@@ -32,7 +33,7 @@ const GameIntro = lazy(() => import('../components/GameIntro').then((module) => 
 const MultiplayerLobby = lazy(() => import('../components/MultiplayerLobby').then((module) => ({ default: module.MultiplayerLobby })));
 
 type ActiveTab = Exclude<GameMode, 'lobby'>;
-const ACTIVE_TABS: readonly ActiveTab[] = ['swipe', 'quiz', 'wheel', 'match', 'number', 'letter'];
+const ACTIVE_TABS: readonly ActiveTab[] = ['swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race'];
 const isActiveTab = (value: string | null): value is ActiveTab => value !== null && ACTIVE_TABS.includes(value as ActiveTab);
 export const PlayScreen: React.FC = () => {
   const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
@@ -65,6 +66,7 @@ export const PlayScreen: React.FC = () => {
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [myCardAnswer, setMyCardAnswer] = useState<string | null>(null);
   const [partnerCardAnswer, setPartnerCardAnswer] = useState<string | null>(null);
+  const [riddleAnswerRevealed, setRiddleAnswerRevealed] = useState(false);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(() => sessionStorage.getItem('knotyet_openRoom') === 'true');
@@ -265,6 +267,7 @@ export const PlayScreen: React.FC = () => {
     setIsCardFlipped(false);
     setMyCardAnswer(null);
     setPartnerCardAnswer(null);
+    setRiddleAnswerRevealed(false);
     
     const currentCard = filteredCards[cardIndex];
     if (currentCard) {
@@ -305,8 +308,8 @@ export const PlayScreen: React.FC = () => {
           setIntroShown(stored);
         } else if (msg.type === 'SWIPE_ACTION' && currentTab === 'swipe') {
           executeSwipe(msg.payload.direction);
-        } else if (msg.type === 'SWIPE_FLIP' && currentTab === 'swipe') {
-          setIsCardFlipped(msg.payload);
+        } else if (msg.type === 'RIDDLE_REVEAL' && currentTab === 'swipe') {
+          setRiddleAnswerRevealed(true);
         } else if (msg.type === 'CARD_SUBMIT' && currentTab === 'swipe') {
           setPartnerCardAnswer(msg.payload);
         }
@@ -315,6 +318,14 @@ export const PlayScreen: React.FC = () => {
   }, [multiplayer.status, currentTab, multiplayer.subscribeMessage, cardIndex, filteredCards, activeTab, multiplayer.activeGame]);
 
   const currentCard = filteredCards[cardIndex];
+  const isRiddleAsker = currentCard?.category === 'teka-teki'
+    ? ((cardIndex % 2 === 0) ? !!multiplayer.isHost : !multiplayer.isHost)
+    : true;
+  const canAdvanceCurrentCard = !currentCard || multiplayer.status !== 'connected'
+    ? true
+    : currentCard.category === 'teka-teki'
+      ? isRiddleAsker
+      : Boolean(myCardAnswer && partnerCardAnswer);
 
   // A card counts as seen as soon as it is displayed. This avoids resurfacing
   // an abandoned prompt after a refresh or on another device.
@@ -369,18 +380,18 @@ export const PlayScreen: React.FC = () => {
       // In Swipe game:
       if (currentTab === 'swipe' && introShown['swipe']) {
         if (e.key === 'ArrowRight') {
+          if (!canAdvanceCurrentCard) return;
           e.preventDefault();
           handleManualAction('right');
         } else if (e.key === 'ArrowLeft') {
+          if (!canAdvanceCurrentCard) return;
           e.preventDefault();
           handleManualAction('left');
         } else if (e.key === ' ' || e.key === 'Spacebar') {
+          if (currentCard?.category === 'teka-teki' && multiplayer.status === 'connected' && !isRiddleAsker) return;
           e.preventDefault();
           setIsCardFlipped(prev => {
             const next = !prev;
-            if (multiplayer.status === 'connected') {
-              multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: next });
-            }
             sounds.playFlip();
             return next;
           });
@@ -393,7 +404,8 @@ export const PlayScreen: React.FC = () => {
   }, [
     isEndGameModalOpen, isFriendsModalOpen, isRoomModalOpen, isProfileOpen, 
     isMusicMenuOpen, isDisconnectModalOpen, isSummaryOpen, multiplayer.status, 
-    currentTab, introShown, handleSwipe, handleTabClick, isCardFlipped, isPlayingGame
+    currentTab, introShown, handleSwipe, handleTabClick, isCardFlipped, isPlayingGame,
+    currentCard?.category, isRiddleAsker, canAdvanceCurrentCard
   ]);
 
   const handleRestartDeck = () => {
@@ -519,7 +531,7 @@ export const PlayScreen: React.FC = () => {
 
             {multiplayer.status !== 'connected' && (
               <GameModeNav currentTab={currentTab} onSelect={handleTabClick}
-                labels={{ swipe: t.tabSwipe, quiz: t.tabQuiz, wheel: t.tabWheel, number: t.tabNumber || 'Number Guesser', letter: t.tabLetter || 'Letter Race' }}
+                labels={{ swipe: t.tabSwipe, quiz: t.tabQuiz, wheel: t.tabWheel, number: t.tabNumber || 'Number Guesser', letter: t.tabLetter || 'Letter Race', 'secret-race': 'Secret Number Race' }}
               />
             )}
           </header>
@@ -603,12 +615,14 @@ export const PlayScreen: React.FC = () => {
                           isFlipped={isCardFlipped}
                           onToggleFlip={(flipped) => {
                             setIsCardFlipped(flipped);
-                            if (multiplayer.status === 'connected') {
-                              multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: flipped });
-                            }
                           }}
                           myAnswer={myCardAnswer}
                           partnerAnswer={partnerCardAnswer}
+                          answerRevealedToPartner={riddleAnswerRevealed}
+                          onRevealToPartner={() => {
+                            setRiddleAnswerRevealed(true);
+                            if (multiplayer.status === 'connected') multiplayer.sendMessage({ type: 'RIDDLE_REVEAL' });
+                          }}
                           onSubmitAnswer={(ans) => {
                             setMyCardAnswer(ans);
                             if (multiplayer.status === 'connected') {
@@ -636,7 +650,7 @@ export const PlayScreen: React.FC = () => {
                       {/* Skip button */}
                       <button 
                         onClick={() => handleManualAction('left')} 
-                        disabled={!currentCard}
+                        disabled={!currentCard || !canAdvanceCurrentCard}
                         title="Skip Question (Left Arrow ←)"
                         className="game-action game-action-skip flex-1 py-3 sm:py-3.5 px-2 sm:px-4 font-black text-xs sm:text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 group"
                       >
@@ -645,29 +659,10 @@ export const PlayScreen: React.FC = () => {
                         <span className="hidden md:inline-block text-[9px] font-mono px-1.5 py-0.5 rounded bg-pink-100 text-pink-600 font-bold">←</span>
                       </button>
 
-                      {/* Flip / Reveal button (if card is flippable) */}
-                      {currentCard && (multiplayer.status === 'connected' || currentCard.category === 'teka-teki') && (
-                        <button
-                          onClick={() => {
-                            setIsCardFlipped(!isCardFlipped);
-                            if (multiplayer.status === 'connected') {
-                              multiplayer.sendMessage({ type: 'SWIPE_FLIP', payload: !isCardFlipped });
-                            }
-                            sounds.playFlip();
-                          }}
-                          title="Flip Card / Reveal Answer (Spacebar)"
-                          className="game-action game-action-flip flex-1 py-3 sm:py-3.5 px-2 sm:px-4 font-black text-xs sm:text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 group"
-                        >
-                          <RotateCw className="w-4 h-4 group-hover:rotate-180 transition-transform text-violet-600" />
-                          <span>{isCardFlipped ? (t.flipBack || 'Back') : (currentCard.category === 'teka-teki' ? t.revealAnswer : 'Answer')}</span>
-                          <span className="hidden md:inline-block text-[9px] font-mono px-1.5 py-0.5 rounded bg-violet-100 text-violet-600 font-bold">Space</span>
-                        </button>
-                      )}
-
                       {/* Pass / Next button */}
                       <button 
                         onClick={() => handleManualAction('right')} 
-                        disabled={!currentCard}
+                        disabled={!currentCard || !canAdvanceCurrentCard}
                         title="Pass / Next Question (Right Arrow →)"
                         className="game-action game-action-next flex-1 py-3 sm:py-3.5 px-2 sm:px-4 font-black text-xs sm:text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 group"
                         style={{ boxShadow: '0 4px 0 #059669, 0 6px 16px rgba(16,185,129,0.35)' }}
@@ -702,6 +697,11 @@ export const PlayScreen: React.FC = () => {
                 introShown['number']
                   ? <NumberGuesserGame onEndGame={handleEndGame} />
                   : <GameIntro gameType="number" onStart={() => markIntroShown('number')} />
+              )}
+              {currentTab === 'secret-race' && (
+                introShown['secret-race']
+                  ? <SecretNumberRaceGame onEndGame={handleEndGame} />
+                  : <GameIntro gameType="secret-race" onStart={() => markIntroShown('secret-race')} />
               )}
               {currentTab === 'letter' && (
                 introShown['letter']
@@ -764,6 +764,7 @@ export const PlayScreen: React.FC = () => {
             currentTab === 'wheel' ? 'Anti-Awkward Wheel' :
             currentTab === 'match' ? 'Couple Match' :
             currentTab === 'number' ? 'Number Guesser' :
+            currentTab === 'secret-race' ? 'Secret Number Race' :
             currentTab === 'letter' ? 'Letter Race' : 'Game'
           }
         />

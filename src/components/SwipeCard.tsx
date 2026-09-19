@@ -18,6 +18,8 @@ interface SwipeCardProps {
   myAnswer?: string | null;
   partnerAnswer?: string | null;
   onSubmitAnswer?: (answer: string) => void;
+  answerRevealedToPartner?: boolean;
+  onRevealToPartner?: () => void;
 }
 
 const CATEGORY_COLORS: Record<string, { bg: string; label: string; icon: 'puzzle' | 'heart' | 'together' | 'zap' }> = {
@@ -30,14 +32,14 @@ const CATEGORY_COLORS: Record<string, { bg: string; label: string; icon: 'puzzle
 export const SwipeCard: React.FC<SwipeCardProps> = ({ 
   card, cardIndex = 0, stackDepth = 0, onSwipe, isTop,
   isFlipped: controlledIsFlipped, onToggleFlip, 
-  myAnswer, partnerAnswer, onSubmitAnswer 
+  myAnswer, partnerAnswer, onSubmitAnswer, answerRevealedToPartner = false, onRevealToPartner
 }) => {
   const { t, partner } = useGame();
   const multiplayer = useMultiplayer();
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
   const [localIsFlipped, setLocalIsFlipped] = useState(false);
   
-  const isFlipped = controlledIsFlipped !== undefined ? controlledIsFlipped : localIsFlipped;
+  const isFlipped = answerRevealedToPartner || (controlledIsFlipped !== undefined ? controlledIsFlipped : localIsFlipped);
   const x = useMotionValue(0);
 
   const rotate = useTransform(x, [-200, 200], [-14, 14]);
@@ -133,16 +135,23 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
             <div className="conversation-rule"><span /><UiSymbol kind={catColors.icon} /></div>
           </div>
           <footer className="conversation-bottom" onPointerDown={event => event.stopPropagation()}>
-            {canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' ? t.revealAnswer : 'Share your answers'}<UiSymbol kind="next" /></button>
+            {isMultiplayer && card.category === 'teka-teki' && !isMyTurnToAsk ? (
+              myAnswer ? <div className="answer-note"><span>Your guess is in</span><p>{myAnswer}</p><small>Waiting for {partnerName} to reveal the answer…</small></div>
+              : <form className="conversation-response" onPointerDown={event => event.stopPropagation()} onSubmit={event => { event.preventDefault(); const value = String(new FormData(event.currentTarget).get('guess') || '').trim(); if (!value) return; onSubmitAnswer?.(value); sounds.playSuccess(); }}>
+                  <label htmlFor={`riddle-guess-${card.id}`}>What is your guess?</label><input id={`riddle-guess-${card.id}`} name="guess" autoComplete="off" placeholder="Type your clever guess…" disabled={!isTop} required />
+                  <button type="submit" className="card-reveal-button" disabled={!isTop}><UiSymbol kind="message" /> Lock in my guess <UiSymbol kind="next" /></button>
+                </form>
+            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' ? t.revealAnswer : 'Share your answers'}<UiSymbol kind="next" /></button>
             : <span className="conversation-prompt">No perfect answer. Just your answer.</span>}
             <div className="conversation-directions"><span><UiSymbol kind="back" /> {t.skipLeft}</span><span>{t.passRight} <UiSymbol kind="next" /></span></div>
           </footer>
         </div>
         <div className="swipe-card-back conversation-face conversation-answer backface-hidden rotate-y-180" aria-hidden={!isFlipped}>
-          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind="lock" /> THE REVEAL</span><button type="button" className="card-back-button" aria-label="Back to the question" disabled={!isTop || !isFlipped} onClick={toggleFlip}><UiSymbol kind="flip" /></button></header>
+          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind="lock" /> THE REVEAL</span><button type="button" className="card-back-button" aria-label="Back to the question" disabled={!isTop || !isFlipped || answerRevealedToPartner} onClick={toggleFlip}><UiSymbol kind="flip" /></button></header>
           <div className="conversation-answer-body">
             <span className="conversation-answer-label">{card.flipContent.title}</span>
             <p className="question-text answer-text">{card.flipContent.description}</p>
+            {isMultiplayer && card.category === 'teka-teki' && isMyTurnToAsk && !answerRevealedToPartner && <div className="conversation-response"><p className="conversation-notice">{partnerAnswer ? `${partnerName}'s guess: “${partnerAnswer}”` : `Give ${partnerName} a moment to make a guess.`}</p><button type="button" onClick={onRevealToPartner} className="card-reveal-button"><UiSymbol kind="together" /> Show the answer together <UiSymbol kind="next" /></button></div>}
             {isMultiplayer && onSubmitAnswer && card.category !== 'teka-teki' ? <div className="conversation-response">
               {partnerAnswer && !myAnswer && <p className="conversation-notice">{partnerName} has answered. What do you think?</p>}
               {!partnerAnswer && myAnswer && <div className="answer-note"><span>Your answer</span><p>{myAnswer}</p><small>Waiting for {partnerName} to answer...</small></div>}

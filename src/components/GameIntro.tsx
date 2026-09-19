@@ -4,7 +4,7 @@ import { GameArtwork } from './ArcadeArt';
 import { sounds } from '../utils/audio';
 import { useMultiplayer } from '../store/MultiplayerContext';
 
-type GameType = 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter';
+type GameType = 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter' | 'secret-race';
 
 interface GameIntroConfig {
   title: string;
@@ -72,6 +72,15 @@ const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
     ],
     buttonText: 'Begin the race', tipText: 'Keep the phone centered so both players see the letter together.',
   },
+  'secret-race': {
+    title: 'Secret Number Race', eyebrow: 'Locked in', subtitle: 'Choose privately, reveal together, then race for the answer.', accent: '#b8f1df', icon: Hash,
+    steps: [
+      { title: 'Pick in secret', description: 'Lock a number without showing your partner.' },
+      { title: 'Reveal at GO', description: 'Both numbers appear together after the countdown.' },
+      { title: 'Race the answer', description: 'The quickest correct answer earns the round.' },
+    ],
+    buttonText: 'Start the best of five', tipText: 'For subtraction, the host number always comes first. Negative answers count.',
+  },
 };
 
 interface GameIntroProps {
@@ -130,7 +139,7 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
     );
   }
 
-  const artworkKind = gameType === 'swipe' ? 'cards' : gameType === 'quiz' ? 'heart' : gameType;
+  const artworkKind = gameType === 'swipe' ? 'cards' : gameType === 'quiz' ? 'heart' : gameType === 'secret-race' ? 'number' : gameType;
 
   return (
     <section className="game-card game-intro-card arcade-intro" style={{ '--game-accent': config.accent } as React.CSSProperties} aria-labelledby={`intro-${gameType}`}>
