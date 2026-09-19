@@ -48,15 +48,23 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
 
   const [questions, setQuestions] = useState<MatchQuestion[]>(() => {
+    if (multiplayer.status === 'connected' && !multiplayer.isHost) {
+      return getMatchQuestionsByIds(multiplayer.questionDecks.match || []);
+    }
     try {
       const stored = sessionStorage.getItem('match_questions');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return getMatchQuestionsByIds(parsed.map(item => item.id), progress?.answered_questions);
+        if (Array.isArray(parsed) && parsed.length > 0) return getMatchQuestionsByIds(parsed.map(item => item.id));
       }
     } catch {}
     return getShuffledMatchQuestions(10, progress?.answered_questions);
   });
+  useEffect(() => {
+    if (multiplayer.status !== 'connected' || multiplayer.isHost || !multiplayer.questionDecks.match) return;
+    setQuestions(getMatchQuestionsByIds(multiplayer.questionDecks.match));
+    setCurrentIndex(multiplayer.questionIndices.match || 0);
+  }, [multiplayer.status, multiplayer.isHost, multiplayer.questionDecks.match, multiplayer.questionIndices.match]);
 
   const [currentIndex, setCurrentIndex] = useState(() => Number(sessionStorage.getItem('match_currentIndex')) || 0);
   const [stage, setStage] = useState<'vote' | 'reveal'>(() => readStringUnion(sessionStorage, 'match_stage', ['vote', 'reveal'] as const, 'vote'));
@@ -96,10 +104,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (multiplayer.status === 'connected' && multiplayer.isHost && questions.length > 0) {
       multiplayer.sendMessage({
         type: 'SYNC_QUESTION_IDS',
-        payload: { game: 'match', questionIds: questions.map(q => q.id) }
+        payload: { game: 'match', questionIds: questions.map(q => q.id), currentIndex }
       });
     }
-  }, [multiplayer.status, multiplayer.isHost, questions]);
+  }, [multiplayer.status, multiplayer.isHost, questions, currentIndex]);
 
   const executeNext = useCallback(() => {
     if (currentIndex + 1 < questions.length) {
@@ -149,21 +157,24 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   useEffect(() => {
     if (multiplayer.status === 'connected') {
-      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+      return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'MATCH_SELECT') {
           setPartnerAnswer(msg.payload);
         } else if (msg.type === 'MATCH_NEXT') {
           executeNext();
         } else if (msg.type === 'MATCH_RESTART') {
-          const synced = msg.payload?.questionIds ? getMatchQuestionsByIds(msg.payload.questionIds, progress?.answered_questions) : undefined;
+          const synced = msg.payload?.questionIds ? getMatchQuestionsByIds(msg.payload.questionIds) : undefined;
           handleRestart(false, synced);
         } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'match') {
-          const synced = getMatchQuestionsByIds(msg.payload.questionIds, progress?.answered_questions);
-          if (synced.length > 0) setQuestions(synced);
+          const synced = getMatchQuestionsByIds(msg.payload.questionIds);
+          if (synced.length > 0) {
+            setQuestions(synced);
+            setCurrentIndex(msg.payload.currentIndex || 0);
+          }
         }
-      };
+      });
     }
-  }, [multiplayer.status, multiplayer.messageListener, executeNext, handleRestart]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, executeNext, handleRestart]);
 
   useEffect(() => {
     if (myAnswer && partnerAnswer && stage === 'vote') {
@@ -260,9 +271,9 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         </div>
         <div className="game-card activity-card text-center p-8 space-y-3">
           <Sparkles className="w-10 h-10 text-brand mx-auto" />
-          <h3 className="text-xl font-black text-ink">You have explored every question!</h3>
-          <p className="text-sm font-semibold text-ink-3">Fresh prompts are being added soon. Pick another game for your next round together.</p>
-          <button onClick={handleEndGame} className="btn-chunky btn-pink mx-auto px-5 py-3">Choose another game</button>
+          <h3 className="text-xl font-black text-ink">{multiplayer.status === 'connected' && !multiplayer.isHost ? 'Getting your shared questions...' : 'You have explored every question!'}</h3>
+          <p className="text-sm font-semibold text-ink-3">{multiplayer.status === 'connected' && !multiplayer.isHost ? 'Your partner’s question deck is syncing now.' : 'Fresh prompts are being added soon. Pick another game for your next round together.'}</p>
+          {multiplayer.status !== 'connected' || multiplayer.isHost ? <button onClick={handleEndGame} className="btn-chunky btn-pink mx-auto px-5 py-3">Choose another game</button> : null}
         </div>
       </div>
     );

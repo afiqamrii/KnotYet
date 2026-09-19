@@ -174,7 +174,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   useEffect(() => {
     if (multiplayer.status === 'connected') {
-      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+      return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'LETTER_START') {
           beginCountdown(msg.payload);
         } else if (msg.type === 'LETTER_WORD_SUBMIT') {
@@ -183,9 +183,9 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
         } else if (msg.type === 'LETTER_NEXT') {
           resetRound();
         }
-      };
+      });
     }
-  }, [multiplayer.status, multiplayer.messageListener, resetRound, stage]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, resetRound, stage]);
 
   const handleEndGame = () => {
     if (onEndGame) {

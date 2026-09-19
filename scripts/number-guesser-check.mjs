@@ -50,7 +50,7 @@ const verifyAt = async (viewport) => {
 
   const input = page.getByLabel('Your guess');
   await page.getByRole('button', { name: 'Increase guess' }).click();
-  assert.equal(await input.inputValue(), '51', 'the first stepper tap starts at the range midpoint');
+  assert.equal(await input.inputValue(), '1', 'the first stepper tap starts at the lower bound without suggesting a midpoint');
   await input.fill('50');
   await page.getByRole('button', { name: 'Lock in 50' }).click();
   await page.locator('.number-latest-clue strong').filter({ hasText: 'Go higher!' }).waitFor();

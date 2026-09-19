@@ -1,7 +1,7 @@
 import { UiSymbol, RoundLabel } from './GameCardDesign';
 import React, { useState, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { Sparkles, Dices, RotateCcw, X } from 'lucide-react';
+import { Sparkles, Dices, RotateCcw } from 'lucide-react';
 import { WHEEL_SEGMENTS, WheelSegment } from '../data/questions';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
@@ -11,9 +11,10 @@ import { getRandomUnseenWheelSelection, getWheelPromptId, markQuestionAsSeen } f
 
 export interface Props {
   onEndGame?: () => void;
+  reservedQuestionIds?: string[];
 }
 
-export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
+export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = [] }) => {
   const { t, partner, addHeartPoints, recordAnsweredQuestion } = useGame();
   const { checkLimit, incrementPlayCount, progress } = useAuth();
   const multiplayer = useMultiplayer();
@@ -28,6 +29,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
   const [allPromptsSeen, setAllPromptsSeen] = useState(false);
   const tickIntervalRef = useRef<number | null>(null);
   const spinTimeoutRef = useRef<number | null>(null);
+  const lastRemoteSpinRef = useRef<string | null>(null);
   React.useEffect(() => () => {
     if (tickIntervalRef.current !== null) window.clearTimeout(tickIntervalRef.current);
     if (spinTimeoutRef.current !== null) window.clearTimeout(spinTimeoutRef.current);
@@ -38,15 +40,23 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
 
   React.useEffect(() => {
     if (multiplayer.status === 'connected') {
-      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+      return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'SPIN_WHEEL') {
+          lastRemoteSpinRef.current = JSON.stringify(msg.payload);
           executeSpin(msg.payload.rotation, msg.payload.segmentIndex, msg.payload.promptIndex);
         } else if (msg.type === 'WHEEL_SUBMIT') {
           setPartnerAnswer(msg.payload);
         }
-      };
+      });
     }
-  }, [multiplayer.status, multiplayer.messageListener]);
+  }, [multiplayer.status, multiplayer.subscribeMessage]);
+  React.useEffect(() => {
+    if (multiplayer.status !== 'connected' || multiplayer.isHost || !multiplayer.wheelSpin) return;
+    const key = JSON.stringify(multiplayer.wheelSpin);
+    if (lastRemoteSpinRef.current === key) return;
+    lastRemoteSpinRef.current = key;
+    executeSpin(multiplayer.wheelSpin.rotation, multiplayer.wheelSpin.segmentIndex, multiplayer.wheelSpin.promptIndex);
+  }, [multiplayer.status, multiplayer.isHost, multiplayer.wheelSpin]);
 
   const executeSpin = (targetRotation: number, segmentIdx: number, promptIdx: number) => {
     setSpinning(true);
@@ -93,7 +103,9 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
       return;
     }
     
-    const selection = getRandomUnseenWheelSelection(progress?.answered_questions);
+    // Icebreaker keeps its next deck ready while this game is open. Keep those
+    // queued cards out of the wheel so switching games cannot repeat a prompt.
+    const selection = getRandomUnseenWheelSelection([...(progress?.answered_questions || []), ...reservedQuestionIds]);
     if (!selection) {
       setAllPromptsSeen(true);
       return;
@@ -131,26 +143,8 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
       const target = e.target instanceof HTMLElement ? e.target : null;
       // Open dialogs own the keyboard; native controls keep their activation keys.
       if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return;
-      if (showModal && e.key === 'Escape') {
-        e.preventDefault();
-        setShowModal(false);
-        return;
-      }
+      if (showModal) return;
       if (target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="link"], [role="dialog"], [role="alertdialog"]')) return;
-
-      if (showModal) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          setShowModal(false);
-        } else if (e.key === ' ' || e.key === 'Enter') {
-          if (multiplayer.status !== 'connected') {
-            e.preventDefault();
-            setShowModal(false);
-            sounds.playSuccess();
-          }
-        }
-        return;
-      }
 
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
@@ -267,15 +261,9 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame }) => {
 
       {/* Result Modal */}
       {showModal && selectedSegment && (
-        <div className="modal-overlay centered" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay centered" role="dialog" aria-modal="true" aria-label="Wheel result">
           <div className="game-card activity-card wheel-prompt w-full max-w-xs sm:max-w-md p-6 text-center space-y-4 animate-pop-in relative"
-            onClick={e => e.stopPropagation()}
             style={{ boxShadow: `0 0 0 4px ${selectedSegment.color}30, 0 20px 60px rgba(0,0,0,0.25)` }}>
-
-            <button onClick={() => setShowModal(false)} aria-label="Close wheel prompt"
-              className="absolute top-4 right-4 w-11 h-11 rounded-full flex items-center justify-center text-ink-3 hover:bg-stone-100">
-              <X className="w-4 h-4" />
-            </button>
 
             <div className="w-16 h-16 rounded-3xl mx-auto flex items-center justify-center text-3xl animate-float"
               style={{ background: `${selectedSegment.color}18`, border: `3px solid ${selectedSegment.color}40`, boxShadow: `0 8px 24px ${selectedSegment.color}35` }}>

@@ -32,6 +32,7 @@ export interface WheelSegment {
   textColor: string;
   category: string;
   prompts: string[];
+  promptIds: string[];
 }
 
 
@@ -139,7 +140,14 @@ export const MATCH_QUESTIONS: MatchQuestion[] = taarufData.compatibility_match_c
   vibeText: item.tip_perbincangan || 'Match Score check!'
 }));
 
-export const WHEEL_SEGMENTS: WheelSegment[] = [
+const matureQuestionGroups = Object.entries(taarufData.soalan_matang_prakahwinan);
+
+const matureWheelPrompts = (categoryIndex: number) => {
+  const [, questions] = matureQuestionGroups[categoryIndex];
+  return questions.map((item, index) => ({ id: `sm-${categoryIndex}-${index}`, text: item.soalan }));
+};
+
+const BASE_WHEEL_SEGMENTS: Omit<WheelSegment, 'promptIds'>[] = [
   {
     id: 'masa-depan',
     label: 'Masa Depan',
@@ -218,4 +226,32 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
       'Apa benda paling mahal awak pernah beli dan tak menyesal?'
     ]
   }
+];
+
+const vibeWheelPrompts = taarufData.vibe_check.map((item, index) => ({ id: `vc-${index}`, text: item.soalan }));
+const extraWheelPrompts: Record<string, { id: string; text: string }[]> = {
+  'masa-depan': [...matureWheelPrompts(2), ...matureWheelPrompts(3)],
+  'deep-talk': matureWheelPrompts(1),
+  kewangan: matureWheelPrompts(0),
+};
+
+export const WHEEL_SEGMENTS: WheelSegment[] = [
+  ...BASE_WHEEL_SEGMENTS.map(segment => {
+    const extra = extraWheelPrompts[segment.id] || [];
+    return {
+      ...segment,
+      prompts: [...segment.prompts, ...extra.map(prompt => prompt.text)],
+      promptIds: [...segment.prompts.map((_, index) => `wheel:${segment.id}:${index}`), ...extra.map(prompt => prompt.id)],
+    };
+  }),
+  {
+    id: 'vibe-check',
+    label: 'Vibe Check',
+    icon: '',
+    color: '#b8f1df',
+    textColor: '#241d35',
+    category: 'Vibe Check',
+    prompts: vibeWheelPrompts.map(prompt => prompt.text),
+    promptIds: vibeWheelPrompts.map(prompt => prompt.id),
+  },
 ];

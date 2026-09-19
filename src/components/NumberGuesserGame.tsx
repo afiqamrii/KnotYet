@@ -47,7 +47,11 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     const s = sessionStorage.getItem('num_stage');
     return (s === 'reveal' || s === 'guess') ? s as 'reveal' | 'guess' : 'setup';
   });
-  const [secretNumber, setSecretNumber] = useState<number | null>(() => Number(sessionStorage.getItem('num_secret')) || null);
+  const [secretNumber, setSecretNumber] = useState<number | null>(() => (
+    multiplayer.status === 'connected' && !multiplayer.isHost
+      ? multiplayer.numberSecret
+      : Number(sessionStorage.getItem('num_secret')) || null
+  ));
   const [guesses, setGuesses] = useState<{ value: number; hint: 'higher' | 'lower'; guesser?: string }[]>(() => {
     try {
       return readJson<Array<{ value: number; hint: 'higher' | 'lower'; guesser?: string }>>(sessionStorage, 'num_guesses', []);
@@ -94,11 +98,18 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (secretNumber === null && (multiplayer.status !== 'connected' || multiplayer.isHost)) {
       const randomSecret = Math.floor(Math.random() * (MAX_NUM - MIN_NUM + 1)) + MIN_NUM;
       setSecretNumber(randomSecret);
-      if (multiplayer.status === 'connected' && multiplayer.isHost) {
-        multiplayer.sendMessage({ type: 'NUM_SET_SECRET', payload: randomSecret });
-      }
     }
   }, [secretNumber, multiplayer.status, multiplayer.isHost]);
+  useEffect(() => {
+    if (multiplayer.status === 'connected' && multiplayer.isHost && secretNumber !== null) {
+      multiplayer.sendMessage({ type: 'NUM_SET_SECRET', payload: secretNumber });
+    }
+  }, [multiplayer.status, multiplayer.isHost, multiplayer.sendMessage, secretNumber]);
+  useEffect(() => {
+    if (multiplayer.status === 'connected' && !multiplayer.isHost && multiplayer.numberSecret !== null) {
+      setSecretNumber(multiplayer.numberSecret);
+    }
+  }, [multiplayer.status, multiplayer.isHost, multiplayer.numberSecret]);
 
   useEffect(() => {
     sessionStorage.setItem('num_stage', stage);
@@ -152,8 +163,9 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const adjustGuess = (amount: number) => {
-    const fallback = Math.round((lowerBound + upperBound) / 2);
-    const nextGuess = inputValue !== '' && Number.isInteger(parsedGuess) ? parsedGuess + amount : fallback;
+    const nextGuess = inputValue !== '' && Number.isInteger(parsedGuess)
+      ? parsedGuess + amount
+      : amount > 0 ? lowerBound : upperBound;
     setInputValue(String(Math.min(upperBound, Math.max(lowerBound, nextGuess))));
     sounds.playTick();
   };
@@ -177,7 +189,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   useEffect(() => {
     if (multiplayer.status === 'connected') {
-      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+      return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'NUM_SET_SECRET') {
           setSecretNumber(msg.payload);
           sounds.playFlip();
@@ -188,9 +200,9 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         } else if (msg.type === 'NUM_NEXT') {
           executeNextRound();
         }
-      };
+      });
     }
-  }, [multiplayer.status, multiplayer.messageListener, executeNextRound, secretNumber, multiplayer.remoteProfile]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, executeNextRound, secretNumber, multiplayer.remoteProfile]);
 
 
   const handleEndGame = () => {
@@ -347,8 +359,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
                       aria-describedby="number-guess-help"
-                      placeholder={String(Math.round((lowerBound + upperBound) / 2))}
-                      autoFocus
+                      placeholder="?"
                     />
                     <button type="button" onClick={() => adjustGuess(1)} aria-label="Increase guess" disabled={parsedGuess === upperBound}>
                       <Plus aria-hidden="true" />

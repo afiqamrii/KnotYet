@@ -65,7 +65,6 @@ export const PlayScreen: React.FC = () => {
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [myCardAnswer, setMyCardAnswer] = useState<string | null>(null);
   const [partnerCardAnswer, setPartnerCardAnswer] = useState<string | null>(null);
-  const [syncedSwipeCardIds, setSyncedSwipeCardIds] = useState<string[] | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(() => sessionStorage.getItem('knotyet_openRoom') === 'true');
@@ -96,15 +95,12 @@ export const PlayScreen: React.FC = () => {
     } catch { return {}; }
   });
 
-  const markIntroShown = (tab: ActiveTab, broadcast = true) => {
+  const markIntroShown = (tab: ActiveTab) => {
     setIntroShown(prev => {
       const next = { ...prev, [tab]: true };
       writeJson(sessionStorage, STORAGE_KEYS.introShown, next);
       return next;
     });
-    if (broadcast && multiplayer.status === 'connected') {
-      multiplayer.sendMessage({ type: 'START_GAME', payload: { game: tab } });
-    }
   };
 
   const markIntroNotShown = (tab: ActiveTab) => {
@@ -198,33 +194,33 @@ export const PlayScreen: React.FC = () => {
     : activeTab;
 
   // ---- Filtered Cards (Dynamic Shuffle & Non-Repeating) ----
-  const filteredCards = useMemo(() => {
+  const localSwipeCards = useMemo(() => {
     // isLoading changing to false creates the first real deck from cloud
     // history. After that, the ref keeps a round steady while answers sync.
     const seenIds = isLoading ? seenQuestionIdsRef.current : (progress?.answered_questions || seenQuestionIdsRef.current);
-    if (multiplayer.status === 'connected' && !multiplayer.isHost && syncedSwipeCardIds && syncedSwipeCardIds.length > 0) {
-      return getSwipeCardsByIds(syncedSwipeCardIds, seenIds);
-    }
     return getShuffledSwipeCards(selectedCategory, 15, seenIds);
-  }, [selectedCategory, roundCounter, multiplayer.status, multiplayer.isHost, syncedSwipeCardIds, isLoading]);
+  }, [selectedCategory, roundCounter, isLoading]);
+  const filteredCards = useMemo(() => {
+    if (multiplayer.status === 'connected' && !multiplayer.isHost) {
+      return getSwipeCardsByIds(multiplayer.questionDecks.swipe || []);
+    }
+    return localSwipeCards;
+  }, [localSwipeCards, multiplayer.status, multiplayer.isHost, multiplayer.questionDecks.swipe]);
 
   // Host broadcasts the card deck to the joining player for synchronized cards
   React.useEffect(() => {
     if (multiplayer.status === 'connected' && multiplayer.isHost && currentTab === 'swipe' && filteredCards.length > 0) {
       multiplayer.sendMessage({
         type: 'SYNC_QUESTION_IDS',
-        payload: { game: 'swipe', questionIds: filteredCards.map(c => c.id) }
+        payload: { game: 'swipe', questionIds: filteredCards.map(c => c.id), currentIndex: cardIndex }
       });
     }
-  }, [multiplayer.status, multiplayer.isHost, currentTab, selectedCategory, roundCounter, filteredCards]);
-
-  // Auto-close partner left modal after 5 seconds
+  }, [multiplayer.status, multiplayer.isHost, currentTab, selectedCategory, roundCounter, filteredCards, cardIndex]);
   React.useEffect(() => {
-    if (multiplayer.status === 'partner_left') {
-      const t = setTimeout(() => multiplayer.leaveRoom(), 5000);
-      return () => clearTimeout(t);
+    if (multiplayer.status === 'connected' && !multiplayer.isHost && multiplayer.questionDecks.swipe) {
+      setCardIndex(multiplayer.questionIndices.swipe || 0);
     }
-  }, [multiplayer.status, multiplayer]);
+  }, [multiplayer.status, multiplayer.isHost, multiplayer.questionDecks.swipe, multiplayer.questionIndices.swipe]);
 
 
   // Monitor game start in multiplayer
@@ -247,7 +243,8 @@ export const PlayScreen: React.FC = () => {
       setActiveTab('swipe');
     }
     
-    previousTab.current = multiplayer.status === 'connected' ? multiplayer.activeGame : 'lobby';
+    if (multiplayer.status === 'connected') previousTab.current = multiplayer.activeGame;
+    else if (multiplayer.status === 'disconnected') previousTab.current = 'lobby';
   }, [multiplayer.status, multiplayer.activeGame, activeTab, incrementPlayCount]);
 
 
@@ -297,10 +294,9 @@ export const PlayScreen: React.FC = () => {
 
   React.useEffect(() => {
     if (multiplayer.status === 'connected') {
-      const prevListener = multiplayer.messageListener.current;
-      multiplayer.messageListener.current = (msg: MultiplayerMessage) => {
+      return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'START_GAME' && isActiveTab(msg.payload.game)) {
-          markIntroShown(msg.payload.game, false);
+          markIntroShown(msg.payload.game);
         } else if (msg.type === 'END_GAME') {
           const currentTabToReset = multiplayer.activeGame !== 'lobby' ? multiplayer.activeGame : activeTab;
           const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
@@ -313,14 +309,10 @@ export const PlayScreen: React.FC = () => {
           setIsCardFlipped(msg.payload);
         } else if (msg.type === 'CARD_SUBMIT' && currentTab === 'swipe') {
           setPartnerCardAnswer(msg.payload);
-        } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'swipe') {
-          setSyncedSwipeCardIds(msg.payload.questionIds);
-        } else if (prevListener) {
-          prevListener(msg);
         }
-      };
+      });
     }
-  }, [multiplayer.status, currentTab, multiplayer.messageListener, cardIndex, filteredCards.length, activeTab, multiplayer.activeGame]);
+  }, [multiplayer.status, currentTab, multiplayer.subscribeMessage, cardIndex, filteredCards, activeTab, multiplayer.activeGame]);
 
   const currentCard = filteredCards[cardIndex];
 
@@ -630,11 +622,11 @@ export const PlayScreen: React.FC = () => {
                             style={{ background: 'linear-gradient(135deg, #FACC15, #F97316)' }}>
                             <Sparkles className="w-8 h-8 text-white" />
                           </div>
-                          <h3 className="font-black text-ink text-xl">{t.allCardsTitle}</h3>
-                          <p className="text-sm text-ink-3">{t.allCardsSub}</p>
-                          <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
+                          <h3 className="font-black text-ink text-xl">{multiplayer.status === 'connected' && !multiplayer.isHost ? 'Getting your shared cards...' : t.allCardsTitle}</h3>
+                          <p className="text-sm text-ink-3">{multiplayer.status === 'connected' && !multiplayer.isHost ? 'Your partner’s deck is syncing now.' : t.allCardsSub}</p>
+                          {(multiplayer.status !== 'connected' || multiplayer.isHost) && <button onClick={handleRestartDeck} className="btn-chunky btn-pink text-sm px-6">
                             <RotateCw className="w-4 h-4" /> {t.playAgain}
-                          </button>
+                          </button>}
                         </div>
                       )}
                     </div>
@@ -698,7 +690,7 @@ export const PlayScreen: React.FC = () => {
               )}
               {currentTab === 'wheel' && (
                 introShown['wheel']
-                  ? <SpinWheel onEndGame={handleEndGame} />
+                  ? <SpinWheel onEndGame={handleEndGame} reservedQuestionIds={filteredCards.map(card => card.id)} />
                   : <GameIntro gameType="wheel" onStart={() => markIntroShown('wheel')} />
               )}
               {currentTab === 'match' && (
@@ -805,8 +797,9 @@ export const PlayScreen: React.FC = () => {
                 <Users className="w-8 h-8 text-red-500" />
               </div>
               <h3 className="text-xl font-black text-ink mb-2">Partner Disconnected</h3>
-              <p className="text-sm font-bold text-red-500 mb-2">Your partner has ended the session or lost connection.</p>
-              <p className="text-xs text-ink-3 animate-pulse">You will be automatically returned to the main menu in a few seconds...</p>
+              <p className="text-sm font-bold text-red-500 mb-2">The connection paused or your partner left. Keep this tab open if they are coming back.</p>
+              <p className="text-xs text-ink-3 mb-4">If you opened WhatsApp, return here to continue playing.</p>
+              <button type="button" className="btn-chunky btn-white px-5 py-2" onClick={() => multiplayer.leaveRoom()}>Leave room</button>
             </div>
           </div>
         )}

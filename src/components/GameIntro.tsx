@@ -104,7 +104,7 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
       if (broadcast && isMultiplayer) multiplayer.sendMessage({ type: 'START_GAME', payload: { game: gameType } });
       onStart();
     }, 3700);
-  }, [gameType, isMultiplayer, multiplayer, onStart]);
+  }, [gameType, isMultiplayer, multiplayer.sendMessage, onStart]);
 
   useEffect(() => {
     if (countdownTrigger && phase === 'intro') startCountdown(false);
@@ -112,14 +112,11 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
 
   useEffect(() => {
     if (!isMultiplayer) return;
-    const previousListener = multiplayer.messageListener.current;
-    multiplayer.messageListener.current = (message) => {
+    return multiplayer.subscribeMessage((message) => {
       if (message.type === 'START_COUNTDOWN') startCountdown(false);
       else if (message.type === 'START_GAME') onStart();
-      else previousListener?.(message);
-    };
-    return () => { multiplayer.messageListener.current = previousListener; };
-  }, [isMultiplayer, multiplayer, onStart, startCountdown]);
+    });
+  }, [isMultiplayer, multiplayer.subscribeMessage, onStart, startCountdown]);
 
   if (phase !== 'intro') {
     return (

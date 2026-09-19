@@ -26,7 +26,7 @@ export type MultiplayerMessage =
   | { type: 'QUIZ_NEXT' }
   | { type: 'SPIN_WHEEL'; payload: { rotation: number, segmentIndex: number, promptIndex: number } }
   | { type: 'WHEEL_SUBMIT'; payload: string }
-  | { type: 'SYNC_QUESTION_IDS'; payload: { game: GameMode; questionIds: string[] } }
+  | { type: 'SYNC_QUESTION_IDS'; payload: { game: GameMode; questionIds: string[]; currentIndex?: number } }
   | { type: 'MATCH_SELECT'; payload: string }
   | { type: 'MATCH_NEXT' }
   | { type: 'MATCH_RESTART'; payload?: { questionIds?: string[] } }
@@ -55,6 +55,10 @@ interface MultiplayerState {
   chatMessages: ChatMessage[];
   unreadChatCount: number;
   latestIncomingMessage: ChatMessage | null;
+  questionDecks: Partial<Record<GameMode, string[]>>;
+  questionIndices: Partial<Record<GameMode, number>>;
+  numberSecret: number | null;
+  wheelSpin: { rotation: number; segmentIndex: number; promptIndex: number } | null;
 }
 
 interface MultiplayerContextType extends MultiplayerState {
@@ -65,7 +69,7 @@ interface MultiplayerContextType extends MultiplayerState {
   sendMessage: (msg: MultiplayerMessage) => void;
   sendChatMessage: (text: string, isQuickReaction?: boolean) => boolean;
   clearUnreadChatCount: () => void;
-  messageListener: React.MutableRefObject<((msg: MultiplayerMessage) => void) | null>;
+  subscribeMessage: (listener: (msg: MultiplayerMessage) => void) => () => void;
 }
 
 const MultiplayerContext = createContext<MultiplayerContextType | null>(null);
@@ -94,7 +98,13 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     chatMessages: [],
     unreadChatCount: 0,
     latestIncomingMessage: null,
+    questionDecks: {},
+    questionIndices: {},
+    numberSecret: null,
+    wheelSpin: null,
   });
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     if (state.status === 'hosting' || state.status === 'joining' || state.status === 'connected') {
@@ -111,21 +121,27 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const peerRef = useRef<Peer | null>(null);
   const connRef = useRef<DataConnection | null>(null);
   const localProfileRef = useRef<UserProfile | null>(null);
-  const partnerLeftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messageListener = useRef<((msg: MultiplayerMessage) => void) | null>(null);
+  const hasConnectedRef = useRef(false);
+  const remoteLeftRef = useRef(false);
+  const messageSubscribers = useRef(new Set<(msg: MultiplayerMessage) => void>());
+  const subscribeMessage = useCallback((listener: (msg: MultiplayerMessage) => void) => {
+    messageSubscribers.current.add(listener);
+    return () => { messageSubscribers.current.delete(listener); };
+  }, []);
 
-  const cleanup = useCallback(() => {
-    if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
-    partnerLeftTimer.current = null;
-    if (connRef.current) {
-      connRef.current.close();
-      connRef.current = null;
-    }
-    if (peerRef.current) {
-      peerRef.current.destroy();
-      peerRef.current = null;
-    }
-    setState({
+  const cleanup = useCallback((preserveSession = false) => {
+    const connection = connRef.current;
+    connRef.current = null;
+    connection?.close();
+    const peer = peerRef.current;
+    peerRef.current = null;
+    peer?.destroy();
+    setState(previous => preserveSession ? {
+      ...previous,
+      isConnected: false,
+      status: 'disconnected',
+      error: null,
+    } : {
       isConnected: false,
       isHost: false,
       status: 'disconnected',
@@ -136,47 +152,69 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       chatMessages: [],
       unreadChatCount: 0,
       latestIncomingMessage: null,
+      questionDecks: {},
+      questionIndices: {},
+      numberSecret: null,
+      wheelSpin: null,
     });
   }, []);
 
   const handlePartnerLeft = useCallback(() => {
     setState(s => {
-      if (s.status === 'connected') {
+      if (s.status === 'connected' || s.status === 'joining' || s.status === 'hosting') {
         return { ...s, isConnected: false, status: 'partner_left' };
       }
       return s;
     });
-    if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
-    partnerLeftTimer.current = setTimeout(cleanup, 60000);
-  }, [cleanup]);
+  }, []);
 
   const handleConnection = useCallback((conn: DataConnection) => {
     connRef.current = conn;
     
     conn.on('open', () => {
+      if (connRef.current !== conn) return;
+      hasConnectedRef.current = true;
+      remoteLeftRef.current = false;
       setState(s => ({ ...s, isConnected: true, status: 'connected', error: null }));
       // Send profile to partner
       if (localProfileRef.current) {
         conn.send({ type: 'PROFILE_SYNC', payload: localProfileRef.current });
       }
+      if (stateRef.current.isHost && stateRef.current.activeGame !== 'lobby') {
+        conn.send({ type: 'SET_GAME', payload: stateRef.current.activeGame });
+        const questionIds = stateRef.current.questionDecks[stateRef.current.activeGame];
+        if (questionIds?.length) {
+          conn.send({ type: 'SYNC_QUESTION_IDS', payload: { game: stateRef.current.activeGame, questionIds, currentIndex: stateRef.current.questionIndices[stateRef.current.activeGame] || 0 } });
+        }
+        if (stateRef.current.activeGame === 'number' && stateRef.current.numberSecret !== null) {
+          conn.send({ type: 'NUM_SET_SECRET', payload: stateRef.current.numberSecret });
+        }
+        if (stateRef.current.activeGame === 'wheel' && stateRef.current.wheelSpin) {
+          conn.send({ type: 'SPIN_WHEEL', payload: stateRef.current.wheelSpin });
+        }
+      }
     });
 
     conn.on('data', (data) => {
+      if (connRef.current !== conn) return;
       if (!isMultiplayerMessage(data)) return;
       const msg = data;
       
       if (msg.type === 'PROFILE_SYNC') {
         setState(s => ({ ...s, remoteProfile: msg.payload }));
       } else if (msg.type === 'SET_GAME') {
-        setState(s => ({ ...s, activeGame: msg.payload }));
-        if (messageListener.current) {
-          messageListener.current(msg);
-        }
+        setState(s => ({
+          ...s,
+          activeGame: msg.payload,
+          questionDecks: { ...s.questionDecks, [msg.payload]: undefined },
+          questionIndices: { ...s.questionIndices, [msg.payload]: undefined },
+          numberSecret: msg.payload === 'number' ? null : s.numberSecret,
+          wheelSpin: msg.payload === 'wheel' ? null : s.wheelSpin,
+        }));
+        messageSubscribers.current.forEach(listener => listener(msg));
       } else if (msg.type === 'END_GAME') {
         setState(s => ({ ...s, activeGame: 'lobby' }));
-        if (messageListener.current) {
-          messageListener.current(msg);
-        }
+        messageSubscribers.current.forEach(listener => listener(msg));
       } else if (msg.type === 'CHAT_MESSAGE') {
         if (!msg.payload || typeof msg.payload.text !== 'string' || !msg.payload.text.trim() || typeof msg.payload.id !== 'string') return;
         const incoming = { ...msg.payload, senderId: 'partner', text: msg.payload.text.slice(0, 2000) };
@@ -187,13 +225,24 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
           latestIncomingMessage: incoming,
         }));
         sounds.playChatPop();
+      } else if (msg.type === 'SYNC_QUESTION_IDS') {
+        setState(s => ({
+          ...s,
+          questionDecks: { ...s.questionDecks, [msg.payload.game]: msg.payload.questionIds },
+          questionIndices: { ...s.questionIndices, [msg.payload.game]: msg.payload.currentIndex || 0 },
+        }));
+        messageSubscribers.current.forEach(listener => listener(msg));
+      } else if (msg.type === 'NUM_SET_SECRET') {
+        setState(s => ({ ...s, numberSecret: msg.payload }));
+        messageSubscribers.current.forEach(listener => listener(msg));
+      } else if (msg.type === 'SPIN_WHEEL') {
+        setState(s => ({ ...s, wheelSpin: msg.payload }));
+        messageSubscribers.current.forEach(listener => listener(msg));
       } else if (msg.type === 'LEAVE_ROOM') {
+        remoteLeftRef.current = true;
         handlePartnerLeft();
       } else {
-        // Pass to active game listener
-        if (messageListener.current) {
-          messageListener.current(msg);
-        }
+        messageSubscribers.current.forEach(listener => listener(msg));
       }
     });
 
@@ -201,30 +250,11 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (connRef.current === conn) handlePartnerLeft();
     });
     conn.on('error', () => { if (connRef.current === conn) handlePartnerLeft(); });
-  }, [handlePartnerLeft, cleanup]);
+  }, [handlePartnerLeft]);
 
-  useEffect(() => {
-    const resumeConnection = () => {
-      if (document.visibilityState === 'hidden' || state.status !== 'partner_left' || state.isHost || !state.roomCode) return;
-      const peer = peerRef.current;
-      if (!peer?.open || connRef.current?.open) return;
-      if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
-      partnerLeftTimer.current = null;
-      setState(current => ({ ...current, status: 'joining', error: null }));
-      handleConnection(peer.connect(getPeerId(state.roomCode), { reliable: true }));
-    };
-    window.addEventListener('focus', resumeConnection);
-    window.addEventListener('online', resumeConnection);
-    document.addEventListener('visibilitychange', resumeConnection);
-    return () => {
-      window.removeEventListener('focus', resumeConnection);
-      window.removeEventListener('online', resumeConnection);
-      document.removeEventListener('visibilitychange', resumeConnection);
-    };
-  }, [handleConnection, state.isHost, state.roomCode, state.status]);
-
-  const hostRoom = useCallback((code: string, profile: UserProfile) => {
-    cleanup();
+  const hostRoom = useCallback((code: string, profile: UserProfile, reconnect = false) => {
+    cleanup(reconnect);
+    if (!reconnect) { hasConnectedRef.current = false; remoteLeftRef.current = false; }
     localProfileRef.current = profile;
     setState(s => ({ ...s, status: 'hosting', isHost: true, roomCode: code, error: null }));
 
@@ -243,19 +273,23 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     peer.on('connection', (conn) => {
+      if (peerRef.current !== peer) { conn.close(); return; }
       if (connRef.current?.open) { conn.close(); return; }
       handleConnection(conn);
     });
 
     peer.on('error', (err) => {
+      if (peerRef.current !== peer) return;
       console.error(err);
-      setState(s => ({ ...s, status: 'error', error: 'Failed to create room. Code might be in use.' }));
+      setState(s => ({ ...s, status: hasConnectedRef.current ? 'partner_left' : 'error', error: hasConnectedRef.current ? null : 'Failed to create room. Code might be in use.' }));
       peer.destroy();
     });
+    peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
   }, [cleanup, handleConnection]);
 
-  const joinRoom = useCallback((code: string, profile: UserProfile) => {
-    cleanup();
+  const joinRoom = useCallback((code: string, profile: UserProfile, reconnect = false) => {
+    cleanup(reconnect);
+    if (!reconnect) { hasConnectedRef.current = false; remoteLeftRef.current = false; }
     localProfileRef.current = profile;
     setState(s => ({ ...s, status: 'joining', isHost: false, roomCode: code, error: null }));
 
@@ -270,22 +304,40 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     peerRef.current = peer;
 
     peer.on('open', () => {
+      if (peerRef.current !== peer) return;
       const conn = peer.connect(getPeerId(code), { reliable: true });
       handleConnection(conn);
     });
 
     peer.on('error', (err) => {
+      if (peerRef.current !== peer) return;
       console.error(err);
       let errorMsg = 'Failed to connect. Make sure host is waiting.';
       if (err.type === 'peer-unavailable') {
         errorMsg = 'Room does not exist. Please check the code.';
       }
-      setState(s => ({ ...s, status: 'error', error: errorMsg }));
+      setState(s => ({ ...s, status: hasConnectedRef.current ? 'partner_left' : 'error', error: hasConnectedRef.current ? null : errorMsg }));
       peer.destroy();
     });
+    peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
   }, [cleanup, handleConnection]);
 
+  useEffect(() => {
+    if (state.status !== 'partner_left' || !state.roomCode || !localProfileRef.current || remoteLeftRef.current) return;
+    const retry = () => {
+      if (document.visibilityState !== 'visible' || !navigator.onLine || !localProfileRef.current || !state.roomCode) return;
+      if (state.isHost) {
+        if (!peerRef.current?.open) hostRoom(state.roomCode, localProfileRef.current, true);
+      }
+      else joinRoom(state.roomCode, localProfileRef.current, true);
+    };
+    const timer = window.setInterval(retry, 4000);
+    return () => window.clearInterval(timer);
+  }, [state.status, state.isHost, state.roomCode, hostRoom, joinRoom]);
+
   const leaveRoom = useCallback(() => {
+    remoteLeftRef.current = true;
+    hasConnectedRef.current = false;
     if (connRef.current && connRef.current.open) {
       connRef.current.send({ type: 'LEAVE_ROOM' });
     }
@@ -293,7 +345,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [cleanup]);
 
   const setGame = useCallback((game: GameMode) => {
-    setState(s => ({ ...s, activeGame: game }));
+    setState(s => ({
+      ...s,
+      activeGame: game,
+      questionDecks: { ...s.questionDecks, [game]: undefined },
+      questionIndices: { ...s.questionIndices, [game]: undefined },
+      numberSecret: game === 'number' ? null : s.numberSecret,
+      wheelSpin: game === 'wheel' ? null : s.wheelSpin,
+    }));
     if (connRef.current) {
       connRef.current.send({ type: 'SET_GAME', payload: game });
     }
@@ -302,6 +361,17 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const sendMessage = useCallback((msg: MultiplayerMessage) => {
     if (connRef.current && connRef.current.open) {
       connRef.current.send(msg);
+    }
+    if (msg.type === 'SYNC_QUESTION_IDS') {
+      setState(s => ({
+        ...s,
+        questionDecks: { ...s.questionDecks, [msg.payload.game]: msg.payload.questionIds },
+        questionIndices: { ...s.questionIndices, [msg.payload.game]: msg.payload.currentIndex || 0 },
+      }));
+    } else if (msg.type === 'NUM_SET_SECRET') {
+      setState(s => ({ ...s, numberSecret: msg.payload }));
+    } else if (msg.type === 'SPIN_WHEEL') {
+      setState(s => ({ ...s, wheelSpin: msg.payload }));
     }
   }, []);
 
@@ -334,7 +404,6 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   useEffect(() => () => {
-    if (partnerLeftTimer.current) clearTimeout(partnerLeftTimer.current);
     const connection = connRef.current;
     connRef.current = null;
     connection?.close();
@@ -356,7 +425,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       sendMessage,
       sendChatMessage,
       clearUnreadChatCount,
-      messageListener
+      subscribeMessage
     }}>
       {children}
     </MultiplayerContext.Provider>

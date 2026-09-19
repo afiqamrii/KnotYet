@@ -101,13 +101,12 @@ export function getShuffledMatchQuestions(count: number = 10, additionalSeenIds?
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-export function getMatchQuestionsByIds(ids: string[], additionalSeenIds?: Iterable<string>): MatchQuestion[] {
-  const seen = getSeenQuestionIds(additionalSeenIds);
+export function getMatchQuestionsByIds(ids: string[]): MatchQuestion[] {
   const map = new Map(MATCH_QUESTIONS.map(q => [q.id, q]));
   const result: MatchQuestion[] = [];
   for (const id of ids) {
     const q = map.get(id);
-    if (q && !seen.has(q.id)) result.push(q);
+    if (q) result.push(q);
   }
   return result;
 }
@@ -122,13 +121,12 @@ export function getShuffledGuessQuestions(count: number = 10, additionalSeenIds?
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-export function getGuessQuestionsByIds(ids: string[], additionalSeenIds?: Iterable<string>): GuessQuizItem[] {
-  const seen = getSeenQuestionIds(additionalSeenIds);
+export function getGuessQuestionsByIds(ids: string[]): GuessQuizItem[] {
   const map = new Map(GUESS_QUIZ_LIST.map(q => [q.id, q]));
   const result: GuessQuizItem[] = [];
   for (const id of ids) {
     const q = map.get(id);
-    if (q && !seen.has(q.id)) result.push(q);
+    if (q) result.push(q);
   }
   return result;
 }
@@ -149,13 +147,12 @@ export function getShuffledSwipeCards(category: CardCategory | 'all', count: num
   return shuffled.slice(0, Math.min(count, shuffled.length));
 }
 
-export function getSwipeCardsByIds(ids: string[], additionalSeenIds?: Iterable<string>): SwipeCardItem[] {
-  const seen = getSeenQuestionIds(additionalSeenIds);
+export function getSwipeCardsByIds(ids: string[]): SwipeCardItem[] {
   const map = new Map(SWIPE_CARDS.map(c => [c.id, c]));
   const result: SwipeCardItem[] = [];
   for (const id of ids) {
     const card = map.get(id);
-    if (card && !seen.has(card.id)) result.push(card);
+    if (card) result.push(card);
   }
   return result;
 }
@@ -164,17 +161,20 @@ export function getSwipeCardsByIds(ids: string[], additionalSeenIds?: Iterable<s
 // 4. SPIN WHEEL PROMPTS
 // ==========================================
 
-export const getWheelPromptId = (segmentId: string, promptIndex: number) => `wheel:${segmentId}:${promptIndex}`;
+export const getWheelPromptId = (segmentId: string, promptIndex: number) =>
+  WHEEL_SEGMENTS.find(segment => segment.id === segmentId)?.promptIds[promptIndex] ?? `wheel:${segmentId}:${promptIndex}`;
 
 export function getRandomUnseenWheelSelection(additionalSeenIds?: Iterable<string>): { segmentIndex: number; promptIndex: number; questionId: string } | null {
   const seen = getSeenQuestionIds(additionalSeenIds);
-  const available = WHEEL_SEGMENTS.flatMap((segment, segmentIndex) =>
+  const availableSegments = WHEEL_SEGMENTS.map((segment, segmentIndex) =>
     segment.prompts.map((_, promptIndex) => ({
       segmentIndex,
       promptIndex,
-      questionId: getWheelPromptId(segment.id, promptIndex),
-    })),
-  ).filter(item => !seen.has(item.questionId));
+      questionId: segment.promptIds[promptIndex],
+    })).filter(item => !seen.has(item.questionId)),
+  ).filter(prompts => prompts.length > 0);
 
-  return available.length > 0 ? available[Math.floor(Math.random() * available.length)] : null;
+  if (availableSegments.length === 0) return null;
+  const segment = availableSegments[Math.floor(Math.random() * availableSegments.length)];
+  return segment[Math.floor(Math.random() * segment.length)];
 }
