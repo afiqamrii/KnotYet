@@ -49,3 +49,5 @@
   .date-game-grid .art-numbers { transform: rotate(-8deg) scale(.85); }
 }
 
+
+.date-games-try{display:flex;justify-content:center;margin:25px 0 0;text-align:center}.date-games-try a{display:inline-flex;align-items:center;gap:7px;min-height:44px;color:#5b36b6;font-size:13px;font-weight:800;text-decoration:underline;text-underline-offset:4px}.date-games-try a:hover{color:#241d35}.footer-legal-link{gap:20px;flex-wrap:wrap}

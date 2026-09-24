@@ -5,6 +5,7 @@ import { GameProvider, useGame } from './store/GameContext';
 import { useAuth } from './store/AuthContext';
 import { LoadingScreen } from './components/LoadingScreen';
 import { PrivacyPolicy } from './screens/PrivacyPolicy';
+import { PublicConversationDeck } from './screens/PublicConversationDeck';
 
 const WelcomeScreen = lazy(() => import('./screens/WelcomeScreen').then((module) => ({ default: module.WelcomeScreen })));
 const InviteScreen = lazy(() => import('./screens/InviteScreen').then((module) => ({ default: module.InviteScreen })));
@@ -48,6 +49,7 @@ const AppRoutes = () => {
       <Route path="/setup" element={<ProtectedRoute requireProfile={false}><WelcomeScreen onComplete={() => undefined} /></ProtectedRoute>} />
       <Route path="/play" element={<ProtectedRoute><PlayRoute /></ProtectedRoute>} />
       <Route path="/invite" element={<InviteScreen />} />
+      <Route path="/try" element={<PublicConversationDeck />} />
       <Route path="*" element={<Navigate to="/" replace />} />
       <Route path={'/privacy'} element={<PrivacyPolicy />} />
     </Routes>

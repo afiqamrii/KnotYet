@@ -686,8 +686,6 @@
 .game-action-flip { color: #6651bd; }
 .game-action-next { color: white; background: #299769; border-color: transparent; }
 .game-action:disabled { opacity: .42; }
-.play-ad-slot { color: #8a8a93; background: rgba(255,255,255,.38); border: 1px dashed rgba(60,60,67,.15); box-shadow: none; }
-.play-ad-slot .text-white\/80, .play-ad-slot .text-white\/70, .play-ad-slot .text-white\/60, .play-ad-slot .text-white\/50 { color: #8a8a93 !important; }
 
 .game-card {
   background: rgba(255,255,255,.9);

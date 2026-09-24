@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { BrandMark } from '../components/ArcadeArt';
 import '../styles/privacy.css';
 
-const EFFECTIVE_DATE = '18 September 2026';
+const EFFECTIVE_DATE = '25 September 2026';
 
 export const PrivacyPolicy = () => {
   useEffect(() => {
@@ -82,16 +82,16 @@ export const PrivacyPolicy = () => {
                 <li>create multiplayer rooms and connect players;</li>
                 <li>remember preferences and restore game sessions;</li>
                 <li>measure site performance and understand how features are used;</li>
-                <li>display, measure, and help prevent fraud involving advertisements;</li>
+                <li>if advertising is introduced, display and measure ads and help prevent ad fraud;</li>
                 <li>protect the service, enforce limits, troubleshoot problems, and comply with legal obligations.</li>
               </ul>
             </section>
 
             <section id={'ads'}>
               <h2>4. Advertising, cookies, and similar technologies</h2>
-              <p>KnotYet uses Google AdSense to display advertisements. Google and other third-party vendors may use cookies, web beacons, device identifiers, or similar technologies to serve and measure ads based on your visits to this and other websites. Google’s use of advertising cookies enables it and its partners to serve ads based on your visit to KnotYet and other sites.</p>
+              <p>KnotYet does not currently show Google-served ads. If we introduce Google AdSense ads, Google and other vendors may use cookies, web beacons, device identifiers, or similar technologies to serve and measure them. We will update this policy before ad serving begins.</p>
               <p>You can learn how Google uses data from sites that use its services in <a href={'https://policies.google.com/technologies/partner-sites'} target={'_blank'} rel={'noopener noreferrer'}>Google’s partner-sites policy <ExternalLink aria-hidden={'true'} /></a>. You may manage personalised advertising through <a href={'https://adssettings.google.com/'} target={'_blank'} rel={'noopener noreferrer'}>Google Ads Settings <ExternalLink aria-hidden={'true'} /></a> or opt out of some third-party personalised advertising through <a href={'https://www.aboutads.info/choices/'} target={'_blank'} rel={'noopener noreferrer'}>YourAdChoices <ExternalLink aria-hidden={'true'} /></a>.</p>
-              <p>Where required by law, we or our advertising partners will request consent before using non-essential cookies or serving personalised ads. If you decline, you may still see non-personalised or contextual advertising.</p>
+              <p>If we introduce advertising, we will provide any consent choices required by law before using non-essential advertising cookies or serving personalised ads.</p>
             </section>
 
             <section id={'sharing'}>

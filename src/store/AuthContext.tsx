@@ -1,10 +1,7 @@
 ﻿import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
-import { AdModal } from '../components/AdModal';
 
-const MULTIPLAYER_DAILY_LIMIT = 3;
-const SOLO_DAILY_LIMIT = 5;
 const clearAccountCache = () => {
   [
     'knotyet_guest_active',
@@ -27,7 +24,6 @@ interface AuthContextType {
   refreshProgress: () => Promise<void>;
   refreshCouple: () => Promise<void>;
   incrementPlayCount: (type: 'solo' | 'multiplayer') => Promise<void>;
-  awardBonusPlay: (type: 'solo' | 'multiplayer') => Promise<void>;
   checkLimit: (type: 'solo' | 'multiplayer') => boolean;
 }
 
@@ -43,7 +39,6 @@ const AuthContext = createContext<AuthContextType>({
   refreshProgress: async () => {},
   refreshCouple: async () => {},
   incrementPlayCount: async () => {},
-  awardBonusPlay: async () => {},
   checkLimit: () => true,
 });
 
@@ -57,19 +52,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [couple, setCouple] = useState<CoupleProgress | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
-  const [adLimitType, setAdLimitType] = useState<'solo' | 'multiplayer' | null>(null);
-
-  const checkLimit = (type: 'solo' | 'multiplayer') => {
-    const limit = type === 'solo' ? SOLO_DAILY_LIMIT : MULTIPLAYER_DAILY_LIMIT;
-    const count = type === 'solo' ? progress?.solo_play_count : progress?.play_together_count;
-    if (!progress?.is_premium && (count || 0) >= limit) {
-      setAdLimitType(type);
-      setIsAdModalOpen(true);
-      return false;
-    }
-    return true;
-  };
+  // Keep game callers working while play remains unrestricted during review.
+  const checkLimit: AuthContextType['checkLimit'] = () => true;
 
   const refreshProgress = async () => {
     if (!user) return;
@@ -263,39 +247,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (data) setProgress(data);
   };
   
-  const awardBonusPlay = async (type: 'solo' | 'multiplayer') => {
-    if (!user || !progress) return;
-    const field = type === 'solo' ? 'solo_play_count' : 'play_together_count';
-    // By decrementing the count, we give them one "bonus" play that allows them back under the limit
-    const newCount = Math.max(0, (progress[field] || 0) - 1);
-    
-    const { data } = await supabase
-      .from('user_progress')
-      .update({ [field]: newCount })
-      .eq('user_id', user.id)
-      .select()
-      .single();
-      
-    if (data) setProgress(data);
-  };
-
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, awardBonusPlay, checkLimit }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, checkLimit }}>
       {children}
-      {isAdModalOpen && adLimitType && (
-        <AdModal 
-          title={adLimitType === 'multiplayer' ? "Ready for one more together?" : "Ready for one more game?"}
-          description={adLimitType === 'multiplayer' 
-            ? `You've enjoyed your ${MULTIPLAYER_DAILY_LIMIT} free multiplayer sessions today. A short ad unlocks another.`
-            : `You've completed ${SOLO_DAILY_LIMIT} solo games today. A short ad unlocks another.`}
-          rewardText={adLimitType === 'multiplayer' ? "1 Multiplayer Session" : "1 Solo Game"}
-          onClose={() => setIsAdModalOpen(false)}
-          onRewardEarned={() => {
-            awardBonusPlay(adLimitType);
-            setIsAdModalOpen(false);
-          }}
-        />
-      )}
     </AuthContext.Provider>
   );
 };
