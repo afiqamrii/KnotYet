@@ -34,6 +34,9 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
   const firstCorrect = useRef<Candidate | null>(null);
   const goTimer = useRef<number | null>(null);
   const resultTimer = useRef<number | null>(null);
+  const retryTimer = useRef<number | null>(null);
+  const cooldowns = useRef({ host: 0, partner: 0 });
+  const rewardedRounds = useRef(new Set<string>());
   const started = useRef(false);
   const [number, setNumber] = useState('');
   const [answer, setAnswer] = useState('');
@@ -48,6 +51,10 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer]);
 
   const newRound = useCallback((id: string, round: number, scores: { host: number; partner: number }) => {
+    if (goTimer.current !== null) window.clearTimeout(goTimer.current);
+    if (resultTimer.current !== null) window.clearTimeout(resultTimer.current);
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    cooldowns.current = { host: 0, partner: 0 };
     const next: SecretRaceState = { matchId: id, round, operation: OPERATIONS[Math.floor(Math.random() * OPERATIONS.length)], phase: 'picking', hostLocked: false, partnerLocked: false, scores };
     numbersRef.current = {};
     guestLockedNumber.current = null;
@@ -82,7 +89,8 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
     setFeedback('Not quite — take a breath and race again!');
     setAnswer('');
     setRetryUntil(until);
-    window.setTimeout(() => setRetryUntil(previous => previous === until ? 0 : previous), delay);
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    retryTimer.current = window.setTimeout(() => setRetryUntil(previous => previous === until ? 0 : previous), delay);
     sounds.playMismatch();
   }, []);
 
@@ -95,12 +103,13 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
     publish(next, 'SECRET_RACE_RESULT');
     sounds.playSuccess();
     if (winner === role) confetti({ particleCount: 80, spread: 80, origin: { y: .64 }, colors: ['#ff829e', '#7c3aed', '#cbeafa', '#d5f578', '#f9d77e'] });
-    addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, true);
-  }, [addHeartPoints, isHost, publish, role]);
+  }, [isHost, publish, role]);
 
   const judge = useCallback((player: 'host' | 'partner', value: number) => {
     const current = stateRef.current;
-    if (!isHost || !current || current.phase !== 'answering' || !current.equation || value !== current.equation.answer) {
+    if (!isHost || !current || current.phase !== 'answering' || !current.equation || !Number.isInteger(value) || cooldowns.current[player] > Date.now()) return;
+    if (value !== current.equation.answer) {
+      cooldowns.current[player] = Date.now() + WRONG_DELAY_MS;
       if (player === 'host') wrong();
       else multiplayer.sendMessage({ type: 'SECRET_RACE_WRONG', payload: { matchId: current?.matchId || '', delayMs: WRONG_DELAY_MS } });
       return;
@@ -140,7 +149,7 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
     event.preventDefault();
     const current = stateRef.current;
     const value = Number(answer);
-    if (!current || current.phase !== 'answering' || retryUntil > Date.now() || !Number.isInteger(value)) return;
+    if (!answer.trim() || !current || current.phase !== 'answering' || retryUntil > Date.now() || !Number.isInteger(value)) return;
     if (isHost) judge('host', value);
     else multiplayer.sendMessage({ type: 'SECRET_RACE_ANSWER', payload: { matchId: current.matchId, answer: value } });
   };
@@ -172,7 +181,14 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
 
   useEffect(() => multiplayer.subscribeMessage(message => {
     if (message.type === 'SECRET_RACE_START' || message.type === 'SECRET_RACE_STATE' || message.type === 'SECRET_RACE_RESULT') {
-      if (message.type === 'SECRET_RACE_START') guestLockedNumber.current = null;
+      if (isHost) return;
+      if (stateRef.current?.matchId !== message.payload.matchId) {
+        guestLockedNumber.current = null;
+        setNumber('');
+        setAnswer('');
+        setRetryUntil(0);
+        setFeedback('');
+      }
       stateRef.current = message.payload;
       setState(message.payload);
       if (message.payload.phase !== 'picking') setFeedback('');
@@ -185,7 +201,7 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
       if (next.hostLocked) beginCountdown(next);
     } else if (message.type === 'SECRET_RACE_GO') {
       const current = stateRef.current;
-      if (!current || current.matchId !== message.payload.matchId) return;
+      if (isHost || !current || current.matchId !== message.payload.matchId || current.phase !== 'countdown') return;
       const next = { ...current, phase: 'answering' as const, equation: message.payload.equation };
       stateRef.current = next;
       setState(next);
@@ -194,11 +210,11 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
     } else if (message.type === 'SECRET_RACE_ANSWER' && isHost) {
       if (stateRef.current?.matchId === message.payload.matchId) judge('partner', message.payload.answer);
     } else if (message.type === 'SECRET_RACE_WRONG' && stateRef.current?.matchId === message.payload.matchId) {
-      wrong(message.payload.delayMs);
+      if (!isHost && stateRef.current.phase === 'answering') wrong(WRONG_DELAY_MS);
     } else if (message.type === 'SECRET_RACE_NEXT' && isHost && stateRef.current?.matchId === message.payload.matchId && stateRef.current.phase === 'result') {
       const current = stateRef.current;
-      newRound(current.matchId, current.round + 1, current.scores);
-    } else if (message.type === 'SECRET_RACE_RESTART' && isHost && stateRef.current?.matchId === message.payload.matchId) {
+      newRound(matchId(), current.round + 1, current.scores);
+    } else if (message.type === 'SECRET_RACE_RESTART' && isHost && stateRef.current?.matchId === message.payload.matchId && stateRef.current.phase === 'complete') {
       newRound(matchId(), 1, { host: 0, partner: 0 });
     }
   }), [beginCountdown, isHost, judge, multiplayer, newRound, publish, wrong]);
@@ -206,7 +222,14 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
   useEffect(() => () => {
     if (goTimer.current !== null) window.clearTimeout(goTimer.current);
     if (resultTimer.current !== null) window.clearTimeout(resultTimer.current);
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
   }, []);
+
+  useEffect(() => {
+    if (!state || (state.phase !== 'result' && state.phase !== 'complete') || rewardedRounds.current.has(state.matchId)) return;
+    rewardedRounds.current.add(state.matchId);
+    addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, true);
+  }, [state, addHeartPoints]);
 
   if (multiplayer.status !== 'connected') return <section className="secret-race-card secret-race-empty"><Users /><h2>Secret Number Race is made for two.</h2><p>Open a Play Together room, then pick this game from your shared lobby.</p></section>;
   if (!state) return <section className="secret-race-card secret-race-empty"><Sparkles /><h2>Setting up the race…</h2><p>Your shared round is loading.</p></section>;
@@ -219,10 +242,12 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
   const matchWinner = state.scores.host === state.scores.partner ? 'tie' : state.scores.host > state.scores.partner ? 'host' : 'partner';
   const cooldown = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
   const nextRound = () => {
-    if (isHost) newRound(state.matchId, state.round + 1, state.scores);
+    if (stateRef.current?.phase !== 'result') return;
+    if (isHost) newRound(matchId(), state.round + 1, state.scores);
     else multiplayer.sendMessage({ type: 'SECRET_RACE_NEXT', payload: { matchId: state.matchId } });
   };
   const playAgain = () => {
+    if (stateRef.current?.phase !== 'complete') return;
     if (isHost) newRound(matchId(), 1, { host: 0, partner: 0 });
     else multiplayer.sendMessage({ type: 'SECRET_RACE_RESTART', payload: { matchId: state.matchId } });
   };

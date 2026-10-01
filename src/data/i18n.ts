@@ -1,6 +1,6 @@
 // ============================================================
 // i18n — UI strings for English (EN) and Malay (MY)
-// Content (teka-teki, questions, riddles) stays in Malay always.
+// Question decks are written in English; interface language is selectable.
 // Only UI labels/buttons/instructions are translated here.
 // ============================================================
 
@@ -24,7 +24,7 @@ export const i18n = {
     catAll: 'All',
     catRiddles: 'Riddles',
     catVibeCheck: 'Vibe Check',
-    catTaaruf: 'Taaruf',
+    catTaaruf: 'Real Talk',
     // Swipe card
     cardCount: (current: number, total: number) => `Card ${current} of ${total}`,
     answered: 'Done',

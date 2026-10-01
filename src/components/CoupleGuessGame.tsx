@@ -1,6 +1,6 @@
 import { UiSymbol, RoundLabel } from './GameCardDesign';
 import { GiphyReaction, ReactionDialog } from './GiphyReaction';
-import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Component, ErrorInfo } from 'react';
 import { readStringUnion } from '../utils/storage';
 import confetti from 'canvas-confetti';
 import { Heart, Sparkles, RefreshCw, Trophy } from 'lucide-react';
@@ -60,7 +60,11 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       const stored = sessionStorage.getItem('guess_questions');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return getGuessQuestionsByIds(parsed.map(item => item.id));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const restored = getGuessQuestionsByIds(parsed.map(item => item.id));
+          if (restored.length === parsed.length) return restored;
+          ['guess_currentIndex', 'guess_stage', 'guess_actualAnswer', 'guess_guessedAnswer', 'guess_score', 'guess_completed', 'guess_isMySecret'].forEach(key => sessionStorage.removeItem(key));
+        }
       }
     } catch {}
     return getShuffledGuessQuestions(10, progress?.answered_questions);
@@ -83,6 +87,9 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     return { positive, text: positive ? t.earnedPoints(EARN) : t.deductedPoints(DEDUCT) };
   });
   const [isMySecret, setIsMySecret] = useState<boolean>(() => sessionStorage.getItem('guess_isMySecret') === 'true');
+  const stageRef = useRef(stage);
+  const completedRef = useRef(completed);
+  const actualRef = useRef(actualAnswer);
 
   useEffect(() => {
     sessionStorage.setItem('guess_questions', JSON.stringify(questions));
@@ -96,7 +103,10 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [questions, currentIndex, stage, actualAnswer, guessedAnswer, score, completed, isMySecret]);
 
   const currentQuiz = questions[currentIndex] || questions[0] || { id: 'gq-0', targetRole: 'Lelaki' as const, question: '', options: [], vibeText: '' };
-  const isBoyTarget = currentQuiz.targetRole === 'Lelaki';
+  const isFirstPlayerTarget = currentIndex % 2 === 0;
+  const isMySecretTurn = multiplayer.status !== 'connected' || (isFirstPlayerTarget ? multiplayer.isHost : !multiplayer.isHost);
+  const secretName = multiplayer.status === 'connected' ? (isMySecretTurn ? profile?.name || 'You' : partnerName) : (isFirstPlayerTarget ? profile?.name || 'Player 1' : partner?.name || 'Player 2');
+  const guesserName = isFirstPlayerTarget ? partner?.name || 'Player 2' : profile?.name || 'Player 1';
 
   // Save a prompt when it reaches the player, rather than waiting for an
   // answer. Leaving and returning to a round therefore cannot repeat it.
@@ -118,6 +128,9 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer.status, multiplayer.isHost, questions, currentIndex]);
 
   const executeNext = useCallback(() => {
+    if (stageRef.current !== 'reveal' || completedRef.current) return;
+    stageRef.current = 'secret';
+    actualRef.current = null;
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((p) => p + 1);
       setStage('secret');
@@ -126,15 +139,17 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       setIsMySecret(false);
       setPointsToast(null);
     } else {
+      completedRef.current = true;
       setCompleted(true);
+      setPointsToast(null);
       if (multiplayer.status !== 'connected') incrementPlayCount('solo');
-      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
-      if (score === questions.length - 1) addHeartPoints(HEART_POINTS.PERFECT_QUIZ, multiplayer.status === 'connected'); 
+      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ + (score === questions.length ? HEART_POINTS.PERFECT_QUIZ : 0), multiplayer.status === 'connected');
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15'] });
     }
   }, [currentIndex, score, addHeartPoints, multiplayer.status, incrementPlayCount, questions.length]);
 
   const handleNext = useCallback(() => {
+    if (multiplayer.status === 'connected' && !multiplayer.isHost) return;
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'QUIZ_NEXT' });
     }
@@ -142,6 +157,10 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer, executeNext]);
 
   const handleRestart = useCallback((broadcast: boolean = true, newQList?: GuessQuizItem[]) => {
+    if (broadcast && multiplayer.status === 'connected' && !multiplayer.isHost) return;
+    stageRef.current = 'secret';
+    completedRef.current = false;
+    actualRef.current = null;
     const nextQuestions = newQList || getShuffledGuessQuestions(10, progress?.answered_questions);
     setQuestions(nextQuestions);
     setCurrentIndex(0); 
@@ -166,8 +185,10 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const receiveGuess = useCallback((option: string) => {
+    if (stageRef.current !== 'guess' || !actualRef.current || !currentQuiz.options.includes(option)) return;
+    stageRef.current = 'reveal';
     setGuessedAnswer(option);
-    const isMatch = option === actualAnswer;
+    const isMatch = option === actualRef.current;
     
     // Mark question as answered in persistent history so it will not repeat
     if (currentQuiz?.id) {
@@ -186,7 +207,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15'],
       });
     } else {
-      deductHeartPoints(DEDUCT);
+      deductHeartPoints(DEDUCT, multiplayer.status === 'connected');
       showToast(t.deductedPoints(DEDUCT), false);
       sounds.playMismatch();
     }
@@ -197,15 +218,21 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (multiplayer.status === 'connected') {
       return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'QUIZ_ACTUAL') {
+          if (isMySecretTurn || stageRef.current !== 'secret' || !currentQuiz.options.includes(msg.payload)) return;
+          stageRef.current = 'guess';
+          actualRef.current = msg.payload;
           setIsMySecret(false);
           setActualAnswer(msg.payload);
           sounds.playFlip();
           setStage('guess');
         } else if (msg.type === 'QUIZ_GUESS') {
+          if (!isMySecretTurn) return;
           receiveGuess(msg.payload);
         } else if (msg.type === 'QUIZ_NEXT') {
+          if (multiplayer.isHost) return;
           executeNext();
         } else if (msg.type === 'QUIZ_RESTART') {
+          if (multiplayer.isHost) return;
           const synced = msg.payload?.questionIds ? getGuessQuestionsByIds(msg.payload.questionIds) : undefined;
           handleRestart(false, synced);
         } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'quiz') {
@@ -217,20 +244,24 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         }
       });
     }
-  }, [multiplayer.status, multiplayer.subscribeMessage, executeNext, handleRestart, receiveGuess]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, executeNext, handleRestart, receiveGuess, isMySecretTurn, currentQuiz]);
 
   const handleSelectActual = (option: string) => {
+    if (stageRef.current !== 'secret' || !isMySecretTurn || !currentQuiz.options.includes(option)) return;
     if (currentIndex === 0 && multiplayer.status !== 'connected' && !checkLimit('solo')) {
       return;
     }
 
+    actualRef.current = option;
     if (multiplayer.status === 'connected') {
+      stageRef.current = 'guess';
       setIsMySecret(true);
       multiplayer.sendMessage({ type: 'QUIZ_ACTUAL', payload: option });
       setActualAnswer(option);
       sounds.playFlip();
       setStage('guess');
     } else {
+      stageRef.current = 'handover';
       // Single player: go to handover screen so guesser can't see highlighted selection
       setActualAnswer(option);
       sounds.playFlip();
@@ -239,6 +270,8 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const handleHandoverReady = () => {
+    if (stageRef.current !== 'handover') return;
+    stageRef.current = 'guess';
     sounds.playFlip();
     setStage('guess');
   };
@@ -254,6 +287,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const handleSelectGuess = (option: string) => {
+    if (stageRef.current !== 'guess' || (multiplayer.status === 'connected' && isMySecretTurn) || !currentQuiz.options.includes(option)) return;
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'QUIZ_GUESS', payload: option });
     }
@@ -401,7 +435,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
           
           <GiphyReaction mood="win" seed={`summary-${score}`} compact />
 
-          <button onClick={() => handleRestart(true)} className="completion-button completion-button-primary">
+          <button onClick={() => handleRestart(true)} disabled={multiplayer.status === 'connected' && !multiplayer.isHost} className="completion-button completion-button-primary">
             <RefreshCw className="w-4 h-4" /> {t.quizRestart}
           </button>
         </div>
@@ -444,8 +478,8 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
               <div><small>Your guess</small><p>{guessedAnswer}</p></div>
             </div>
             <GiphyReaction mood={pointsToast.positive ? 'match' : 'miss'} seed={currentQuiz.id} />
-            <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} className="reaction-next">
-              Next Question <UiSymbol kind="next" />
+            <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} disabled={multiplayer.status === 'connected' && !multiplayer.isHost} className="reaction-next">
+              {multiplayer.status === 'connected' && !multiplayer.isHost ? 'Waiting for host…' : 'Next Question'} <UiSymbol kind="next" />
             </button>
           </ReactionDialog>
         )}
@@ -461,7 +495,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         <div className="question-panel">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black text-white"
             style={{ background: 'linear-gradient(135deg, #F59E0B, #F97316)', boxShadow: '0 2px 8px rgba(245,158,11,0.25)' }}>
-            <UiSymbol kind="game" /> {t.quizHeader(currentQuiz.targetRole)}
+            <UiSymbol kind="game" /> About {secretName}
           </div>
           <h3 className={`question-text ${currentQuiz.question.length > 140 ? 'question-long' : ''}`}>
             {currentQuiz.question}
@@ -472,12 +506,13 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         </div>
 
       {/* STAGE 1: Secret pick */}
-      {stage === 'secret' && (
+      {stage === 'secret' && !isMySecretTurn && <div className="py-6 text-center text-brand font-bold">{secretName} is choosing a secret answer. You’ll guess next.</div>}
+      {stage === 'secret' && isMySecretTurn && (
         <div className="space-y-2 animate-slide-up">
           <div className="py-1 px-2.5 rounded-xl text-center"
             style={{ background: '#FEF3C7', border: '1.5px solid #FDE68A' }}>
             <p className="text-[11px] font-black text-amber-800 leading-tight">
-              <UiSymbol kind="lock" /> {t.quizSecretPrompt(currentQuiz.targetRole)}
+              <UiSymbol kind="lock" /> {secretName}, choose your real answer. Keep it to yourself.
             </p>
           </div>
           <div className="answer-grid">
@@ -510,7 +545,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
               Chosen! No peeking
             </h3>
             <p className="text-xs text-ink-3 font-semibold leading-snug">
-              Hand phone to <span className="text-brand font-black">{isBoyTarget ? 'the Girl' : 'the Boy'}</span>!
+              Hand phone to <span className="text-brand font-black">{guesserName}</span>!
             </p>
           </div>
           <button
@@ -551,7 +586,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
                 {multiplayer.status === 'connected' ? (
                   <><UiSymbol kind="zap" /> {partnerName} has locked in their secret answer! Can you guess it?</>
                 ) : (
-                  <><UiSymbol kind="users" /> {t.quizGuessPrompt(isBoyTarget ? 'Perempuan' : 'Lelaki')}</>
+                  <><UiSymbol kind="users" /> {guesserName}, which answer did {secretName} choose?</>
                 )}
               </p>
             </div>

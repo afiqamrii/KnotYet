@@ -1,6 +1,6 @@
 import { RoundLabel } from './GameCardDesign';
 import { GiphyReaction } from './GiphyReaction';
-import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Component, ErrorInfo } from 'react';
 import { readJson } from '../utils/storage';
 import confetti from 'canvas-confetti';
 import { ArrowDown, ArrowUp, Minus, Plus, Sparkles, Target } from 'lucide-react';
@@ -41,6 +41,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
+  const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('num_mode') === 'solo' ? 'solo' : sessionStorage.getItem('num_mode') === 'together' || partner ? 'together' : 'solo');
 
   const [stage, setStage] = useState<'setup' | 'guess' | 'reveal'>(() => {
     if (multiplayer.status === 'connected') return 'guess';
@@ -53,24 +54,29 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
       : Number(sessionStorage.getItem('num_secret')) || null
   ));
   const [guesses, setGuesses] = useState<{ value: number; hint: 'higher' | 'lower'; guesser?: string }[]>(() => {
+    if (multiplayer.status === 'connected') return [];
     try {
       return readJson<Array<{ value: number; hint: 'higher' | 'lower'; guesser?: string }>>(sessionStorage, 'num_guesses', []);
     } catch { return []; }
   });
   const [inputValue, setInputValue] = useState('');
-  const [winnerName, setWinnerName] = useState<string | null>(null);
+  const [winnerName, setWinnerName] = useState<string | null>(() => sessionStorage.getItem('num_winner'));
   
   const [localP1Name, setLocalP1Name] = useState(() => sessionStorage.getItem('num_p1') || profile?.name || 'Player 1');
   const [localP2Name, setLocalP2Name] = useState(() => sessionStorage.getItem('num_p2') || partner?.name || 'Player 2');
 
   const [round, setRound] = useState(() => Number(sessionStorage.getItem('num_round')) || 1);
   const [hintPopup, setHintPopup] = useState<{ hint: 'higher' | 'lower' } | null>(null);
+  const roundFinished = useRef(stage === 'reveal');
+  const processedGuesses = useRef(new Set(guesses.map(guess => guess.value)));
+  const hintTimer = useRef<number>();
+  useEffect(() => () => window.clearTimeout(hintTimer.current), []);
 
   const isP1Turn = guesses.length % 2 === 0;
   
   const currentTurnName = multiplayer.status === 'connected' 
-    ? (isP1Turn ? (multiplayer.isHost ? profile?.name : partner?.name || 'Partner') : (!multiplayer.isHost ? profile?.name : partner?.name || 'Partner'))
-    : (isP1Turn ? localP1Name : localP2Name);
+    ? (isP1Turn ? (multiplayer.isHost ? profile?.name : partnerName) : (!multiplayer.isHost ? profile?.name : partnerName))
+    : (localMode === 'solo' || isP1Turn ? localP1Name : localP2Name);
     
   const isMyTurn = multiplayer.status === 'connected' 
     ? (isP1Turn ? multiplayer.isHost : !multiplayer.isHost) 
@@ -118,13 +124,17 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     sessionStorage.setItem('num_round', round.toString());
     sessionStorage.setItem('num_p1', localP1Name);
     sessionStorage.setItem('num_p2', localP2Name);
-  }, [stage, secretNumber, guesses, round, localP1Name, localP2Name]);
+    sessionStorage.setItem('num_mode', localMode);
+    if (winnerName) sessionStorage.setItem('num_winner', winnerName); else sessionStorage.removeItem('num_winner');
+  }, [stage, secretNumber, guesses, round, localP1Name, localP2Name, localMode, winnerName]);
 
   const processGuess = (val: number, guesser: string) => {
-    if (secretNumber === null) return;
+    if (stage !== 'guess' || roundFinished.current || secretNumber === null || !Number.isInteger(val) || val < lowerBound || val > upperBound || processedGuesses.current.has(val)) return;
+    processedGuesses.current.add(val);
     
     if (val === secretNumber) {
       // Win
+      roundFinished.current = true;
       setWinnerName(guesser);
       setStage('reveal');
       sounds.playSuccess();
@@ -139,7 +149,8 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
       setHintPopup({ hint });
       
       // Auto-hide hint popup after 2.5 seconds
-      setTimeout(() => {
+      window.clearTimeout(hintTimer.current);
+      hintTimer.current = window.setTimeout(() => {
         setHintPopup(null);
       }, 2500);
     }
@@ -147,10 +158,10 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   const handleGuess = (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseInt(inputValue);
-    if (isNaN(val) || val < MIN_NUM || val > MAX_NUM) return;
+    const val = Number(inputValue);
+    if (!guessIsValid || !isMyTurn || secretNumber === null || stage !== 'guess' || roundFinished.current) return;
 
-    if (round === 1 && multiplayer.status !== 'connected' && !checkLimit('solo')) return;
+    if (multiplayer.status !== 'connected' && !checkLimit('solo')) return;
 
     // Send the turn-based current name
     const guesser = multiplayer.status === 'connected' ? (profile?.name || 'Player') : currentTurnName;
@@ -171,6 +182,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const handleNextRound = () => {
+    if (!roundFinished.current || (multiplayer.status === 'connected' && !multiplayer.isHost)) return;
     sounds.playFlip();
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'NUM_NEXT' });
@@ -179,6 +191,11 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const executeNextRound = useCallback(() => {
+    if (!roundFinished.current) return;
+    roundFinished.current = false;
+    processedGuesses.current.clear();
+    window.clearTimeout(hintTimer.current);
+    setHintPopup(null);
     setRound(r => r + 1);
     setSecretNumber(null);
     setGuesses([]);
@@ -191,9 +208,11 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (multiplayer.status === 'connected') {
       return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'NUM_SET_SECRET') {
+          if (multiplayer.isHost || !Number.isInteger(msg.payload) || msg.payload < MIN_NUM || msg.payload > MAX_NUM) return;
           setSecretNumber(msg.payload);
           sounds.playFlip();
         } else if (msg.type === 'NUM_GUESS') {
+          if (isMyTurn) return;
           const guessVal = typeof msg.payload === 'object' ? msg.payload.val : msg.payload;
           const guessName = typeof msg.payload === 'object' ? msg.payload.name : undefined;
           processGuess(guessVal, guessName || multiplayer.remoteProfile?.name || 'Partner');
@@ -202,7 +221,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         }
       });
     }
-  }, [multiplayer.status, multiplayer.subscribeMessage, executeNextRound, secretNumber, multiplayer.remoteProfile]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, executeNextRound, secretNumber, multiplayer.remoteProfile, stage, lowerBound, upperBound, isMyTurn]);
 
 
   const handleEndGame = () => {
@@ -265,7 +284,11 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
           <div className="number-setup-stage w-full flex-1 flex flex-col items-center justify-center animate-slide-up">
             <div className="text-center space-y-1 shrink-0">
               <h3 className="text-xl font-black text-ink">Who is playing?</h3>
-              <p className="text-xs text-ink-3">Enter names for Player 1 and Player 2.</p>
+              <p className="text-xs text-ink-3">Play a solo puzzle or take turns on one screen.</p>
+              <div className="flex gap-2 justify-center pt-2" role="group" aria-label="Number game mode">
+                <button type="button" aria-pressed={localMode === 'solo'} className={`btn-chunky ${localMode === 'solo' ? 'btn-pink' : 'btn-white'} text-xs px-3 py-2`} onClick={() => setLocalMode('solo')}>Solo</button>
+                <button type="button" aria-pressed={localMode === 'together'} className={`btn-chunky ${localMode === 'together' ? 'btn-pink' : 'btn-white'} text-xs px-3 py-2`} onClick={() => setLocalMode('together')}>Two players</button>
+              </div>
             </div>
             <div className="number-setup-fields w-full space-y-2.5">
               <div>
@@ -279,7 +302,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
                   placeholder="Player 1 Name"
                 />
               </div>
-              <div>
+              <div hidden={localMode === 'solo'}>
                 <label htmlFor="number-player-two" className="block text-[11px] font-black uppercase tracking-wider text-pink-700 mb-1">Player 2</label>
                 <input
                   type="text"
@@ -294,7 +317,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="w-full shrink-0">
               <button
                 onClick={() => { sounds.playFlip(); setStage('guess'); }}
-                disabled={!localP1Name.trim() || !localP2Name.trim()}
+                disabled={!localP1Name.trim() || (localMode === 'together' && !localP2Name.trim())}
                 className="btn-chunky w-full py-3 text-sm disabled:opacity-50"
                 style={{
                   background: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
@@ -425,9 +448,10 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="w-full shrink-0">
               <button
                 onClick={handleNextRound}
+                disabled={multiplayer.status === 'connected' && !multiplayer.isHost}
                 className="completion-button completion-button-primary"
               >
-                Play Next Round
+                {multiplayer.status === 'connected' && !multiplayer.isHost ? 'Waiting for host…' : 'Play Next Round'}
               </button>
             </div>
           </div>

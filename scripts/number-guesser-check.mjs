@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 
-const baseUrl = process.env.SMOKE_URL ?? 'http://localhost:5173';
+const baseUrl = process.env.SMOKE_URL ?? 'http://127.0.0.1:5174';
 const executablePath = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const browser = await chromium.launch({ executablePath, headless: true });
+const numberSource = await (await fetch(`${baseUrl}/src/components/NumberGuesserGame.tsx`)).text();
+const numberGameContextUrl = numberSource.match(/import \{ useGame.*?\} from "([^"]+)"/)[1];
+const numberRoomContextUrl = numberSource.match(/import \{ useMultiplayer.*?\} from "([^"]+)"/)[1];
 const fixture = `<!doctype html><html><body><main id="root"></main><script type="module">
   import RefreshRuntime from '/@react-refresh';
   RefreshRuntime.injectIntoGlobalHook(window);
@@ -20,8 +23,8 @@ const fixture = `<!doctype html><html><body><main id="root"></main><script type=
   const React = (await import('/@id/react')).default;
   const ReactDOMClient = (await import('/@id/react-dom/client')).default;
   const { AuthProvider } = await import('/src/store/AuthContext.tsx');
-  const { GameProvider } = await import('/src/store/GameContext.tsx');
-  const { MultiplayerProvider } = await import('/src/store/MultiplayerContext.tsx');
+  const { GameProvider } = await import('${numberGameContextUrl}');
+  const { MultiplayerProvider } = await import('${numberRoomContextUrl}');
   const { NumberGuesserGame } = await import('/src/components/NumberGuesserGame.tsx');
   const app = React.createElement(AuthProvider, null,
     React.createElement(GameProvider, null,

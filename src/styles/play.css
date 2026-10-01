@@ -95,12 +95,14 @@
 .arcade-together-sticker > svg:last-child { width: 20px; height: 20px; align-self: flex-start; }
 
 /* The game selector feels like a shelf of cartridges. */
-.arcade-play .arcade-mode-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0 0 4px; border: 0; border-radius: 0; background: transparent; }
+.arcade-play .arcade-mode-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0 0 4px; border: 0; border-radius: 0; background: transparent; }
 .arcade-mode-nav .game-mode-swipe { --tile-color: #ffb4c6; }
 .arcade-mode-nav .game-mode-quiz { --tile-color: #a9ddf5; }
 .arcade-mode-nav .game-mode-wheel { --tile-color: #f9d77e; }
 .arcade-mode-nav .game-mode-number { --tile-color: #d5f578; }
 .arcade-mode-nav .game-mode-letter { --tile-color: #c7b4ff; }
+.arcade-mode-nav .game-mode-match { --tile-color: #ffd2dc; }
+.arcade-mode-nav .game-mode-choices { --tile-color: #ffe5a0; }
 .arcade-play .game-mode-tab { position: relative; display: flex; justify-content: flex-start; gap: 9px; min-width: 0; min-height: 72px; padding: 10px; border: 1.5px solid #d8d0df; border-radius: 17px; color: #241d35; background: #fffdf8; font-size: 12px; font-weight: 700; transition: border-color .16s, transform .16s, background .16s, box-shadow .16s; }
 .arcade-play .game-mode-tab:hover { color: #241d35; border-color: #241d35; background: color-mix(in srgb, var(--tile-color) 30%, #fffdf8); transform: translateY(-2px); }
 .arcade-play .game-mode-tab[aria-current='page'] { color: #241d35; background: var(--tile-color); border: 2px solid #241d35; box-shadow: 3px 3px 0 #241d35; }
@@ -365,3 +367,15 @@
 .partner-away-leave:hover { background: #f3edff; }
 .partner-away-leave:active { transform: translate(2px, 2px); box-shadow: 1px 2px 0 #241d35; }
 .partner-away-leave:focus-visible { outline: 3px solid #6846df; outline-offset: 4px; }
+
+/* Keep the complete game shelf readable with keyboard and touch controls. */
+.arcade-play .game-mode-tab:focus-visible { outline: 3px solid #7c3aed; outline-offset: 3px; }
+.arcade-play .game-primary-action:disabled { opacity: .65; cursor: wait; transform: none; }
+@media (min-width: 1100px) {
+  .arcade-play .arcade-mode-nav { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .arcade-play .game-mode-tab { flex-direction: column; justify-content: center; gap: 5px; }
+  .arcade-play .game-mode-copy { text-align: center; }
+}
+@media (max-width: 359px) {
+  .arcade-play .arcade-mode-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

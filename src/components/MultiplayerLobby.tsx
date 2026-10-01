@@ -18,6 +18,7 @@ const GAMES = [
   { id: 'letter', title: 'Letter Race', kind: 'letter', tag: 'READY, SET, THINK', description: 'One letter, two quick minds. Who finds the word first?', color: '#e0f1b5' },
   { id: 'number', title: 'Number Guesser', kind: 'number', tag: 'A FRIENDLY LITTLE RIVALRY', description: 'Follow the clues to crack the mystery number.', color: '#cbeafa' },
   { id: 'secret-race', title: 'Secret Number Race', kind: 'number', tag: 'LOCK IN, THEN RACE', description: 'Secret picks become one equation. Fastest answer wins.', color: '#b8f1df' },
+  { id: 'choices', title: 'This or That', kind: 'match', tag: 'PICK A SIDE', description: 'Two choices. Reveal your answers, then get into the why.', color: '#ffe5a0' },
   { id: 'wheel', title: 'Spin Wheel', kind: 'wheel', tag: 'LEAVE IT TO LUCK', description: 'Spin up a surprising new conversation topic.', color: '#ffd8b8' },
 ] as const;
 

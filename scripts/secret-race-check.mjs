@@ -10,11 +10,14 @@ class Connection extends Emitter { constructor(){super();this.open=false;this.ot
 class Peer extends Emitter { constructor(id){super();this.id=typeof id==='string'?id:'guest-'+Math.random().toString(36).slice(2);this.open=false;this.destroyed=false;peers.set(this.id,this);queueMicrotask(()=>{this.open=true;this.emit('open',this.id)})} connect(id){const host=peers.get(id),mine=new Connection(),theirs=new Connection();mine.other=theirs;theirs.other=mine;queueMicrotask(()=>{if(!host?.open){this.emit('error',{type:'peer-unavailable'});return}host.emit('connection',theirs);mine.open=true;theirs.open=true;connections.add(mine);connections.add(theirs);queueMicrotask(()=>{mine.emit('open');theirs.emit('open')})});return mine} destroy(){this.destroyed=true;this.open=false;peers.delete(this.id);for(const c of [...connections])c.close()} reconnect(){this.open=true;this.emit('open',this.id)} }
 window.__peerMock={drop:()=>{for(const c of [...connections])c.close()}};
 export default Peer;`;
+const raceSource = await (await fetch(`${baseUrl}/src/components/SecretNumberRaceGame.tsx`)).text();
+const raceGameContextUrl = raceSource.match(/import \{ useGame.*?\} from "([^"]+)"/)[1];
+const raceRoomContextUrl = raceSource.match(/import \{ useMultiplayer.*?\} from "([^"]+)"/)[1];
 const fixture = `<!doctype html><html><body><main id="root"></main><script type="module">
 import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
 const React=(await import('/@id/react')).default;const ReactDOM=(await import('/@id/react-dom/client')).default;
-const {MultiplayerProvider,useMultiplayer}=await import('/src/store/MultiplayerContext.tsx');
-const {GameProvider,useGame}=await import('/src/store/GameContext.tsx');
+const {MultiplayerProvider,useMultiplayer}=await import('${raceRoomContextUrl}');
+const {GameProvider,useGame}=await import('${raceGameContextUrl}');
 const {SecretNumberRaceGame}=await import('/src/components/SecretNumberRaceGame.tsx');
 function Profile({name,avatar,children}){const game=useGame();React.useEffect(()=>game.setProfile({name,avatarId:avatar,heartPoints:0}),[]);return children}
 function Player({role}){const room=useMultiplayer();React.useEffect(()=>{window[role+'Api']=room},[room,role]);return React.createElement('section',{id:role},React.createElement(SecretNumberRaceGame,{onEndGame:()=>{}}))}

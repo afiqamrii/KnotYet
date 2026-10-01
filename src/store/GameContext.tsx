@@ -110,7 +110,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [lang, setLangState] = useState<Lang>(() => {
-    return (localStorage.getItem(STORAGE_KEY_LANG) as Lang) || 'en';
+    return localStorage.getItem(STORAGE_KEY_LANG) === 'my' ? 'my' : 'en';
   });
 
   const t = i18n[lang];

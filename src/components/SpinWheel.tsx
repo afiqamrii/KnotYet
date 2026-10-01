@@ -30,6 +30,8 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
   const tickIntervalRef = useRef<number | null>(null);
   const spinTimeoutRef = useRef<number | null>(null);
   const lastRemoteSpinRef = useRef<string | null>(null);
+  const spinInProgress = useRef(false);
+  const completedSpins = useRef(new Set<string>());
   React.useEffect(() => () => {
     if (tickIntervalRef.current !== null) window.clearTimeout(tickIntervalRef.current);
     if (spinTimeoutRef.current !== null) window.clearTimeout(spinTimeoutRef.current);
@@ -42,10 +44,11 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
     if (multiplayer.status === 'connected') {
       return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'SPIN_WHEEL') {
+          if (multiplayer.isHost) return;
           lastRemoteSpinRef.current = JSON.stringify(msg.payload);
           executeSpin(msg.payload.rotation, msg.payload.segmentIndex, msg.payload.promptIndex);
         } else if (msg.type === 'WHEEL_SUBMIT') {
-          setPartnerAnswer(msg.payload);
+          if (typeof msg.payload === 'string' && msg.payload.trim()) setPartnerAnswer(msg.payload.trim().slice(0, 500));
         }
       });
     }
@@ -59,6 +62,14 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
   }, [multiplayer.status, multiplayer.isHost, multiplayer.wheelSpin]);
 
   const executeSpin = (targetRotation: number, segmentIdx: number, promptIdx: number) => {
+    const landed = WHEEL_SEGMENTS[segmentIdx];
+    if (!Number.isFinite(targetRotation) || !Number.isInteger(segmentIdx) || !Number.isInteger(promptIdx) || !landed?.prompts[promptIdx]) return;
+    const spinKey = `${targetRotation}:${segmentIdx}:${promptIdx}`;
+    if (completedSpins.current.has(spinKey)) return;
+    completedSpins.current.add(spinKey);
+    spinInProgress.current = true;
+    if (tickIntervalRef.current !== null) window.clearTimeout(tickIntervalRef.current);
+    if (spinTimeoutRef.current !== null) window.clearTimeout(spinTimeoutRef.current);
     setSpinning(true);
     setShowModal(false);
     setMyAnswer(null);
@@ -79,6 +90,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
     playNextTick();
 
     spinTimeoutRef.current = window.setTimeout(() => {
+      spinInProgress.current = false;
       setSpinning(false);
       const landed = WHEEL_SEGMENTS[segmentIdx];
       const questionId = getWheelPromptId(landed.id, promptIdx);
@@ -97,7 +109,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
   };
 
   const spinTheWheel = () => {
-    if (spinning) return;
+    if (spinInProgress.current || (multiplayer.status === 'connected' && !multiplayer.isHost)) return;
     
     if (multiplayer.status !== 'connected' && !checkLimit('solo')) {
       return;
@@ -234,7 +246,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
         </svg>
 
         {/* Center button */}
-        <button onClick={spinTheWheel} disabled={spinning || allPromptsSeen}
+        <button onClick={spinTheWheel} disabled={spinning || allPromptsSeen || (multiplayer.status === 'connected' && !multiplayer.isHost)}
           className="absolute z-10 flex flex-col items-center justify-center font-black text-[10px] uppercase tracking-tighter hover:scale-105 active:scale-95 transition text-white"
           style={{
             width: 64, height: 64, borderRadius: '50%',
@@ -254,7 +266,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
         <button onClick={spinTheWheel} disabled={spinning || allPromptsSeen}
           className="btn-chunky btn-amber w-full text-sm disabled:opacity-60">
           <Dices className="w-4 h-4" />
-          {spinning ? t.wheelSpinning : allPromptsSeen ? 'All prompts explored' : t.wheelSpin}
+          {spinning ? t.wheelSpinning : allPromptsSeen ? 'All prompts explored' : multiplayer.status === 'connected' && !multiplayer.isHost ? 'Waiting for host to spin' : t.wheelSpin}
         </button>
         <p className="text-[10px] text-center text-ink-3 font-semibold">{allPromptsSeen ? 'You have seen every wheel prompt. Try another game together!' : t.wheelTip}</p>
       </div>
@@ -323,7 +335,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
                 ) : !myAnswer ? (
                   <form onSubmit={(e) => {
                     e.preventDefault();
-                    const val = new FormData(e.currentTarget).get('ans') as string;
+                    const val = String(new FormData(e.currentTarget).get('ans') || '').trim().slice(0, 500);
                     if (!val) return;
                     setMyAnswer(val);
                     multiplayer.sendMessage({ type: 'WHEEL_SUBMIT', payload: val });

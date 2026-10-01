@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const GAME_SESSION_KEYS = [
+  'choices_local', 'choices_host', 'choices_guest', 'choices_mode',
   'swipe_category', 'swipe_index', 'swipe_deck', 'swipe_flipped', 'swipe_myAnswer',
   'swipe_partnerAnswer', 'swipe_riddleRevealed',
   'num_stage', 'num_secret', 'num_guesses', 'num_round', 'num_p1', 'num_p2',

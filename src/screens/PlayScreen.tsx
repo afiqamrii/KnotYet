@@ -28,13 +28,14 @@ const MatchGame = lazy(() => import('../components/MatchGame').then((module) => 
 const NumberGuesserGame = lazy(() => import('../components/NumberGuesserGame').then((module) => ({ default: module.NumberGuesserGame })));
 const SecretNumberRaceGame = lazy(() => import('../components/SecretNumberRaceGame').then((module) => ({ default: module.SecretNumberRaceGame })));
 const LetterRaceGame = lazy(() => import('../components/LetterRaceGame').then((module) => ({ default: module.LetterRaceGame })));
+const ThisOrThatGame = lazy(() => import('../components/ThisOrThatGame').then((module) => ({ default: module.ThisOrThatGame })));
 const FriendsModal = lazy(() => import('../components/FriendsModal').then((module) => ({ default: module.FriendsModal })));
 const ProfileScreen = lazy(() => import('./ProfileScreen').then((module) => ({ default: module.ProfileScreen })));
 const GameIntro = lazy(() => import('../components/GameIntro').then((module) => ({ default: module.GameIntro })));
 const MultiplayerLobby = lazy(() => import('../components/MultiplayerLobby').then((module) => ({ default: module.MultiplayerLobby })));
 
 type ActiveTab = Exclude<GameMode, 'lobby'>;
-const ACTIVE_TABS: readonly ActiveTab[] = ['swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race'];
+const ACTIVE_TABS: readonly ActiveTab[] = ['swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race', 'choices'];
 const isActiveTab = (value: string | null): value is ActiveTab => value !== null && ACTIVE_TABS.includes(value as ActiveTab);
 export const PlayScreen: React.FC = () => {
   const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
@@ -55,7 +56,8 @@ export const PlayScreen: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<CardCategory | 'all'>(() =>
     readStringUnion(sessionStorage, 'swipe_category', ['all', 'teka-teki', 'vibe-check', 'taaruf-realiti', 'dare-santai'] as const, 'all')
   );
-  const [cardIndex, setCardIndex] = useState(() => Number(sessionStorage.getItem('swipe_index')) || 0);
+  const [cardIndex, setCardIndex] = useState(() => Math.max(0, Math.floor(Number(sessionStorage.getItem('swipe_index')) || 0)));
+  const lastAdvancedCard = React.useRef<string | null>(null);
   const [roundCounter, setRoundCounter] = useState(0);
   // Keep the current deck stable while progress syncs in the background. A new
   // round reads this ref, so previously shown cards are still excluded without
@@ -236,6 +238,10 @@ export const PlayScreen: React.FC = () => {
     return localSwipeCards;
   }, [localSwipeCards, multiplayer.status, multiplayer.isHost, multiplayer.questionDecks.swipe]);
 
+  React.useEffect(() => {
+    if (filteredCards.length && cardIndex >= filteredCards.length) setCardIndex(0);
+  }, [filteredCards, cardIndex]);
+
   // Host broadcasts the card deck to the joining player for synchronized cards
   React.useEffect(() => {
     if (multiplayer.status === 'connected' && multiplayer.isHost && currentTab === 'swipe' && filteredCards.length > 0) {
@@ -267,11 +273,6 @@ export const PlayScreen: React.FC = () => {
       sounds.stopBGM();
     }
     
-    // Fallback if Match Game is active but we are offline
-    if (multiplayer.status !== 'connected' && !sessionRestoredRef.current && activeTab === 'match') {
-      setActiveTab('swipe');
-    }
-    
     if (multiplayer.status === 'disconnected' && !sessionStorage.getItem('mp_roomCode')) {
       sessionRestoredRef.current = false;
     }
@@ -291,6 +292,9 @@ export const PlayScreen: React.FC = () => {
   };
 
   const executeSwipe = (direction: 'left' | 'right') => {
+    const currentCard = filteredCards[cardIndex];
+    if (!currentCard || lastAdvancedCard.current === currentCard.id) return;
+    lastAdvancedCard.current = currentCard.id;
     if (direction === 'right') setAnsweredCount((p) => p + 1);
     else setSkippedCount((p) => p + 1);
 
@@ -299,7 +303,6 @@ export const PlayScreen: React.FC = () => {
     setPartnerCardAnswer(null);
     setRiddleAnswerRevealed(false);
     
-    const currentCard = filteredCards[cardIndex];
     if (currentCard) {
       recordAnsweredQuestion(currentCard.id);
       markQuestionAsSeen(currentCard.id);
@@ -315,12 +318,19 @@ export const PlayScreen: React.FC = () => {
   };
 
   const handleSwipe = (direction: 'left' | 'right') => {
+    const card = filteredCards[cardIndex];
+    if (!card || (direction === 'right' && !canAdvanceCurrentCard)) return;
     if (multiplayer.status !== 'connected' && !checkLimit('solo')) {
       return;
     }
 
     if (multiplayer.status === 'connected') {
-      multiplayer.sendMessage({ type: 'SWIPE_ACTION', payload: { direction } });
+      if (!multiplayer.isHost) {
+        multiplayer.sendMessage({ type: 'SWIPE_REQUEST', payload: { direction, cardId: card.id } });
+        return;
+      }
+      if (lastAdvancedCard.current === card.id) return;
+      multiplayer.sendMessage({ type: 'SWIPE_ACTION', payload: { direction, cardId: card.id } });
     }
     executeSwipe(direction);
   };
@@ -328,7 +338,7 @@ export const PlayScreen: React.FC = () => {
   React.useEffect(() => {
     if (multiplayer.status === 'connected') {
       return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
-        if (msg.type === 'START_GAME' && isActiveTab(msg.payload.game)) {
+        if (msg.type === 'START_GAME' && !multiplayer.isHost && msg.payload.game === multiplayer.activeGame && isActiveTab(msg.payload.game)) {
           markIntroShown(msg.payload.game);
         } else if (msg.type === 'END_GAME') {
           const currentTabToReset = multiplayer.activeGame !== 'lobby' ? multiplayer.activeGame : activeTab;
@@ -343,35 +353,48 @@ export const PlayScreen: React.FC = () => {
           setPartnerCardAnswer(null);
           setRiddleAnswerRevealed(false);
           setIntroShown(stored);
-        } else if (msg.type === 'SWIPE_ACTION' && currentTab === 'swipe') {
+        } else if (msg.type === 'SWIPE_REQUEST' && currentTab === 'swipe' && multiplayer.isHost && msg.payload.cardId === filteredCards[cardIndex]?.id) {
+          handleSwipe(msg.payload.direction);
+        } else if (msg.type === 'SWIPE_ACTION' && currentTab === 'swipe' && !multiplayer.isHost && msg.payload.cardId === filteredCards[cardIndex]?.id) {
           executeSwipe(msg.payload.direction);
-        } else if (msg.type === 'RIDDLE_REVEAL' && currentTab === 'swipe') {
+        } else if (msg.type === 'RIDDLE_REVEAL' && currentTab === 'swipe' && msg.payload?.cardId === filteredCards[cardIndex]?.id) {
           setRiddleAnswerRevealed(true);
-        } else if (msg.type === 'CARD_SUBMIT' && currentTab === 'swipe') {
-          setPartnerCardAnswer(msg.payload);
+        } else if (msg.type === 'CARD_SUBMIT' && currentTab === 'swipe' && typeof msg.payload === 'object' && msg.payload.cardId === filteredCards[cardIndex]?.id) {
+          setPartnerCardAnswer(msg.payload.answer.slice(0, 2000));
         }
       });
     }
-  }, [multiplayer.status, currentTab, multiplayer.subscribeMessage, cardIndex, filteredCards, activeTab, multiplayer.activeGame]);
+  }, [multiplayer.status, currentTab, multiplayer.subscribeMessage, cardIndex, filteredCards, activeTab, multiplayer.activeGame, multiplayer.isHost, myCardAnswer, partnerCardAnswer, riddleAnswerRevealed]);
 
   // A refreshed peer can rejoin after the original answer packet was sent.
   // Re-send the local commitment once the shared deck is available again.
+  const previousCardId = React.useRef(filteredCards[cardIndex]?.id);
   React.useEffect(() => {
     if (multiplayer.status !== 'connected' || currentTab !== 'swipe' || !filteredCards[cardIndex]) return;
-    if (myCardAnswer) multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: myCardAnswer });
+    if (previousCardId.current !== filteredCards[cardIndex].id) return;
+    if (myCardAnswer) multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: { cardId: filteredCards[cardIndex].id, answer: myCardAnswer } });
     if (riddleAnswerRevealed && filteredCards[cardIndex].category === 'teka-teki') {
-      multiplayer.sendMessage({ type: 'RIDDLE_REVEAL' });
+      multiplayer.sendMessage({ type: 'RIDDLE_REVEAL', payload: { cardId: filteredCards[cardIndex].id } });
     }
   }, [multiplayer.status, currentTab, filteredCards, cardIndex, myCardAnswer, riddleAnswerRevealed]);
 
   const currentCard = filteredCards[cardIndex];
+  React.useEffect(() => {
+    if (previousCardId.current !== currentCard?.id) {
+      setMyCardAnswer(null);
+      setPartnerCardAnswer(null);
+      setIsCardFlipped(false);
+      setRiddleAnswerRevealed(false);
+    }
+    previousCardId.current = currentCard?.id;
+  }, [currentCard?.id]);
   const isRiddleAsker = currentCard?.category === 'teka-teki'
     ? ((cardIndex % 2 === 0) ? !!multiplayer.isHost : !multiplayer.isHost)
     : true;
   const canAdvanceCurrentCard = !currentCard || multiplayer.status !== 'connected'
     ? true
     : currentCard.category === 'teka-teki'
-      ? isRiddleAsker && Boolean(partnerCardAnswer) && riddleAnswerRevealed
+      ? Boolean(isRiddleAsker ? partnerCardAnswer : myCardAnswer) && riddleAnswerRevealed
       : Boolean(myCardAnswer && partnerCardAnswer);
 
   // A card counts as seen as soon as it is displayed. This avoids resurfacing
@@ -422,6 +445,8 @@ export const PlayScreen: React.FC = () => {
         if (e.key === '3') { handleTabClick('wheel'); return; }
         if (e.key === '4') { handleTabClick('number'); return; }
         if (e.key === '5') { handleTabClick('letter'); return; }
+        if (e.key === '6') { handleTabClick('match'); return; }
+        if (e.key === '7') { handleTabClick('choices'); return; }
       }
 
       // In Swipe game:
@@ -431,7 +456,6 @@ export const PlayScreen: React.FC = () => {
           e.preventDefault();
           handleManualAction('right');
         } else if (e.key === 'ArrowLeft') {
-          if (!canAdvanceCurrentCard) return;
           e.preventDefault();
           handleManualAction('left');
         } else if (e.key === ' ' || e.key === 'Spacebar') {
@@ -465,6 +489,8 @@ export const PlayScreen: React.FC = () => {
   };
 
   const handleCategoryChange = (cat: CardCategory | 'all') => {
+    if (multiplayer.status === 'connected' && !multiplayer.isHost) return;
+    lastAdvancedCard.current = null;
     sounds.playFlip();
     sessionStorage.removeItem('swipe_deck');
     setIsCardFlipped(false);
@@ -584,7 +610,7 @@ export const PlayScreen: React.FC = () => {
 
             {multiplayer.status !== 'connected' && (
               <GameModeNav currentTab={currentTab} onSelect={handleTabClick}
-                labels={{ swipe: t.tabSwipe, quiz: t.tabQuiz, wheel: t.tabWheel, number: t.tabNumber || 'Number Guesser', letter: t.tabLetter || 'Letter Race', 'secret-race': 'Secret Number Race' }}
+                labels={{ swipe: t.tabSwipe, quiz: t.tabQuiz, wheel: t.tabWheel, number: t.tabNumber || 'Number Guesser', letter: t.tabLetter || 'Letter Race', match: 'Couple Match', choices: 'This or That', 'secret-race': 'Secret Number Race' }}
               />
             )}
           </header>
@@ -633,6 +659,7 @@ export const PlayScreen: React.FC = () => {
                       {categories.map(cat => (
                         <button
                           key={cat.key}
+                          disabled={multiplayer.status === 'connected' && !multiplayer.isHost}
                           onClick={() => handleCategoryChange(cat.key as CardCategory | 'all')}
                           aria-pressed={selectedCategory === cat.key}
                           className="game-category-pill px-3 py-1 rounded-full whitespace-nowrap text-xs font-black transition active:scale-95 flex-shrink-0"
@@ -674,12 +701,12 @@ export const PlayScreen: React.FC = () => {
                           answerRevealedToPartner={riddleAnswerRevealed}
                           onRevealToPartner={() => {
                             setRiddleAnswerRevealed(true);
-                            if (multiplayer.status === 'connected') multiplayer.sendMessage({ type: 'RIDDLE_REVEAL' });
+                            if (multiplayer.status === 'connected') multiplayer.sendMessage({ type: 'RIDDLE_REVEAL', payload: { cardId: currentCard.id } });
                           }}
                           onSubmitAnswer={(ans) => {
                             setMyCardAnswer(ans);
                             if (multiplayer.status === 'connected') {
-                              multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: ans });
+                              multiplayer.sendMessage({ type: 'CARD_SUBMIT', payload: { cardId: currentCard.id, answer: ans } });
                             }
                           }}
                         />
@@ -703,7 +730,7 @@ export const PlayScreen: React.FC = () => {
                       {/* Skip button */}
                       <button 
                         onClick={() => handleManualAction('left')} 
-                        disabled={!currentCard || !canAdvanceCurrentCard}
+                        disabled={!currentCard}
                         title="Skip Question (Left Arrow ←)"
                         className="game-action game-action-skip flex-1 py-3 sm:py-3.5 px-2 sm:px-4 font-black text-xs sm:text-sm active:scale-95 transition-all flex items-center justify-center gap-1.5 group"
                       >
@@ -731,6 +758,11 @@ export const PlayScreen: React.FC = () => {
                 )
               )}
 
+              {currentTab === 'choices' && (
+                introShown.choices
+                  ? <ThisOrThatGame key={multiplayer.roomCode ? `online-${multiplayer.roomCode}-${multiplayer.isHost}` : 'local'} />
+                  : <GameIntro gameType="choices" onStart={() => markIntroShown('choices')} />
+              )}
               {currentTab === 'quiz' && (
                 introShown['quiz']
                   ? <CoupleGuessGame onEndGame={handleEndGame} />
@@ -818,7 +850,8 @@ export const PlayScreen: React.FC = () => {
             currentTab === 'match' ? 'Couple Match' :
             currentTab === 'number' ? 'Number Guesser' :
             currentTab === 'secret-race' ? 'Secret Number Race' :
-            currentTab === 'letter' ? 'Letter Race' : 'Game'
+            currentTab === 'letter' ? 'Letter Race' :
+            currentTab === 'choices' ? 'This or That' : 'Game'
           }
         />
         

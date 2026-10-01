@@ -1,9 +1,10 @@
-﻿import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
 import { sounds } from '../utils/audio';
+import type { Choice, ChoiceRound } from '../utils/choiceGame';
 
-export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter' | 'secret-race';
+export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter' | 'secret-race' | 'choices';
 
 export type SecretRaceOperation = '+' | '−' | '×';
 export type SecretRaceRole = 'host' | 'partner' | 'tie';
@@ -34,10 +35,14 @@ export interface ChatMessage {
 export type MultiplayerMessage = 
   | { type: 'PROFILE_SYNC'; payload: UserProfile }
   | { type: 'SET_GAME'; payload: GameMode }
-  | { type: 'SWIPE_ACTION'; payload: { direction: 'left' | 'right' } }
+  | { type: 'SWIPE_ACTION'; payload: { direction: 'left' | 'right'; cardId?: string } }
+  | { type: 'SWIPE_REQUEST'; payload: { direction: 'left' | 'right'; cardId: string } }
   | { type: 'SWIPE_FLIP'; payload: boolean }
-  | { type: 'CARD_SUBMIT'; payload: string }
-  | { type: 'RIDDLE_REVEAL' }
+  | { type: 'CARD_SUBMIT'; payload: string | { cardId: string; answer: string } }
+  | { type: 'RIDDLE_REVEAL'; payload?: { cardId: string } }
+  | { type: 'CHOICES_REQUEST' }
+  | { type: 'CHOICES_STATE'; payload: ChoiceRound }
+  | { type: 'CHOICES_PICK'; payload: { roundId: string; choice: Choice } }
   | { type: 'QUIZ_ACTUAL'; payload: string }
   | { type: 'QUIZ_GUESS'; payload: string }
   | { type: 'QUIZ_NEXT' }
@@ -60,8 +65,9 @@ export type MultiplayerMessage =
   | { type: 'SECRET_RACE_RESULT'; payload: SecretRaceState }
   | { type: 'SECRET_RACE_NEXT'; payload: { matchId: string } }
   | { type: 'SECRET_RACE_RESTART'; payload: { matchId: string } }
-  | { type: 'LETTER_START'; payload: string }
-  | { type: 'LETTER_WORD_SUBMIT'; payload: string }
+  | { type: 'LETTER_START'; payload: string | { letter: string; roundId: string } }
+  | { type: 'LETTER_WORD_SUBMIT'; payload: string | { word: string; roundId: string } }
+  | { type: 'LETTER_RESULT'; payload: { name: string; word: string; roundId: string } }
   | { type: 'LETTER_NEXT' }
   | { type: 'START_GAME'; payload: { game: GameMode; questionIds?: string[] } }
   | { type: 'START_COUNTDOWN'; payload: { game: GameMode } }
@@ -113,7 +119,7 @@ const isMultiplayerMessage = (value: unknown): value is MultiplayerMessage => (
 const getPeerId = (code: string) => `jodohdeck-v2-${code}`;
 const getRestoredGame = (): GameMode => {
   const savedGame = sessionStorage.getItem('mp_activeGame');
-  return savedGame && ['lobby', 'swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race'].includes(savedGame)
+  return savedGame && ['lobby', 'swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race', 'choices'].includes(savedGame)
     ? savedGame as GameMode : 'lobby';
 };
 

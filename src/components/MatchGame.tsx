@@ -1,6 +1,6 @@
 import { UiSymbol, RoundLabel } from './GameCardDesign';
 import { GiphyReaction, ReactionDialog } from './GiphyReaction';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { readStringUnion } from '../utils/storage';
 import confetti from 'canvas-confetti';
 import { Trophy, HeartHandshake, RefreshCw, Sparkles } from 'lucide-react';
@@ -55,7 +55,11 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       const stored = sessionStorage.getItem('match_questions');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return getMatchQuestionsByIds(parsed.map(item => item.id));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const restored = getMatchQuestionsByIds(parsed.map(item => item.id));
+          if (restored.length === parsed.length) return restored;
+          ['match_currentIndex', 'match_stage', 'match_myAnswer', 'match_partnerAnswer', 'match_score', 'match_completed'].forEach(key => sessionStorage.removeItem(key));
+        }
       }
     } catch {}
     return getShuffledMatchQuestions(10, progress?.answered_questions);
@@ -72,6 +76,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   const [partnerAnswer, setPartnerAnswer] = useState<string | null>(() => sessionStorage.getItem('match_partnerAnswer') || null);
   const [score, setScore] = useState(() => Number(sessionStorage.getItem('match_score')) || 0);
   const [completed, setCompleted] = useState(() => sessionStorage.getItem('match_completed') === 'true');
+  const [localSecondPlayer, setLocalSecondPlayer] = useState(false);
+  const stageRef = useRef(stage);
+  const completedRef = useRef(completed);
+  const submittedRef = useRef(!!myAnswer);
   const [pointsToast, setPointsToast] = useState<{ text: string; positive: boolean } | null>(() => {
     if (stage !== 'reveal' || !myAnswer || !partnerAnswer) return null;
     const positive = myAnswer === partnerAnswer;
@@ -89,8 +97,12 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [questions, currentIndex, stage, myAnswer, partnerAnswer, score, completed]);
 
   const currentQuiz: MatchQuestion = questions[currentIndex] || questions[0] || { id: 'm-0', question: '', options: [], vibeText: '', kind: 'compatibility' };
-  const spotlightIsMe = currentQuiz.targetPlayer === (multiplayer.isHost ? 'host' : 'partner');
-  const spotlightName = spotlightIsMe ? (profile?.name || 'You') : partnerName;
+  const spotlightIsMe = multiplayer.status === 'connected'
+    ? currentQuiz.targetPlayer === (multiplayer.isHost ? 'host' : 'partner')
+    : currentQuiz.targetPlayer === (localSecondPlayer ? 'partner' : 'host');
+  const spotlightName = multiplayer.status === 'connected'
+    ? (spotlightIsMe ? profile?.name || 'You' : partnerName)
+    : (currentQuiz.targetPlayer === 'host' ? profile?.name || 'Player 1' : partnerName);
 
   // Treat a displayed prompt as seen so it cannot come back after a refresh,
   // reconnect, or a session on another device.
@@ -112,6 +124,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer.status, multiplayer.isHost, questions, currentIndex]);
 
   const executeNext = useCallback(() => {
+    if (stageRef.current !== 'reveal' || completedRef.current) return;
+    stageRef.current = 'vote';
+    submittedRef.current = false;
+    setLocalSecondPlayer(false);
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((p) => p + 1);
       setStage('vote');
@@ -119,13 +135,20 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       setPartnerAnswer(null);
       setPointsToast(null);
     } else {
+      completedRef.current = true;
       setCompleted(true);
+      setPointsToast(null);
       addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED'] });
     }
   }, [currentIndex, questions.length, addHeartPoints, multiplayer.status]);
 
   const handleRestart = useCallback((broadcast: boolean = true, newQList?: MatchQuestion[]) => {
+    if (broadcast && multiplayer.status === 'connected' && !multiplayer.isHost) return;
+    stageRef.current = 'vote';
+    completedRef.current = false;
+    submittedRef.current = false;
+    setLocalSecondPlayer(false);
     const nextQuestions = newQList || getShuffledMatchQuestions(10, progress?.answered_questions);
     setQuestions(nextQuestions);
     setCurrentIndex(0); 
@@ -155,6 +178,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const handleNext = useCallback(() => {
+    if (multiplayer.status === 'connected' && !multiplayer.isHost) return;
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'MATCH_NEXT' });
     }
@@ -165,10 +189,13 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (multiplayer.status === 'connected') {
       return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'MATCH_SELECT') {
+          if (stageRef.current !== 'vote' || !currentQuiz.options.includes(msg.payload)) return;
           setPartnerAnswer(msg.payload);
         } else if (msg.type === 'MATCH_NEXT') {
+          if (multiplayer.isHost) return;
           executeNext();
         } else if (msg.type === 'MATCH_RESTART') {
+          if (multiplayer.isHost) return;
           const synced = msg.payload?.questionIds ? getMatchQuestionsByIds(msg.payload.questionIds) : undefined;
           handleRestart(false, synced);
         } else if (msg.type === 'SYNC_QUESTION_IDS' && msg.payload.game === 'match') {
@@ -180,7 +207,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         }
       });
     }
-  }, [multiplayer.status, multiplayer.subscribeMessage, executeNext, handleRestart]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, executeNext, handleRestart, currentQuiz]);
 
   useEffect(() => {
     if (multiplayer.status === 'connected' && questions.length > 0 && myAnswer) {
@@ -189,7 +216,8 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer.status, questions, currentIndex, myAnswer]);
 
   useEffect(() => {
-    if (myAnswer && partnerAnswer && stage === 'vote') {
+    if (myAnswer && partnerAnswer && stage === 'vote' && stageRef.current === 'vote') {
+      stageRef.current = 'reveal';
       setStage('reveal');
       const isMatch = myAnswer === partnerAnswer;
       
@@ -225,7 +253,15 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const handleSelect = (option: string) => {
-    if (myAnswer) return;
+    if (stageRef.current !== 'vote' || !currentQuiz.options.includes(option)) return;
+    if (multiplayer.status !== 'connected' && localSecondPlayer && myAnswer && !partnerAnswer) {
+      setPartnerAnswer(option);
+      setLocalSecondPlayer(false);
+      sounds.playFlip();
+      return;
+    }
+    if (submittedRef.current || myAnswer) return;
+    submittedRef.current = true;
     sounds.playFlip();
     setMyAnswer(option);
     if (multiplayer.status === 'connected') {
@@ -250,7 +286,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         }
       }
 
-      if (stage === 'vote' && !myAnswer) {
+      if (stage === 'vote' && (!myAnswer || localSecondPlayer)) {
         const keyUpper = e.key.toUpperCase();
         let index = -1;
         if (e.key === '1' || keyUpper === 'A') index = 0;
@@ -267,7 +303,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pointsToast, stage, myAnswer, currentQuiz]);
+  }, [pointsToast, stage, myAnswer, currentQuiz, localSecondPlayer]);
 
 
 
@@ -389,8 +425,8 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
               <div><small>{multiplayer.remoteProfile?.name || 'Partner'}</small><p>{partnerAnswer}</p></div>
             </div>
             <GiphyReaction mood={pointsToast.positive ? 'match' : 'miss'} seed={currentQuiz.id} />
-            <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} className="reaction-next">
-              Next Question <UiSymbol kind="next" />
+            <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} disabled={multiplayer.status === 'connected' && !multiplayer.isHost} className="reaction-next">
+              {multiplayer.status === 'connected' && !multiplayer.isHost ? 'Waiting for host…' : 'Next Question'} <UiSymbol kind="next" />
             </button>
           </ReactionDialog>
         )}
@@ -422,7 +458,14 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       <div className="space-y-2 shrink-0">
         {stage === 'vote' ? (
           <>
-            {myAnswer && !partnerAnswer ? (
+            {myAnswer && !partnerAnswer && !localSecondPlayer ? (
+              multiplayer.status !== 'connected' ? (
+                <div className="py-4 text-center animate-slide-up space-y-3 bg-purple-50/90 border-2 border-purple-200 rounded-2xl p-4">
+                  <h3 className="font-black text-ink">Answer locked. No peeking.</h3>
+                  <p className="text-sm text-ink-3">Pass the phone to {partnerName}. Both choices will reveal together.</p>
+                  <button type="button" className="btn-chunky btn-pink w-full" onClick={() => setLocalSecondPlayer(true)}>I’m ready to choose</button>
+                </div>
+              ) : (
               <div className="py-4 text-center animate-slide-up space-y-3 bg-purple-50/90 border-2 border-purple-200 rounded-2xl p-4">
                 <div className="p-2.5 rounded-xl bg-white border border-purple-100 shadow-sm text-center">
                   <span className="text-[10px] font-black uppercase text-purple-400 block mb-0.5">You Picked</span>
@@ -436,9 +479,10 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
                   <p className="text-[10px] font-semibold text-ink-3">Hang tight! Both answers will reveal together.</p>
                 </div>
                 <div className="w-6 h-6 rounded-full border-2 border-brand border-t-transparent animate-spin mx-auto" />
-              </div>
+              </div>)
             ) : (
               <>
+                {localSecondPlayer && <p className="text-center text-xs font-bold text-brand">{partnerName}, choose your answer.</p>}
                 {partnerAnswer && !myAnswer && (
                   <div className="p-2.5 rounded-xl bg-amber-50 border-2 border-amber-200 text-center animate-bounce-soft mb-2">
                     <p className="text-xs font-black text-amber-800 flex items-center justify-center gap-1.5">

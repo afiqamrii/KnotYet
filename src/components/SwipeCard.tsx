@@ -130,8 +130,8 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: .42, ease: [.4, 0, .2, 1] }}
         className="swipe-card conversation-card w-full h-full relative transform-style-3d" style={{ '--card-tint': catColors.bg } as React.CSSProperties}>
         <div className="swipe-card-front conversation-face backface-hidden" aria-hidden={isFlipped}>
-          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind={catColors.icon} /> {card.categoryLabel}</span><span className="conversation-turn"><UiSymbol kind="users" />{card.turn === 'Dua-dua Serentak' ? 'You two' : card.turn}</span></header>
-          {card.category === 'dare-santai' && <p className="conversation-notice">Tekan Cara main, buat cabaran bersama, kemudian swipe untuk teruskan.</p>}
+          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind={catColors.icon} /> {card.categoryLabel}</span><span className="conversation-turn"><UiSymbol kind="users" />{card.turn === 'Lelaki' ? 'Player 1' : card.turn === 'Perempuan' ? 'Player 2' : 'You two'}</span></header>
+          {card.category === 'dare-santai' && <p className="conversation-notice">Open How to play, try the challenge, then swipe to continue. Passing is always fine.</p>}
           {isMultiplayer && card.category === 'teka-teki' && <p className="conversation-notice">{isMyTurnToAsk ? (partnerAnswer ? `${partnerName} guessed: “${partnerAnswer}” — reveal together!` : `Ask ${partnerName} this riddle, then wait for their typed guess.`) : `${partnerName} is asking you — type your guess before the reveal.`}</p>}
           {isMultiplayer && partnerAnswer && !myAnswer && card.category !== 'teka-teki' && <p className="conversation-notice">{partnerName} has answered. Your turn to reply.</p>}
           <div className="conversation-question">
@@ -146,7 +146,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                   <label htmlFor={`riddle-guess-${card.id}`}>What is your guess?</label><input id={`riddle-guess-${card.id}`} name="guess" autoComplete="off" placeholder="Type your clever guess…" disabled={!isTop} required />
                   <button type="submit" className="card-reveal-button" disabled={!isTop}><UiSymbol kind="message" /> Lock in my guess <UiSymbol kind="next" /></button>
                 </form>
-            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' && isMultiplayer ? 'Peek at the answer privately' : card.category === 'teka-teki' ? t.revealAnswer : card.category === 'dare-santai' ? 'Cara main' : 'Share your answers'}<UiSymbol kind="next" /></button>
+            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' && isMultiplayer ? 'Peek at the answer privately' : card.category === 'teka-teki' ? t.revealAnswer : card.category === 'dare-santai' ? 'How to play' : 'Share your answers'}<UiSymbol kind="next" /></button>
             : <span className="conversation-prompt">No perfect answer. Just your answer.</span>}
             <div className="conversation-directions"><span><UiSymbol kind="back" /> {t.skipLeft}</span><span>{t.passRight} <UiSymbol kind="next" /></span></div>
           </footer>
@@ -171,7 +171,7 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
               {card.flipContent.redFlag && <div className="answer-note answer-note-pink"><span><UiSymbol kind="flag" /> {t.redFlag}</span><p>{card.flipContent.redFlag}</p></div>}
             </>}
           </div>
-          {canFlip && <footer className="conversation-bottom" onPointerDown={event => event.stopPropagation()}><button type="button" onClick={toggleFlip} disabled={!isTop || !isFlipped} className="card-reveal-button"><UiSymbol kind="back" /> {t.flipBack}</button></footer>}
+            {canFlip && !answerRevealedToPartner && <footer className="conversation-bottom" onPointerDown={event => event.stopPropagation()}><button type="button" onClick={toggleFlip} disabled={!isTop || !isFlipped} className="card-reveal-button"><UiSymbol kind="back" /> {t.flipBack}</button></footer>}
         </div>
       </motion.div>
     </motion.div>

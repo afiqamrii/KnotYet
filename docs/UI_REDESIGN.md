@@ -12,9 +12,9 @@ KnotYet is a React 18 / TypeScript / Vite application. Tailwind utilities, Lucid
 | `MultiplayerContext` | PeerJS room connections and synchronized game messages. |
 | `src/data/questions.ts` | Converts the Malaysian/Malay question dataset into playable cards, quizzes, and wheel topics. |
 
-Five games are exposed in the main picker: Icebreaker Cards, Guess My Heart, Spin Wheel, Number Guesser, and Letter Race. The connected-room lobby offers six games, including Couple Match.
+Seven games are exposed in the main picker: Icebreaker Cards, Guess My Heart, Spin Wheel, Number Guesser, Letter Race, Couple Match, and This or That. The connected-room lobby adds Secret Number Race for eight online choices.
 
-The data audit found 623 conversation-card records: 352 riddles, 115 vibe checks, 124 mature discussion prompts, and 32 challenges. These contain 617 distinct question texts and no blanks. All 80 heart quizzes have four choices; 25 Match prompts are valid. The wheel adds 18 prompts. The five public modes therefore contain 721 prompt records; including Match gives 746. Existing duplicate text was preserved.
+The refreshed English bank contains 152 conversation cards, 40 Guess My Heart prompts, 72 Couple Match prompts, 86 wheel prompts, and 32 This or That choices. Shared prompts reuse stable IDs across games, while rewritten content has fresh IDs so earlier history does not hide it. Content checks reject blanks, duplicate prompts, repeated options, source markers, and leftover Malay playable text.
 
 ## Design changes
 
@@ -27,7 +27,7 @@ The visual audit also identified conflicting global shortcuts: quiz answer digit
 
 ## Game cards, window fit, reactions, and chat
 
-The follow-up unifies all six game surfaces: conversation-card fronts and reveals, heart/match questions and choices, wheel prompts, number feedback, and letter-race controls. Questions use Outfit, as do the interface headings and buttons. Platform emoji avatars and reaction decorations are replaced with drawn SVG characters and consistent Lucide icons. Existing avatar IDs and authored question content are preserved.
+The follow-up unifies all eight game surfaces: conversation-card fronts and reveals, heart/match questions and choices, wheel prompts, number feedback, letter-race controls, This or That, and Secret Number Race. Questions use Outfit, as do the interface headings and buttons. Platform emoji avatars and reaction decorations are replaced with drawn SVG characters and consistent Lucide icons. Existing avatar IDs are preserved.
 
 On laptop-sized windows, the console uses a centered 1,180px maximum width and follows the available viewport height up to 820px, keeping wide screens from stretching the game panels. A compact lobby keeps the Start button visible; active games use the main console directly instead of a second bordered panel. Quiz and Match put the question and choices side by side. End Game and a sound toggle sit beside the session timer. Mobile layouts retain readable text, touch targets, and scrolling where content needs it.
 
@@ -49,15 +49,18 @@ npm run dev -- --host 127.0.0.1 --port 5174
 With that server running, use a second terminal:
 
 ```powershell
+npm run test:games
 npm run smoke
 ```
+
+`npm run test:games` covers the question bank, saved history, introductions, all local player modes, synchronized actions, This or That, and the shared wheel/card flows.
 
 `npm run smoke` runs `scripts/ui-check.mjs` through the existing smoke entry point. It defaults to `http://localhost:5174` and Chrome at `C:\Program Files\Google\Chrome\Application\chrome.exe`. Set `SMOKE_URL`, `CHROME_PATH`, or `UI_ARTIFACT_DIR` to override these defaults. The development server must already be running.
 
 The browser sweep passed at **320×740, 390×844, 768×1024, 844×390 landscape, and 1440×1000**. The final sweep also passed against the compiled production bundle served with `vite preview` on port 4174; those screenshots are in `artifacts/production/`. Checks cover landing filters (5/2/3 games), keyboard question preview, all five direct launch tiles, guest entry, partner-room launch, room input/focus/Escape behavior, every game introduction, card advancement, and phone quiz handover/reveal, wheel results, number feedback, and letter-race completion. No uncaught page exceptions, horizontal overflow, or horizontally clipped primary game controls were observed.
 
 
-Targeted UI fixtures also passed at 320px and 1440px: room-code focus remains stable across a 1.5-second parent-clock update; focus trapping, Escape, and scroll restoration still work. In the connected lobby, all six host game buttons are enabled, all six guest game buttons are disabled, Enter/Space invoke the expected game callbacks, and waiting/leave-room controls work. Controls meet 44px sizing with no horizontal overflow or uncaught page errors.
+Targeted UI fixtures also passed at 320px and 1440px: room-code focus remains stable across a 1.5-second parent-clock update; focus trapping, Escape, and scroll restoration still work. In the connected lobby, all eight host game buttons are enabled, guest game buttons remain host-controlled, Enter/Space invoke the expected callbacks, and waiting/leave-room controls work. Controls meet 44px sizing with no horizontal overflow or uncaught page errors.
 
 These additional local fixtures can be rerun against the Vite development server:
 
@@ -84,7 +87,7 @@ node scripts/chat-room-ui-check.mjs
 node scripts/chat-check.mjs
 ```
 
-The laptop sweep checks all five public modes, introductions, Start buttons, game surfaces, and top-bar End Game controls at **1536x695, 1366x650, 1280x600, 1024x600, 1440x900, and 1920x880**. The checked scenes fit without document or main-surface scrolling; the Start button also stays fully inside its panel. On very short windows, instructions can scroll independently above the Start button. Extremely long content can scroll in its dedicated area; smaller phone/landscape layouts use normal document flow.
+The picker and introduction sweep checks all seven offline modes at 320, 390, 1024, and 1440 pixels wide. The broader laptop sweep covers the original game surfaces and top-bar controls at **1536x695, 1366x650, 1280x600, 1024x600, 1440x900, and 1920x880**. Checked scenes fit without horizontal overflow; short windows use dedicated content scrolling where needed.
 
 Connected-card fixtures cover Couple Match and simultaneous conversation answers at 320px and 1440px. These particular fixtures simulate a partner. Separately, the chat suite uses two isolated browser sessions with real PeerJS signaling/WebRTC to verify invitation acceptance, message receipt/acknowledgement, offline queue/reload/reconnect, deduplication, unread counts, joining a shared game room, and both directions of room chat.
 

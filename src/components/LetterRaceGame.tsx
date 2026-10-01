@@ -41,8 +41,9 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const multiplayer = useMultiplayer();
   const isMultiplayer = multiplayer.status === 'connected';
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
+  const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('letter_mode') === 'solo' ? 'solo' : sessionStorage.getItem('letter_mode') === 'together' || partner ? 'together' : 'solo');
 
-  const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => readStringUnion(sessionStorage, 'letter_stage', ['wait', 'countdown', 'race', 'winner'] as const, 'wait'));
+  const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => multiplayer.status === 'connected' ? 'wait' : readStringUnion(sessionStorage, 'letter_stage', ['wait', 'race', 'winner'] as const, 'wait'));
   const [letter, setLetter] = useState<string | null>(() => sessionStorage.getItem('letter_char') || null);
   const [winner, setWinner] = useState<{name: string, word: string} | null>(() => {
     try {
@@ -52,6 +53,9 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   
   const [countdown, setCountdown] = useState(3);
   const [inputValue, setInputValue] = useState('');
+  const [submissionPending, setSubmissionPending] = useState(false);
+  const stageRef = useRef(stage);
+  const roundIdRef = useRef(sessionStorage.getItem('letter_roundId') || 'local');
   const countdownTimers = useRef<number[]>([]);
   useEffect(() => () => countdownTimers.current.forEach(window.clearTimeout), []);
 
@@ -59,21 +63,31 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     sessionStorage.setItem('letter_stage', stage);
     if (letter) sessionStorage.setItem('letter_char', letter); else sessionStorage.removeItem('letter_char');
     if (winner) sessionStorage.setItem('letter_winner', JSON.stringify(winner)); else sessionStorage.removeItem('letter_winner');
-  }, [stage, letter, winner]);
+    sessionStorage.setItem('letter_mode', localMode);
+  }, [stage, letter, winner, localMode]);
 
   const startRace = () => {
+    if (stageRef.current !== 'wait' || (isMultiplayer && !multiplayer.isHost)) return;
     if (multiplayer.status !== 'connected' && !checkLimit('solo')) return;
 
     const randomLetter = LETTERS[Math.floor(Math.random() * LETTERS.length)];
+    const roundId = `letter-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     
     if (multiplayer.status === 'connected') {
-      multiplayer.sendMessage({ type: 'LETTER_START', payload: randomLetter });
+      multiplayer.sendMessage({ type: 'LETTER_START', payload: { letter: randomLetter, roundId } });
     }
     
-    beginCountdown(randomLetter);
+    beginCountdown(randomLetter, roundId);
   };
 
-  const beginCountdown = (char: string) => {
+  const beginCountdown = (char: string, roundId: string) => {
+    if (!LETTERS.includes(char)) return;
+    roundIdRef.current = roundId;
+    sessionStorage.setItem('letter_roundId', roundId);
+    stageRef.current = 'countdown';
+    setWinner(null);
+    setInputValue('');
+    setSubmissionPending(false);
     setLetter(char);
     setStage('countdown');
     setCountdown(3);
@@ -83,28 +97,31 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     countdownTimers.current = [
       window.setTimeout(() => { setCountdown(2); sounds.playFlip(); }, 1000),
       window.setTimeout(() => { setCountdown(1); sounds.playFlip(); }, 2000),
-      window.setTimeout(() => { setStage('race'); sounds.playSuccess(); }, 3000),
+      window.setTimeout(() => { stageRef.current = 'race'; setStage('race'); sounds.playSuccess(); }, 3000),
     ];
   };
 
   const handleWordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue || !letter) return;
-    if (!inputValue.toUpperCase().startsWith(letter)) return; // Must start with letter
-    
-    const word = inputValue;
+    const word = inputValue.trim().toUpperCase();
+    if (stageRef.current !== 'race' || submissionPending || !letter || !/^[A-Z]{2,30}$/.test(word) || !word.startsWith(letter)) return;
     
     if (multiplayer.status === 'connected') {
-      multiplayer.sendMessage({ type: 'LETTER_WORD_SUBMIT', payload: word });
+      if (!multiplayer.isHost) {
+        setSubmissionPending(true);
+        multiplayer.sendMessage({ type: 'LETTER_WORD_SUBMIT', payload: { word, roundId: roundIdRef.current } });
+        return;
+      }
     }
     
-    processWin(profile?.name || 'Player', word);
+    declareWinner(profile?.name || 'Player', word);
     setInputValue('');
   };
 
   const processWin = (winnerName: string, winningWord: string) => {
-    if (stage === 'winner') return; // Prevent double trigger
-    
+    if (stageRef.current !== 'race') return;
+    stageRef.current = 'winner';
+    setSubmissionPending(false);
     setWinner({ name: winnerName, word: winningWord });
     setStage('winner');
     sounds.playSuccess();
@@ -114,13 +131,22 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
   };
 
+  // The host decides once, so simultaneous submissions cannot create two winners.
+  const declareWinner = (name: string, word: string) => {
+    if (stageRef.current !== 'race') return;
+    processWin(name, word);
+    if (isMultiplayer && multiplayer.isHost) multiplayer.sendMessage({ type: 'LETTER_RESULT', payload: { name, word, roundId: roundIdRef.current } });
+  };
+
   // Face to Face (Single Player) Tap logic
   const handleFaceToFaceTap = (player: 'top' | 'bottom') => {
+    if (isMultiplayer || localMode !== 'together') return;
     const winnerName = player === 'bottom' ? (profile?.name || 'Player') : (partner?.name || 'Partner');
     processWin(winnerName, "First to tap!");
   };
 
   const handleNextRound = () => {
+    if (stageRef.current !== 'winner' || (isMultiplayer && !multiplayer.isHost)) return;
     if (multiplayer.status === 'connected') {
       multiplayer.sendMessage({ type: 'LETTER_NEXT' });
     }
@@ -128,6 +154,9 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   };
 
   const resetRound = useCallback(() => {
+    stageRef.current = 'wait';
+    countdownTimers.current.forEach(window.clearTimeout);
+    setSubmissionPending(false);
     setLetter(null);
     setWinner(null);
     setStage('wait');
@@ -150,7 +179,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             startRace();
           }
         }
-      } else if (stage === 'race' && !isMultiplayer) {
+      } else if (stage === 'race' && !isMultiplayer && localMode === 'together') {
         if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
           e.preventDefault();
           handleFaceToFaceTap('top');
@@ -170,29 +199,38 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [stage, isMultiplayer, multiplayer.isHost, multiplayer.status, letter]);
+  }, [stage, isMultiplayer, multiplayer.isHost, multiplayer.status, letter, localMode]);
 
   useEffect(() => {
     if (multiplayer.status === 'connected') {
       return multiplayer.subscribeMessage((msg: MultiplayerMessage) => {
         if (msg.type === 'LETTER_START') {
-          beginCountdown(msg.payload);
+          if (multiplayer.isHost) return;
+          const payload = typeof msg.payload === 'string' ? { letter: msg.payload, roundId: 'legacy' } : msg.payload;
+          if (payload.roundId === roundIdRef.current) return;
+          beginCountdown(payload.letter, payload.roundId);
         } else if (msg.type === 'LETTER_WORD_SUBMIT') {
-          // If we receive this, the partner submitted a word first.
-          processWin(multiplayer.remoteProfile?.name || 'Partner', msg.payload);
+          if (!multiplayer.isHost) return;
+          const payload = typeof msg.payload === 'string' ? { word: msg.payload, roundId: roundIdRef.current } : msg.payload;
+          const word = payload.word.trim().toUpperCase();
+          if (payload.roundId !== roundIdRef.current || !letter || !/^[A-Z]{2,30}$/.test(word) || !word.startsWith(letter)) return;
+          declareWinner(partnerName, word);
+        } else if (msg.type === 'LETTER_RESULT') {
+          if (!multiplayer.isHost && msg.payload.roundId === roundIdRef.current) processWin(msg.payload.name, msg.payload.word);
         } else if (msg.type === 'LETTER_NEXT') {
+          if (multiplayer.isHost) return;
           resetRound();
         }
       });
     }
-  }, [multiplayer.status, multiplayer.subscribeMessage, resetRound, stage]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, resetRound, stage, letter, partnerName]);
 
   const handleEndGame = () => {
     if (onEndGame) {
       onEndGame();
     } else {
       sessionStorage.removeItem('letter_stage');
-      sessionStorage.removeItem('letter_letter');
+      sessionStorage.removeItem('letter_char');
       
       const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
       stored.letter = false;
@@ -214,7 +252,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
           <div>
             <h2 className="font-black text-white text-sm leading-tight drop-shadow-sm">Letter Race</h2>
             <div className="flex items-center gap-2 text-[10px] font-bold text-white/80">
-              <span>{isMultiplayer ? 'Type it fast!' : 'Face-to-Face Tap!'}</span>
+              <span>{isMultiplayer || localMode === 'solo' ? 'Type it fast!' : 'Face-to-Face Tap!'}</span>
             </div>
           </div>
         </div>
@@ -228,7 +266,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
 
       {/* Game card fills remaining space */}
       <div className="game-card activity-card type-board flex-1 flex flex-col relative overflow-hidden bg-white p-3.5 sm:p-5 animate-pop-in">
-        <RoundLabel title="READY, SET, THINK" detail={'TWO PLAYERS'} kind="type" />
+        <RoundLabel title="READY, SET, THINK" detail={!isMultiplayer && localMode === 'solo' ? 'SOLO CHALLENGE' : 'TWO PLAYERS'} kind="type" />
         
         {stage === 'wait' && (
           <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 space-y-4 sm:space-y-6 animate-pop-in z-10">
@@ -239,12 +277,16 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="text-center space-y-1.5">
               <h3 className="text-lg sm:text-xl font-black text-ink">Ready to Race?</h3>
               <p className="text-xs sm:text-sm text-ink-3 font-medium max-w-xs">
-                {isMultiplayer 
+                {isMultiplayer || localMode === 'solo'
                   ? "A random letter will appear. Be the first to type a word starting with it!" 
                   : "Put phone between you. When the letter appears, shout a word and be the first to tap your side!"}
               </p>
             </div>
             
+            {!isMultiplayer && <div className="flex gap-2" role="group" aria-label="Letter game mode">
+              <button type="button" aria-pressed={localMode === 'solo'} onClick={() => setLocalMode('solo')} className={`btn-chunky ${localMode === 'solo' ? 'btn-pink' : 'btn-white'} text-xs px-3 py-2`}>Solo</button>
+              <button type="button" aria-pressed={localMode === 'together'} onClick={() => setLocalMode('together')} className={`btn-chunky ${localMode === 'together' ? 'btn-pink' : 'btn-white'} text-xs px-3 py-2`}>Two players</button>
+            </div>}
             {(!isMultiplayer || multiplayer.isHost) ? (
               <button
                 onClick={startRace}
@@ -277,7 +319,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
           </div>
         )}
 
-        {stage === 'race' && !isMultiplayer && (
+        {stage === 'race' && !isMultiplayer && localMode === 'together' && (
           <div className="letter-playing-field absolute inset-0 flex flex-col">
             {/* Top Half - Partner (Rotated 180deg) */}
             <button 
@@ -316,11 +358,12 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
           </div>
         )}
 
-        {stage === 'race' && isMultiplayer && (
+        {stage === 'race' && (isMultiplayer || localMode === 'solo') && (
           <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-6 space-y-4 sm:space-y-6 animate-pop-in z-10">
             <div className="text-center">
               <h2 className="text-6xl sm:text-8xl font-black text-fuchsia-600 drop-shadow-xl mb-1">{letter}</h2>
-              <p className="text-fuchsia-500 font-bold text-xs sm:text-sm">Type a word starting with '{letter}'!</p>
+              <p className="text-fuchsia-500 font-bold text-xs sm:text-sm">Type a real word starting with '{letter}' — at least two letters.</p>
+              <p className="text-[10px] text-ink-3 mt-1">Real words only. Play on the honour system.</p>
             </div>
             
             <form onSubmit={handleWordSubmit} className="w-full max-w-md mx-auto space-y-3">
@@ -337,7 +380,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
               />
               <button
                 type="submit"
-                disabled={!inputValue || !inputValue.startsWith(letter!)}
+                disabled={submissionPending || !/^[A-Z]{2,30}$/.test(inputValue.trim()) || !inputValue.trim().startsWith(letter!)}
                 className="btn-chunky w-full py-3 sm:py-3.5 text-sm sm:text-base disabled:opacity-50"
                 style={{
                   background: 'linear-gradient(135deg, #10B981, #059669)',
@@ -345,7 +388,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
                   boxShadow: '0 5px 0 #047857, 0 6px 18px rgba(16,185,129,0.35)'
                 }}
               >
-                Submit!
+                {submissionPending ? 'Checking the finish…' : 'Submit!'}
               </button>
             </form>
           </div>

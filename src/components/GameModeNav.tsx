@@ -1,9 +1,9 @@
 ﻿import type { ComponentType } from 'react';
-import { Dices, Hash, Heart, Layers3, TextCursor, type LucideProps } from 'lucide-react';
+import { Dices, Hash, Heart, HeartHandshake, Layers3, TextCursor, type LucideProps } from 'lucide-react';
 import type { GameMode } from '../store/MultiplayerContext';
 
-type PlayableTab = Exclude<GameMode, 'lobby' | 'match'>;
-type Labels = Record<PlayableTab, string>;
+type PlayableTab = Exclude<GameMode, 'lobby' | 'secret-race'>;
+type Labels = Record<PlayableTab, string> & Partial<Record<'secret-race', string>>;
 
 interface GameModeNavProps {
   currentTab: GameMode;
@@ -15,8 +15,10 @@ const MODES: Array<{ id: PlayableTab; shortLabel: string; description: string; s
   { id: 'swipe', shortLabel: 'Cards', description: 'A little deeper', shortcut: '1', icon: Layers3 },
   { id: 'quiz', shortLabel: 'Heart', description: 'Know your person?', shortcut: '2', icon: Heart },
   { id: 'wheel', shortLabel: 'Wheel', description: 'Leave it to luck', shortcut: '3', icon: Dices },
-  { id: 'number', shortLabel: 'Numbers', description: 'A friendly face-off', shortcut: '4', icon: Hash },
-  { id: 'letter', shortLabel: 'Letters', description: 'Quick minds win', shortcut: '5', icon: TextCursor },
+  { id: 'number', shortLabel: 'Numbers', description: 'Solo or take turns', shortcut: '4', icon: Hash },
+  { id: 'letter', shortLabel: 'Letters', description: 'Solo or a quick race', shortcut: '5', icon: TextCursor },
+  { id: 'match', shortLabel: 'Match', description: 'Same phone or online', shortcut: '6', icon: HeartHandshake },
+  { id: 'choices', shortLabel: 'This or That', description: 'Solo or compare sides', shortcut: '7', icon: Dices },
 ];
 
 export const GameModeNav = ({ currentTab, labels, onSelect }: GameModeNavProps) => (
