@@ -1,9 +1,11 @@
 export type CardCategory = 'teka-teki' | 'vibe-check' | 'taaruf-realiti' | 'dare-santai';
+import type { QuestionMood } from './questionMood';
 
 export { WOULD_YOU_RATHER, type WouldYouRatherQuestion } from './englishChoices';
 
 export interface SwipeCardItem {
   id: string;
+  mood: QuestionMood;
   category: CardCategory;
   categoryLabel: string;
   badgeColor: string;
@@ -20,6 +22,7 @@ export interface SwipeCardItem {
 
 export interface GuessQuizItem {
   id: string;
+  mood: QuestionMood;
   targetRole: 'Lelaki' | 'Perempuan'; // Who is being guessed
   question: string;
   options: string[];
@@ -35,6 +38,7 @@ export interface WheelSegment {
   category: string;
   prompts: string[];
   promptIds: string[];
+  promptMoods: QuestionMood[];
 }
 
 
@@ -69,6 +73,7 @@ const excludedBonusIds = new Set<string>();
 export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
   ...taarufData.teka_teki_bodoh.map((item, i) => ({
     id: `tt-en2-${i}`,
+    mood: 'fun' as const,
     category: 'teka-teki' as CardCategory,
     categoryLabel: 'Riddles',
     badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
@@ -82,6 +87,7 @@ export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
   })),
   ...taarufData.vibe_check.map((item, i) => ({
     id: `vc-en2-${i}`,
+    mood: item.mood,
     category: 'vibe-check' as CardCategory,
     categoryLabel: 'Vibe Check',
     badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-300',
@@ -96,6 +102,7 @@ export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
   ...Object.entries(taarufData.soalan_matang_prakahwinan).flatMap(([_key, items], categoryIndex) =>
     items.map((item, i) => ({
       id: `sm-en2-${categoryIndex}-${i}`,
+      mood: item.mood,
       category: 'taaruf-realiti' as CardCategory,
       categoryLabel: 'Real Talk',
       badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -103,7 +110,7 @@ export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
       question: item.soalan,
       flipContent: {
         title: 'Make room for an honest answer',
-        description: 'Take your time. Different answers are a reason to be curious, not a verdict on your relationship.',
+        description: item.followUp,
         greenFlag: item.green_flag,
         redFlag: item.red_flag,
         type: 'answer' as const
@@ -111,21 +118,25 @@ export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
     }))
   ),
   ...taarufData.uncomfortable_topics.map((item, i) => ({
+    mood: item.mood,
     id: `ut-en2-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'A Little Deeper',
     badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i), question: item.soalan,
     flipContent: { title: 'Take it at your own pace', description: item.sebab_penting, greenFlag: item.green_flag, redFlag: item.red_flag, type: 'answer' as const }
   })),
   ...taarufData.random_deep_questions.map((item, i) => ({
+    mood: item.mood,
     id: `rd-en2-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Deep Talk',
     badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i), question: item.soalan,
     flipContent: { title: 'Stay with that thought', description: item.tujuan, type: 'answer' as const }
   })),
   ...taarufData.soalan_realiti_pasangan.map((item, i) => ({
+    mood: item.mood,
     id: `rp-en2-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Everyday Us',
     badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i), question: item.soalan,
     flipContent: { title: 'A little more to explore', description: item.tujuan, type: 'answer' as const }
   })),
   ...taarufData.unspoken_rules_malaysia.map((item, i) => ({
+    mood: item.mood,
     id: `ur-en2-${i}`, category: 'taaruf-realiti' as CardCategory, categoryLabel: 'Unwritten Rules',
     badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', turn: getTurn(i),
     question: `What do you think about this expectation: ${item.aturan}?`,
@@ -133,6 +144,7 @@ export const SWIPE_CARDS: SwipeCardItem[] = uniqueByText([
   })),
   ...taarufData.bonus_challenges.map((item, i) => ({
     id: `bc-en2-${i}`,
+    mood: item.mood,
     category: 'dare-santai' as CardCategory,
     categoryLabel: 'Bonus Challenge',
     badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
@@ -153,6 +165,7 @@ const cleanOption = (opt: string) => opt.replace(/^[A-D]\.\s*/, '');
 
 export const GUESS_QUIZ_LIST: GuessQuizItem[] = uniqueByText(taarufData.teka_hati_dia.map((item, i) => ({
   id: `gq-en2-${i}`,
+  mood: item.mood,
   targetRole: getTargetRole(i),
   question: item.soalan,
   options: item.pilihan.map(cleanOption),
@@ -161,6 +174,7 @@ export const GUESS_QUIZ_LIST: GuessQuizItem[] = uniqueByText(taarufData.teka_hat
 
 export interface MatchQuestion {
   id: string;
+  mood: QuestionMood;
   question: string;
   options: string[];
   vibeText: string;
@@ -173,6 +187,7 @@ export interface MatchQuestion {
 export const MATCH_QUESTIONS: MatchQuestion[] = uniqueByText([
   ...taarufData.compatibility_match_check.map((item, i) => ({
     id: `m-en2-${i}`,
+    mood: item.mood,
     question: item.soalan,
     options: item.pilihan.map(cleanOption),
     vibeText: item.tip_perbincangan || 'What is the story behind your choice?',
@@ -180,6 +195,7 @@ export const MATCH_QUESTIONS: MatchQuestion[] = uniqueByText([
   })),
   ...GUESS_QUIZ_LIST.map((item, i) => ({
     id: item.id,
+    mood: item.mood,
     question: item.question,
     options: item.options,
     vibeText: item.vibeText,
@@ -192,10 +208,10 @@ const matureQuestionGroups = Object.entries(taarufData.soalan_matang_prakahwinan
 
 const matureWheelPrompts = (categoryIndex: number) => {
   const [, questions] = matureQuestionGroups[categoryIndex];
-  return uniqueByText(questions.map((item, index) => ({ id: `sm-en2-${categoryIndex}-${index}`, text: item.soalan })), item => item.text);
+  return uniqueByText(questions.map((item, index) => ({ id: `sm-en2-${categoryIndex}-${index}`, text: item.soalan, mood: item.mood })), item => item.text);
 };
 
-const BASE_WHEEL_SEGMENTS: Omit<WheelSegment, 'promptIds'>[] = [
+const BASE_WHEEL_SEGMENTS: Omit<WheelSegment, 'promptIds' | 'promptMoods'>[] = [
   {
     id: 'masa-depan',
     label: 'The Future',
@@ -276,11 +292,19 @@ const BASE_WHEEL_SEGMENTS: Omit<WheelSegment, 'promptIds'>[] = [
   }
 ];
 
-const vibeWheelPrompts = uniqueByText(taarufData.vibe_check.map((item, index) => ({ id: `vc-en2-${index}`, text: item.soalan })), item => item.text);
-const extraWheelPrompts: Record<string, { id: string; text: string }[]> = {
+const vibeWheelPrompts = uniqueByText(taarufData.vibe_check.map((item, index) => ({ id: `vc-en2-${index}`, text: item.soalan, mood: item.mood })), item => item.text);
+const extraWheelPrompts: Record<string, { id: string; text: string; mood: QuestionMood }[]> = {
   'masa-depan': [...matureWheelPrompts(2), ...matureWheelPrompts(3)],
-  'deep-talk': matureWheelPrompts(1),
+  'deep-talk': [...matureWheelPrompts(1), ...taarufData.random_deep_questions.map((item, index) => ({ id: `rd-en2-${index}`, text: item.soalan, mood: item.mood }))],
   kewangan: matureWheelPrompts(0),
+};
+const baseWheelMoods: Record<string, QuestionMood[]> = {
+  'masa-depan': ['deep', 'deep', 'fun'],
+  'zaman-kanak': ['fun', 'easy', 'fun'],
+  'deep-talk': ['deep', 'deep', 'deep'],
+  romantik: ['easy', 'deep', 'easy'],
+  spontan: ['fun', 'fun', 'fun'],
+  kewangan: ['easy', 'easy', 'easy'],
 };
 
 export const WHEEL_SEGMENTS: WheelSegment[] = [
@@ -290,6 +314,7 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
       ...segment,
       prompts: [...segment.prompts, ...extra.map(prompt => prompt.text)],
       promptIds: [...segment.prompts.map((_, index) => `wheel:en2:${segment.id}:${index}`), ...extra.map(prompt => prompt.id)],
+      promptMoods: [...baseWheelMoods[segment.id], ...extra.map(prompt => prompt.mood)],
     };
   }),
   {
@@ -301,5 +326,6 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
     category: 'Vibe Check',
     prompts: vibeWheelPrompts.map(prompt => prompt.text),
     promptIds: vibeWheelPrompts.map(prompt => prompt.id),
+    promptMoods: vibeWheelPrompts.map(prompt => prompt.mood),
   },
 ];

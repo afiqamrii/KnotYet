@@ -1,11 +1,14 @@
 // Original English prompts. Keep array order stable and append new cards:
 // questions.ts gives each entry a versioned history ID shared across game modes.
-export interface ConversationPrompt { question: string; followUp: string }
+import type { QuestionMood } from './questionMood';
+import { extraVibes, extraDeep, extraRelationship, extraMatureGroups, extraGuesses, extraMatches, type ConversationRow, type ChoiceRow } from './conversationExtras';
+
+export interface ConversationPrompt { question: string; followUp: string; mood: QuestionMood }
 export interface ChoicePrompt extends ConversationPrompt { options: [string, string, string, string] }
-const conversation = (items: [string, string][]): ConversationPrompt[] =>
-  items.map(([question, followUp]) => ({ question, followUp }));
-const choice = (items: [string, [string, string, string, string], string][]): ChoicePrompt[] =>
-  items.map(([question, options, followUp]) => ({ question, options, followUp }));
+const conversation = (items: ConversationRow[], defaultMood: QuestionMood = 'deep'): ConversationPrompt[] =>
+  items.map(([question, followUp, mood = defaultMood]) => ({ question, followUp, mood }));
+const choice = (items: ChoiceRow[]): ChoicePrompt[] =>
+  items.map(([question, options, followUp, mood = 'easy']) => ({ question, options, followUp, mood }));
 
 export const englishRiddles = [
   ['What gets wetter the more it dries something else?', 'A towel. It absorbs water while drying other things.'],
@@ -64,14 +67,15 @@ export const englishVibes = conversation([
   ['What is your favourite way to spend half an hour with no obligations?', 'Does it leave you recharged or wondering where the time went?'],
   ['What minor problem should already have been solved by now?', 'Pitch your overengineered solution.'],
   ['If you could borrow a friend\'s talent for one afternoon, which would you choose?', 'What would you make or do first?'],
-  ['What is the best thing about you that a first impression might miss?', 'What situation tends to bring it out?'],
+  ['What is the best thing about you that a first impression might miss?', 'What situation tends to bring it out?', 'deep'],
   ['Which activity makes you forget to check your phone?', 'When did you last make time for it?'],
   ['What did you think was incredibly fancy when you were a child?', 'Does a little part of you still think so?'],
   ['What is the most you have committed to a joke?', 'At what point did it become more work than expected?'],
   ['Which everyday sound do you love?', 'What place or memory does it bring back?'],
   ['What is your signature move when you do not know anyone at a gathering?', 'How can someone make it easier to join in?'],
   ['What would make a perfect unplanned evening?', 'You have two hours, no bookings, and a modest budget.'],
-]);
+  ...extraVibes,
+], 'fun');
 
 export const englishMatureGroups = [
   conversation([
@@ -114,7 +118,7 @@ export const englishMatureGroups = [
     ['What kind of home atmosphere would you like to create?', 'Describe how a visitor or a tired version of you would feel there.'],
     ['What do you hope a future version of you has stopped worrying about?', 'What could the present version of you do to help?'],
   ]),
-];
+].map((group, index) => [...group, ...conversation(extraMatureGroups[index])]);
 
 export const englishSensitive = conversation([
   ['How do you let someone know a joke crossed a line for you?', 'What response would help you feel heard? You can use a fictional example.'],
@@ -140,6 +144,7 @@ export const englishDeep = conversation([
   ['Which memory would you keep if you could save an ordinary moment in a jar?', 'Describe one detail you would not want to lose.'],
   ['What kind of attention makes you feel most valued?', 'When did someone last give you that kind of attention?'],
   ['What are you hoping will take up less space in your mind?', 'What would you like to make room for instead?'],
+  ...extraDeep,
 ]);
 
 export const englishRelationship = conversation([
@@ -155,6 +160,7 @@ export const englishRelationship = conversation([
   ['Which friendship habits would you want to protect in a relationship?', 'How could both people keep room for their own people?'],
   ['What would help you feel like a team during a stressful errand?', 'Pick a real situation and give each person a useful job.'],
   ['What is one thing you would like a partner to ask instead of assume?', 'How would you answer that question today?'],
+  ...extraRelationship,
 ]);
 
 export const englishExpectations = conversation([
@@ -189,7 +195,7 @@ export const englishChallenges = conversation([
   ['Write the worst possible directions to an imaginary cafe.', 'Keep them funny, not useful. Solo: add a landmark. Together: take turns adding one increasingly unhelpful instruction.'],
   ['Choose a fictional skill you would trade one real skill for.', 'Explain the trade. Together: the other person decides whether the deal needs a better offer.'],
   ['Create a tiny award for something you handled recently.', 'Name the award and give a ten-second acceptance speech. Together: offer each other a specific, sincere runner-up award.'],
-]);
+], 'fun');
 
 export const englishGuesses = choice([
   ['Which little treat would I choose after a long day?', ['A favourite snack', 'A long shower', 'A comfort episode', 'An early night'], 'What makes that one feel like a reset?'],
@@ -211,7 +217,7 @@ export const englishGuesses = choice([
   ['Which part of a celebration matters most to me?', ['The people', 'The food', 'A thoughtful moment', 'Doing something fun'], 'What celebration got this especially right?'],
   ['What am I most likely to overpack?', ['Clothes', 'Snacks', 'Chargers and gadgets', 'Just-in-case items'], 'What have I packed and never once used?'],
   ['What would make a rainy afternoon better for me?', ['A hot drink and a book', 'A nap', 'A film marathon', 'Cooking something'], 'What is the perfect soundtrack for it?'],
-  ['When would I prefer to have a difficult conversation?', ['As soon as possible', 'After a short pause', 'During a quiet walk', 'At an agreed time'], 'What would help the conversation start well?'],
+  ['When would I prefer to have a difficult conversation?', ['As soon as possible', 'After a short pause', 'During a quiet walk', 'At an agreed time'], 'What would help the conversation start well?', 'deep'],
   ['Which tiny win would I celebrate most?', ['Clearing a nagging task', 'Learning something new', 'Keeping a good habit', 'Saying what I meant'], 'Which one have I had recently?'],
   ['What is my likely approach to assembling furniture?', ['Read every step first', 'Sort all the pieces', 'Start and work it out', 'Find a helpful video'], 'What role would a second person be useful for?'],
   ['What would I pick for a no-pressure date?', ['Coffee and a walk', 'A shared meal', 'A casual activity', 'A relaxed evening in'], 'Which little detail would make it better?'],
@@ -232,6 +238,7 @@ export const englishGuesses = choice([
   ['What matters most when I choose a gift?', ['It is useful', 'It feels personal', 'It is a good surprise', 'We can enjoy it together'], 'Which gift have I enjoyed choosing for someone?'],
   ['What would I protect in a very busy week?', ['Enough sleep', 'Some time alone', 'Time with loved ones', 'One enjoyable activity'], 'How can someone help me protect it?'],
   ['What is my ideal pace for a weekend morning?', ['Up and out early', 'One plan after breakfast', 'Slow and unstructured', 'Decide when I wake up'], 'What is the one thing I would not want to rush?'],
+  ...extraGuesses,
 ]);
 
 export const englishMatches = choice([
@@ -267,16 +274,17 @@ export const englishMatches = choice([
   ['What would make a difficult week feel more manageable?', ['Fewer commitments', 'Clear practical help', 'More quiet time together', 'Something small to anticipate'], 'How would you ask for that without expecting mind-reading?'],
   ['What is your favourite way to enjoy a familiar place together?', ['Find a new food spot', 'Revisit a good memory', 'Take a different route', 'Stay longer and slow down'], 'What familiar place comes to mind?'],
   ['What would you choose for the final hour of a good day?', ['A gentle conversation', 'A shared show or book', 'A slow walk', 'An early night'], 'What would you like the day to end feeling like?'],
+  ...extraMatches,
 ]);
 
 // Adapter retains the established questionBank field names for existing games.
 // Follow-up prompts replace the old relationship verdicts.
 const mature = (items: ConversationPrompt[]) => items.map(item => ({
-  soalan: item.question, followUp: item.followUp, green_flag: '', red_flag: '',
+  soalan: item.question, followUp: item.followUp, mood: item.mood, green_flag: '', red_flag: '',
 }));
 export const englishQuestionBank = {
   teka_teki_bodoh: englishRiddles,
-  vibe_check: englishVibes.map(item => ({ soalan: item.question, soalan_perangkap: item.followUp })),
+  vibe_check: englishVibes.map(item => ({ soalan: item.question, soalan_perangkap: item.followUp, mood: item.mood })),
   soalan_matang_prakahwinan: {
     pengurusan_duit_dan_hutang: mature(englishMatureGroups[0]),
     batasan_keluarga_dan_mertua: mature(englishMatureGroups[1]),
@@ -284,14 +292,14 @@ export const englishQuestionBank = {
     perancangan_zuriat_dan_emosi: mature(englishMatureGroups[3]),
   },
   uncomfortable_topics: englishSensitive.map(item => ({
-    soalan: item.question, sebab_penting: item.followUp, green_flag: '', red_flag: '',
+    soalan: item.question, sebab_penting: item.followUp, mood: item.mood, green_flag: '', red_flag: '',
   })),
-  random_deep_questions: englishDeep.map(item => ({ soalan: item.question, tujuan: item.followUp })),
-  soalan_realiti_pasangan: englishRelationship.map(item => ({ soalan: item.question, tujuan: item.followUp })),
-  unspoken_rules_malaysia: englishExpectations.map(item => ({ aturan: item.question, huraian: item.followUp })),
-  bonus_challenges: englishChallenges.map(item => ({ cabaran: item.question, deskripsi: item.followUp })),
-  teka_hati_dia: englishGuesses.map(item => ({ soalan: item.question, pilihan: item.options, kategori: item.followUp })),
-  compatibility_match_check: englishMatches.map(item => ({ soalan: item.question, pilihan: item.options, tip_perbincangan: item.followUp })),
+  random_deep_questions: englishDeep.map(item => ({ soalan: item.question, tujuan: item.followUp, mood: item.mood })),
+  soalan_realiti_pasangan: englishRelationship.map(item => ({ soalan: item.question, tujuan: item.followUp, mood: item.mood })),
+  unspoken_rules_malaysia: englishExpectations.map(item => ({ aturan: item.question, huraian: item.followUp, mood: item.mood })),
+  bonus_challenges: englishChallenges.map(item => ({ cabaran: item.question, deskripsi: item.followUp, mood: item.mood })),
+  teka_hati_dia: englishGuesses.map(item => ({ soalan: item.question, pilihan: item.options, kategori: item.followUp, mood: item.mood })),
+  compatibility_match_check: englishMatches.map(item => ({ soalan: item.question, pilihan: item.options, tip_perbincangan: item.followUp, mood: item.mood })),
 };
 
 // Every property read by questions.ts is checked here before this bank is used.

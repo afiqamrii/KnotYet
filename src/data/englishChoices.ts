@@ -1,12 +1,15 @@
+import type { QuestionMood } from './questionMood';
+
 export interface WouldYouRatherQuestion {
   id: string;
+  mood: QuestionMood;
   question: string;
   options: [string, string];
   followUp: string;
 }
 
 // Original conversation starters, with no correct answer or relationship verdict.
-export const WOULD_YOU_RATHER: WouldYouRatherQuestion[] = [
+const originalChoices: Omit<WouldYouRatherQuestion, 'mood'>[] = [
   { id: 'wyr-en2-0', question: 'Pick your kind of mini escape.', options: ['A cabin with rain on the roof', 'A sunny room near the sea'], followUp: 'What is the first thing you do when you arrive?' },
   { id: 'wyr-en2-1', question: 'You get one oddly useful talent.', options: ['Always find the perfect gift', 'Always pick the best dish on the menu'], followUp: 'Tell a story about a time this would have helped.' },
   { id: 'wyr-en2-2', question: 'Which good day would you rather have?', options: ['A carefully planned adventure', 'A completely accidental great day'], followUp: 'How much uncertainty is fun for you?' },
@@ -39,4 +42,25 @@ export const WOULD_YOU_RATHER: WouldYouRatherQuestion[] = [
   { id: 'wyr-en2-29', question: 'Pick a slightly ridiculous convenience.', options: ['A soundtrack that matches your mood', 'A narrator who explains your decisions'], followUp: 'What would it sound like today?' },
   { id: 'wyr-en2-30', question: 'Which would you rather receive?', options: ['A letter to read years from now', 'A photo of an ordinary moment you missed'], followUp: 'Why would that feel worth keeping?' },
   { id: 'wyr-en2-31', question: 'Choose how your next good story begins.', options: ['We took the wrong turn', 'We finally tried the thing we kept postponing'], followUp: 'What real-life plan could become that story?' },
+];
+
+const originalDeepIds = new Set([9, 14, 16, 20, 22, 24, 27, 30]);
+const originalFunIds = new Set([1, 3, 8, 11, 17, 18, 19, 29]);
+export const WOULD_YOU_RATHER: WouldYouRatherQuestion[] = [
+  ...originalChoices.map((item, index) => ({
+    ...item,
+    mood: (originalDeepIds.has(index) ? 'deep' : originalFunIds.has(index) ? 'fun' : 'easy') as QuestionMood,
+  })),
+  { id: 'wyr-en2-32', mood: 'easy', question: 'Choose tonight\'s simple comfort.', options: ['A warm bowl of noodles', 'Toast and a hot drink'], followUp: 'What would you put on in the background?' },
+  { id: 'wyr-en2-33', mood: 'easy', question: 'Pick a place for a short catch-up.', options: ['A familiar mamak', 'A quiet cafe'], followUp: 'What is your usual order?' },
+  { id: 'wyr-en2-34', mood: 'easy', question: 'Which sounds better this morning?', options: ['Breakfast somewhere outside', 'Breakfast in your own kitchen'], followUp: 'What would you eat?' },
+  { id: 'wyr-en2-35', mood: 'easy', question: 'You have twenty minutes to spare.', options: ['Sit somewhere sunny', 'Get comfortable somewhere cool'], followUp: 'Would you bring a drink?' },
+  { id: 'wyr-en2-36', mood: 'fun', question: 'Choose an unnecessary title for yourself.', options: ['Minister of Snacks', 'Director of Cancelling Plans'], followUp: 'What is your first official announcement?' },
+  { id: 'wyr-en2-37', mood: 'fun', question: 'Your day gets an uninvited commentator.', options: ['A very dramatic sports presenter', 'A whispering nature documentary narrator'], followUp: 'What would they say about your morning?' },
+  { id: 'wyr-en2-38', mood: 'fun', question: 'Pick your imaginary housemate.', options: ['A cat that judges your outfits', 'A duck that insists on joining every call'], followUp: 'What house rule would you need immediately?' },
+  { id: 'wyr-en2-39', mood: 'fun', question: 'Choose a suspiciously specific talent.', options: ['Always pick the fastest queue', 'Always know when the toast is ready'], followUp: 'How would you turn it into a career?' },
+  { id: 'wyr-en2-40', mood: 'deep', question: 'Which feels more like being truly seen?', options: ['Someone understands what you do not say', 'Someone asks and listens without assuming'], followUp: 'When has one mattered more than the other?' },
+  { id: 'wyr-en2-41', mood: 'deep', question: 'Which would give you more peace right now?', options: ['Knowing what the next year holds', 'Trusting yourself to handle what it holds'], followUp: 'What makes that answer difficult?' },
+  { id: 'wyr-en2-42', mood: 'deep', question: 'Which kind of courage do you need more?', options: ['Leaving something that no longer fits', 'Staying and asking for something to change'], followUp: 'You can answer hypothetically. What would a small first step look like?' },
+  { id: 'wyr-en2-43', mood: 'deep', question: 'What would you rather stop measuring?', options: ['How far ahead other people seem', 'How close you are to your old plan'], followUp: 'What would be a better way to notice your own progress?' },
 ];

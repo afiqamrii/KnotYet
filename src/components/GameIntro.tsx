@@ -19,13 +19,13 @@ interface GameIntroConfig {
 
 const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
   swipe: {
-    title: 'Icebreaker Cards', eyebrow: 'Conversation', subtitle: 'One card. Two perspectives. A conversation you never saw coming.', accent: '#ff829e', icon: Layers3,
+    title: 'Icebreaker Cards', eyebrow: 'Conversation', subtitle: 'Quick answers, unexpected laughs, and a little room for the deeper stuff.', accent: '#ff829e', icon: Layers3,
     steps: [
       { title: 'Read together', description: 'Take a moment with the prompt before answering.' },
       { title: 'Swipe right', description: 'Move on when the conversation feels complete.' },
       { title: 'Swipe left', description: 'Skip anything that does not fit the moment.' },
     ],
-    buttonText: 'Start with a card', tipText: 'There is no perfect answer. Curiosity matters more than speed.',
+    buttonText: 'Start with a card', tipText: 'The mixed deck keeps things light between deeper questions. Skip any card you like.',
   },
   quiz: {
     title: 'Guess My Heart', eyebrow: 'How well do you know me?', subtitle: 'Choose privately, make your guess, then reveal together.', accent: '#a9ddf5', icon: Heart,
@@ -40,7 +40,7 @@ const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
     title: 'Anti-Awkward Wheel', eyebrow: 'Let chance choose', subtitle: 'A colorful nudge when neither of you knows what to ask next.', accent: '#f9d77e', icon: Dices,
     steps: [
       { title: 'Spin once', description: 'Let the wheel choose a conversation theme.' },
-      { title: 'Read the prompt', description: 'Give each other time to think before answering.' },
+      { title: 'Read the prompt', description: 'Some are quick, some are playful, and some need a moment.' },
       { title: 'Follow the thread', description: 'Stay with the topic if it leads somewhere good.' },
     ],
     buttonText: 'Spin a new topic', tipText: 'Put the phone between you so the wheel feels shared.',
@@ -77,7 +77,7 @@ const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
     steps: [
       { title: 'Pick your side', description: 'Choose the option that feels more like you.' },
       { title: 'Compare, if you like', description: 'Play solo, pass the phone, or reveal with your partner online.' },
-      { title: 'Go a little deeper', description: 'Use the follow-up to explain the choice behind your answer.' },
+      { title: 'Keep it flowing', description: 'Quick picks and playful questions give the deeper ones room to land.' },
     ],
     buttonText: 'Make a choice', tipText: 'Different answers are a conversation starter. You do not need to agree.',
   },

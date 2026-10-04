@@ -6,8 +6,12 @@ import {
   MatchQuestion, 
   GuessQuizItem, 
   SwipeCardItem, 
-  CardCategory 
+  CardCategory,
+  WOULD_YOU_RATHER,
+  WouldYouRatherQuestion,
 } from '../data/questions';
+import type { QuestionMood } from '../data/questionMood';
+import { rotateQuestions, shuffleQuestions } from './questionRotation';
 
 const STORAGE_KEY_SEEN = 'knotyet_seen_questions';
 const STORAGE_KEY_ANSWERED = 'jodohdeck_answered';
@@ -16,12 +20,24 @@ const STORAGE_KEY_ANSWERED = 'jodohdeck_answered';
  * Fisher-Yates shuffle algorithm for truly random, unbiased array distribution.
  */
 export function shuffleArray<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+  return shuffleQuestions(array);
+}
+
+const questionMoods = new Map<string, QuestionMood>([
+  ...SWIPE_CARDS.map(item => [item.id, item.mood] as const),
+  ...GUESS_QUIZ_LIST.map(item => [item.id, item.mood] as const),
+  ...MATCH_QUESTIONS.map(item => [item.id, item.mood] as const),
+  ...WOULD_YOU_RATHER.map(item => [item.id, item.mood] as const),
+  ...WHEEL_SEGMENTS.flatMap(segment => segment.promptIds.map((id, index) => [id, segment.promptMoods[index]] as const)),
+]);
+
+function getQuestionMoodHistory(): QuestionMood[] {
+  // Only actual local viewing history affects pacing. Cloud exclusions may also
+  // include queued cards that have not been shown yet, especially on the wheel.
+  return [...getSeenQuestionIds()].flatMap(id => {
+    const mood = questionMoods.get(id);
+    return mood ? [mood] : [];
+  });
 }
 
 /**
@@ -53,6 +69,8 @@ export function getSeenQuestionIds(additionalSeenIds?: Iterable<string>): Set<st
 export function markQuestionAsSeen(id: string): void {
   try {
     const seen = getSeenQuestionIds();
+    // Explicitly replayed choice rounds still affect the mood of the next deck.
+    seen.delete(id);
     seen.add(id);
     const arr = Array.from(seen);
     localStorage.setItem(STORAGE_KEY_SEEN, JSON.stringify(arr));
@@ -98,25 +116,15 @@ export function resetSeenQuestionsForPrefix(prefix: string): void {
 export function getShuffledMatchQuestions(count: number = 10, additionalSeenIds?: Iterable<string>): MatchQuestion[] {
   const seen = getSeenQuestionIds(additionalSeenIds);
   const available = MATCH_QUESTIONS.filter(question => !seen.has(question.id));
-  const compatibility = shuffleArray(available.filter(question => question.kind === 'compatibility'));
-  const hostSpotlight = shuffleArray(available.filter(question => question.kind === 'spotlight' && question.targetPlayer === 'host'));
-  const partnerSpotlight = shuffleArray(available.filter(question => question.kind === 'spotlight' && question.targetPlayer === 'partner'));
-  const spotlight: MatchQuestion[] = [];
-  while (hostSpotlight.length || partnerSpotlight.length) {
-    const first = hostSpotlight.shift();
-    const second = partnerSpotlight.shift();
-    if (first) spotlight.push(first);
-    if (second) spotlight.push(second);
-  }
-
-  const selected: MatchQuestion[] = [];
-  while (selected.length < count && (compatibility.length || spotlight.length)) {
-    const next = selected.length % 2 === 0
-      ? compatibility.shift() || spotlight.shift()
-      : spotlight.shift() || compatibility.shift();
-    if (next) selected.push(next);
-  }
-  return selected;
+  return rotateQuestions(available, count, getQuestionMoodHistory(), (question, selected) => {
+    const kind = selected.length % 2 === 0 ? 'compatibility' : 'spotlight';
+    if (question.kind !== kind) return false;
+    if (kind === 'compatibility') return true;
+    const spotlightCount = selected.filter(item => item.kind === 'spotlight').length;
+    const target = spotlightCount % 2 === 0 ? 'host' : 'partner';
+    const targetAvailable = available.some(item => item.kind === 'spotlight' && item.targetPlayer === target && !selected.includes(item));
+    return !targetAvailable || question.targetPlayer === target;
+  });
 }
 
 export function getMatchQuestionsByIds(ids: string[]): MatchQuestion[] {
@@ -135,8 +143,7 @@ export function getMatchQuestionsByIds(ids: string[]): MatchQuestion[] {
 
 export function getShuffledGuessQuestions(count: number = 10, additionalSeenIds?: Iterable<string>): GuessQuizItem[] {
   const seen = getSeenQuestionIds(additionalSeenIds);
-  const shuffled = shuffleArray(GUESS_QUIZ_LIST.filter(q => !seen.has(q.id)));
-  return shuffled.slice(0, Math.min(count, shuffled.length));
+  return rotateQuestions(GUESS_QUIZ_LIST.filter(q => !seen.has(q.id)), count, getQuestionMoodHistory());
 }
 
 export function getGuessQuestionsByIds(ids: string[]): GuessQuizItem[] {
@@ -161,8 +168,7 @@ export function getShuffledSwipeCards(category: CardCategory | 'all', count: num
     matching = matching.filter(c => c.category === category);
   }
 
-  const shuffled = shuffleArray(matching.filter(c => !seen.has(c.id)));
-  return shuffled.slice(0, Math.min(count, shuffled.length));
+  return rotateQuestions(matching.filter(c => !seen.has(c.id)), count, getQuestionMoodHistory());
 }
 
 export function getSwipeCardsByIds(ids: string[]): SwipeCardItem[] {
@@ -184,15 +190,24 @@ export const getWheelPromptId = (segmentId: string, promptIndex: number) =>
 
 export function getRandomUnseenWheelSelection(additionalSeenIds?: Iterable<string>): { segmentIndex: number; promptIndex: number; questionId: string } | null {
   const seen = getSeenQuestionIds(additionalSeenIds);
-  const availableSegments = WHEEL_SEGMENTS.map((segment, segmentIndex) =>
+  const available = WHEEL_SEGMENTS.flatMap((segment, segmentIndex) =>
     segment.prompts.map((_, promptIndex) => ({
       segmentIndex,
       promptIndex,
       questionId: segment.promptIds[promptIndex],
+      mood: segment.promptMoods[promptIndex],
     })).filter(item => !seen.has(item.questionId)),
-  ).filter(prompts => prompts.length > 0);
+  );
 
-  if (availableSegments.length === 0) return null;
-  const segment = availableSegments[Math.floor(Math.random() * availableSegments.length)];
-  return segment[Math.floor(Math.random() * segment.length)];
+  const selection = rotateQuestions(available, 1, getQuestionMoodHistory())[0];
+  if (!selection) return null;
+  const { segmentIndex, promptIndex, questionId } = selection;
+  return { segmentIndex, promptIndex, questionId };
+}
+
+export function getShuffledChoiceQuestions(count: number = 8): WouldYouRatherQuestion[] {
+  const seen = getSeenQuestionIds();
+  const unseen = WOULD_YOU_RATHER.filter(question => !seen.has(question.id));
+  // This game's explicit "Play another round" action can replay a completed pool.
+  return rotateQuestions(unseen.length ? unseen : WOULD_YOU_RATHER, count, getQuestionMoodHistory());
 }

@@ -4,8 +4,7 @@ import { createServer } from 'vite';
 // Load real TypeScript exports; this needs neither a browser nor a running app.
 const server = await createServer({ server: { middlewareMode: true }, appType: 'custom' });
 const candidateOnly = process.argv.includes('--candidate');
-// Use after explicit approval to switch every existing game to the new bank.
-// Until then, default validation covers the new English content and live shape.
+// Validate all rendered strings too when checking the published English bank.
 const requireEnglish = process.argv.includes('--require-english');
 try {
   const data = await server.ssrLoadModule('/src/data/englishQuestions.ts');
@@ -50,6 +49,7 @@ try {
     const pools = [SWIPE_CARDS, GUESS_QUIZ_LIST, MATCH_QUESTIONS, WOULD_YOU_RATHER];
     for (const pool of pools) {
       assert.equal(new Set(pool.map(item => item.id)).size, pool.length, 'pool IDs are unique');
+      assert.ok(pool.every(item => ['easy', 'fun', 'deep'].includes(item.mood)), 'every question has an explicit supported mood');
       if (requireEnglish) assert.ok(pool.every(item => item.id.includes('en2')), 'rewritten content uses fresh history IDs');
     }
     const swipeMap = new Map(SWIPE_CARDS.map(item => [item.id, item.question]));
@@ -59,6 +59,8 @@ try {
     }
     for (const segment of WHEEL_SEGMENTS) {
       assert.equal(segment.prompts.length, segment.promptIds.length, 'wheel text and IDs align');
+      assert.equal(segment.prompts.length, segment.promptMoods.length, 'wheel text and mood metadata align');
+      assert.ok(segment.promptMoods.every(mood => ['easy', 'fun', 'deep'].includes(mood)), 'wheel moods are valid');
       for (const [index, id] of segment.promptIds.entries()) {
         if (swipeMap.has(id)) assert.equal(segment.prompts[index], swipeMap.get(id), 'wheel history shares the exact swipe prompt');
       }

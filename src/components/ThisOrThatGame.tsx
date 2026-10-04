@@ -5,6 +5,7 @@ import { useGame } from '../store/GameContext';
 import { useMultiplayer } from '../store/MultiplayerContext';
 import { advanceChoice, choose, isChoiceRound, type Choice, type ChoiceRound } from '../utils/choiceGame';
 import { readJson, writeJson } from '../utils/storage';
+import { getShuffledChoiceQuestions, markQuestionAsSeen } from '../utils/questionManager';
 import { RoundLabel, ResultArt } from './GameCardDesign';
 import '../styles/choices.css';
 
@@ -12,12 +13,8 @@ const VALID_IDS = new Set(WOULD_YOU_RATHER.map(item => item.id));
 const QUESTIONS = new Map(WOULD_YOU_RATHER.map(item => [item.id, item]));
 type LocalMode = 'solo' | 'together';
 const freshRound = (): ChoiceRound => {
-  const ids = [...VALID_IDS];
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-  }
-  return { roundId: crypto.randomUUID(), ids: ids.slice(0, 8), index: 0, picks: [null, null], matches: 0 };
+  const ids = getShuffledChoiceQuestions(8).map(question => question.id);
+  return { roundId: crypto.randomUUID(), ids, index: 0, picks: [null, null], matches: 0 };
 };
 
 export function ThisOrThatGame() {
@@ -40,6 +37,10 @@ export function ThisOrThatGame() {
   const roundRef = useRef(round);
   const [handoverReady, setHandoverReady] = useState(false);
   const [synced, setSynced] = useState(!online || multiplayer.isHost);
+  const currentQuestionId = synced ? round?.ids[round.index] : undefined;
+  useEffect(() => {
+    if (currentQuestionId) markQuestionAsSeen(currentQuestionId);
+  }, [currentQuestionId]);
   const save = useCallback((next: ChoiceRound, broadcast = false) => {
     roundRef.current = next;
     setRound(next);
@@ -106,7 +107,7 @@ export function ThisOrThatGame() {
       <button disabled={!complete && round.picks.some(p => p !== null)} aria-pressed={mode === 'together'} onClick={() => restart('together')}><Users size={16} /> Pass the phone</button>
     </div>}
     {complete ? <div className="choices-panel choices-finish">
-      <ResultArt kind={solo ? 'smile' : 'together'} /><h2>{solo ? 'A little more you.' : 'Eight choices. Plenty to talk about.'}</h2>
+      <ResultArt kind={solo ? 'smile' : 'together'} /><h2>{solo ? 'A little more you.' : `${round.ids.length === 8 ? 'Eight' : round.ids.length} choices. Plenty to talk about.`}</h2>
       <p>{solo ? 'Which answer surprised you most?' : `You picked the same side ${round.matches} of ${round.ids.length} times. Which difference deserves another conversation?`}</p>
       {(!online || multiplayer.isHost) ? <button className="game-primary-action" onClick={() => restart()}><RotateCw size={18} /> Play another round</button> : <p role="status">Your host can start another round.</p>}
     </div> : passing ? <div className="choices-panel choices-finish" aria-live="polite">

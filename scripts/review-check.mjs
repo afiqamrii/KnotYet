@@ -6,6 +6,7 @@ process.env.KNOTYET_TEST_URL = base;
 
 const checks = [
   './question-content-check.mjs',
+  './question-rotation-check.mjs',
   './question-history-check.mjs',
   './game-intro-check.mjs',
   './card-sync-check.mjs',
