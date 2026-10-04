@@ -47,7 +47,8 @@ export type MultiplayerMessage =
   | { type: 'QUIZ_GUESS'; payload: string }
   | { type: 'QUIZ_NEXT' }
   | { type: 'SPIN_WHEEL'; payload: { rotation: number, segmentIndex: number, promptIndex: number } }
-  | { type: 'WHEEL_SUBMIT'; payload: string }
+  | { type: 'WHEEL_SUBMIT'; payload: { spinKey: string; answer: string } }
+  | { type: 'WHEEL_DISMISS'; payload: { spinKey: string } }
   | { type: 'SYNC_QUESTION_IDS'; payload: { game: GameMode; questionIds: string[]; currentIndex?: number } }
   | { type: 'MATCH_SELECT'; payload: string }
   | { type: 'MATCH_NEXT' }

@@ -41,7 +41,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const { checkLimit, incrementPlayCount } = useAuth();
   const multiplayer = useMultiplayer();
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
-  const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('num_mode') === 'solo' ? 'solo' : sessionStorage.getItem('num_mode') === 'together' || partner ? 'together' : 'solo');
+  const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('num_mode') === 'together' ? 'together' : 'solo');
 
   const [stage, setStage] = useState<'setup' | 'guess' | 'reveal'>(() => {
     if (multiplayer.status === 'connected') return 'guess';
@@ -279,7 +279,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
       </div>
 
       <div className="game-card activity-card game-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
-        <RoundLabel title="THE NUMBER DUEL" detail={`ROUND ${round}`} kind="game" />
+        <RoundLabel title={multiplayer.status !== 'connected' && localMode === 'solo' ? 'FIND THE NUMBER' : 'THE NUMBER DUEL'} detail={`ROUND ${round}`} kind="game" />
         {stage === 'setup' && (
           <div className="number-setup-stage w-full flex-1 flex flex-col items-center justify-center animate-slide-up">
             <div className="text-center space-y-1 shrink-0">

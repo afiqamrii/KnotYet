@@ -421,8 +421,8 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
         {pointsToast && (
           <ReactionDialog positive={pointsToast.positive} title={pointsToast.positive ? (currentQuiz.kind === 'spotlight' ? 'You know each other!' : 'Great minds, same answer!') : (currentQuiz.kind === 'spotlight' ? 'A new thing to learn!' : 'Opposites keep it fun!')} points={pointsToast.text}>
             <div className="reaction-answers">
-              <div><small>You</small><p>{myAnswer}</p></div>
-              <div><small>{multiplayer.remoteProfile?.name || 'Partner'}</small><p>{partnerAnswer}</p></div>
+              <div><small>{multiplayer.status === 'connected' ? 'You' : profile?.name || 'Player 1'}</small><p>{myAnswer}</p></div>
+              <div><small>{partnerName}</small><p>{partnerAnswer}</p></div>
             </div>
             <GiphyReaction mood={pointsToast.positive ? 'match' : 'miss'} seed={currentQuiz.id} />
             <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} disabled={multiplayer.status === 'connected' && !multiplayer.isHost} className="reaction-next">
@@ -449,6 +449,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
             {spotlightIsMe ? 'Pick your real answer. Your partner is guessing!' : `Guess ${spotlightName}'s answer. Both choices reveal together!`}
           </p>
         )}
+        {currentQuiz.kind !== 'spotlight' && stage === 'vote' && <p className="text-[11px] sm:text-xs font-semibold text-ink-3 mb-1.5">{multiplayer.status === 'connected' ? 'Choose what feels like you.' : `${localSecondPlayer ? partnerName : profile?.name || 'Player 1'}, choose what feels like you.`} Both answers reveal after you each pick.</p>}
         <h3 className={`question-text ${currentQuiz.question.length > 140 ? 'question-long' : ''}`}>
           {currentQuiz.question}
         </h3>

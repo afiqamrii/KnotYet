@@ -106,7 +106,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
   const isFirstPlayerTarget = currentIndex % 2 === 0;
   const isMySecretTurn = multiplayer.status !== 'connected' || (isFirstPlayerTarget ? multiplayer.isHost : !multiplayer.isHost);
   const secretName = multiplayer.status === 'connected' ? (isMySecretTurn ? profile?.name || 'You' : partnerName) : (isFirstPlayerTarget ? profile?.name || 'Player 1' : partner?.name || 'Player 2');
-  const guesserName = isFirstPlayerTarget ? partner?.name || 'Player 2' : profile?.name || 'Player 1';
+  const guesserName = multiplayer.status === 'connected' ? (isMySecretTurn ? partnerName : profile?.name || 'You') : (isFirstPlayerTarget ? partner?.name || 'Player 2' : profile?.name || 'Player 1');
 
   // Save a prompt when it reaches the player, rather than waiting for an
   // answer. Leaving and returning to a round therefore cannot repeat it.
@@ -474,8 +474,8 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         {pointsToast && (
           <ReactionDialog positive={pointsToast.positive} title={pointsToast.positive ? 'You get each other!' : 'A new thing about you!'} points={pointsToast.text}>
             <div className="reaction-answers">
-              <div><small>Their answer</small><p>{actualAnswer}</p></div>
-              <div><small>Your guess</small><p>{guessedAnswer}</p></div>
+              <div><small>{secretName}'s answer</small><p>{actualAnswer}</p></div>
+              <div><small>{guesserName}'s guess</small><p>{guessedAnswer}</p></div>
             </div>
             <GiphyReaction mood={pointsToast.positive ? 'match' : 'miss'} seed={currentQuiz.id} />
             <button type="button" data-result-next onClick={() => { sounds.playFlip(); handleNext(); }} disabled={multiplayer.status === 'connected' && !multiplayer.isHost} className="reaction-next">

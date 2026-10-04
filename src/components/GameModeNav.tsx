@@ -13,11 +13,11 @@ interface GameModeNavProps {
 
 const MODES: Array<{ id: PlayableTab; shortLabel: string; description: string; shortcut: string; icon: ComponentType<LucideProps> }> = [
   { id: 'swipe', shortLabel: 'Cards', description: 'A little deeper', shortcut: '1', icon: Layers3 },
-  { id: 'quiz', shortLabel: 'Heart', description: 'Know your person?', shortcut: '2', icon: Heart },
+  { id: 'quiz', shortLabel: 'Heart', description: 'Two players · take turns', shortcut: '2', icon: Heart },
   { id: 'wheel', shortLabel: 'Wheel', description: 'Leave it to luck', shortcut: '3', icon: Dices },
   { id: 'number', shortLabel: 'Numbers', description: 'Solo or take turns', shortcut: '4', icon: Hash },
   { id: 'letter', shortLabel: 'Letters', description: 'Solo or a quick race', shortcut: '5', icon: TextCursor },
-  { id: 'match', shortLabel: 'Match', description: 'Same phone or online', shortcut: '6', icon: HeartHandshake },
+  { id: 'match', shortLabel: 'Match', description: 'Two players · private picks', shortcut: '6', icon: HeartHandshake },
   { id: 'choices', shortLabel: 'This or That', description: 'Solo or compare sides', shortcut: '7', icon: Dices },
 ];
 

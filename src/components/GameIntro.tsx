@@ -21,7 +21,7 @@ const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
   swipe: {
     title: 'Icebreaker Cards', eyebrow: 'Conversation', subtitle: 'Quick answers, unexpected laughs, and a little room for the deeper stuff.', accent: '#ff829e', icon: Layers3,
     steps: [
-      { title: 'Read together', description: 'Take a moment with the prompt before answering.' },
+      { title: 'Read the prompt', description: 'Answer to yourself or talk it through together.' },
       { title: 'Swipe right', description: 'Move on when the conversation feels complete.' },
       { title: 'Swipe left', description: 'Skip anything that does not fit the moment.' },
     ],
@@ -34,16 +34,16 @@ const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
       { title: 'Pass the phone', description: 'Give your partner space to make a guess.' },
       { title: 'Reveal together', description: 'Compare answers and talk about the surprise.' },
     ],
-    buttonText: 'Make the first guess', tipText: 'The interesting part is why you chose the answer—not the score.',
+    buttonText: 'Choose the first secret answer', tipText: 'Two players: share a phone or join an online room. Take turns choosing and guessing.',
   },
   wheel: {
-    title: 'Anti-Awkward Wheel', eyebrow: 'Let chance choose', subtitle: 'A colorful nudge when neither of you knows what to ask next.', accent: '#f9d77e', icon: Dices,
+    title: 'Anti-Awkward Wheel', eyebrow: 'Let chance choose', subtitle: 'Spin for a fresh question. Reflect on your own or talk together.', accent: '#f9d77e', icon: Dices,
     steps: [
       { title: 'Spin once', description: 'Let the wheel choose a conversation theme.' },
       { title: 'Read the prompt', description: 'Some are quick, some are playful, and some need a moment.' },
       { title: 'Follow the thread', description: 'Stay with the topic if it leads somewhere good.' },
     ],
-    buttonText: 'Spin a new topic', tipText: 'Put the phone between you so the wheel feels shared.',
+    buttonText: 'Spin a new topic', tipText: 'Answer, then tap Answered. If a prompt does not fit, skip it and spin again.',
   },
   match: {
     title: 'Couple Match', eyebrow: 'Compatibility', subtitle: 'Answer the same question and see where your instincts meet.', accent: '#c7b4ff', icon: HeartHandshake,
@@ -52,7 +52,7 @@ const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
       { title: 'Reveal together', description: 'Both answers appear at the same moment.' },
       { title: 'Talk it through', description: 'A mismatch can be more interesting than a match.' },
     ],
-    buttonText: 'Start matching', tipText: 'Honest answers make the result much more meaningful.',
+    buttonText: 'Start matching', tipText: 'Two players: share a phone or play online. Each person chooses privately before the reveal.',
   },
   number: {
     title: 'Number Guesser', eyebrow: 'A quick challenge', subtitle: 'Find the hidden number on your own, or make it a friendly contest.', accent: '#d5f578', icon: Hash,

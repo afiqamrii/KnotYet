@@ -63,7 +63,6 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
 
   // Advanced Game Rules Logic
   const isMultiplayer = multiplayer.status === 'connected';
-  let canSwipe = true;
   let canFlip = true;
   let isMyTurnToAsk = true;
 
@@ -72,25 +71,12 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       // Turn-based Teka Teki
       isMyTurnToAsk = (cardIndex % 2 === 0) ? !!multiplayer.isHost : !multiplayer.isHost;
       canFlip = isMyTurnToAsk; // Only asker can reveal answer
-      canSwipe = isMyTurnToAsk && !!partnerAnswer && answerRevealedToPartner;
     } else if (card.category === 'dare-santai') {
       // Challenges are played together in person, without typed answers.
-      canSwipe = true;
       canFlip = true;
     } else {
       // Taaruf (Simultaneous Typing)
-      canSwipe = !!(myAnswer && partnerAnswer);
       canFlip = true;
-    }
-  } else {
-    // Solo Mode
-    if (card.category === 'teka-teki' || card.category === 'dare-santai') {
-      canFlip = true;
-      canSwipe = true;
-    } else {
-      // Taaruf/Vibe check: No flip, just read and swipe
-      canFlip = false;
-      canSwipe = true;
     }
   }
 
@@ -121,8 +107,8 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
 
   return (
     <motion.div style={containerStyle} animate={containerAnimate} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      drag={isTop && canSwipe ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.65}
-      onDragEnd={isTop && canSwipe ? handleDragEnd : undefined} className={containerClassName} aria-hidden={!isTop}>
+      drag={isTop ? 'x' : false} dragConstraints={{ left: 0, right: 0 }} dragElastic={0.65}
+      onDragEnd={isTop ? handleDragEnd : undefined} className={containerClassName} aria-hidden={!isTop}>
       {isTop && <>
         <motion.div className="card-swipe-stamp stamp-pass" style={{ opacity: passOpacity }}><Check /> {t.passLabel}</motion.div>
         <motion.div className="card-swipe-stamp stamp-skip" style={{ opacity: skipOpacity }}><X /> {t.skipLabel}</motion.div>
@@ -130,7 +116,8 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
       <motion.div animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: .42, ease: [.4, 0, .2, 1] }}
         className="swipe-card conversation-card w-full h-full relative transform-style-3d" style={{ '--card-tint': catColors.bg } as React.CSSProperties}>
         <div className="swipe-card-front conversation-face backface-hidden" aria-hidden={isFlipped}>
-          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind={catColors.icon} /> {card.categoryLabel}</span><span className="conversation-turn"><UiSymbol kind="users" />{card.turn === 'Lelaki' ? 'Player 1' : card.turn === 'Perempuan' ? 'Player 2' : 'You two'}</span></header>
+          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind={catColors.icon} /> {card.categoryLabel}</span><span className="conversation-turn"><UiSymbol kind="users" />{isMultiplayer ? (card.category === 'teka-teki' ? (isMyTurnToAsk ? 'You ask' : 'You guess') : 'Both of you') : 'Your pace'}</span></header>
+          {!isMultiplayer && card.category !== 'dare-santai' && <p className="conversation-notice">{card.category === 'teka-teki' ? 'Try an answer, then reveal it. Tap Answered to move on, or Skip to pass.' : 'Answer to yourself or talk together. The follow-up is optional. Tap Answered when you’re ready.'}</p>}
           {card.category === 'dare-santai' && <p className="conversation-notice">Open How to play, try the challenge, then swipe to continue. Passing is always fine.</p>}
           {isMultiplayer && card.category === 'teka-teki' && <p className="conversation-notice">{isMyTurnToAsk ? (partnerAnswer ? `${partnerName} guessed: “${partnerAnswer}” — reveal together!` : `Ask ${partnerName} this riddle, then wait for their typed guess.`) : `${partnerName} is asking you — type your guess before the reveal.`}</p>}
           {isMultiplayer && partnerAnswer && !myAnswer && card.category !== 'teka-teki' && <p className="conversation-notice">{partnerName} has answered. Your turn to reply.</p>}
@@ -146,13 +133,13 @@ export const SwipeCard: React.FC<SwipeCardProps> = ({
                   <label htmlFor={`riddle-guess-${card.id}`}>What is your guess?</label><input id={`riddle-guess-${card.id}`} name="guess" autoComplete="off" placeholder="Type your clever guess…" disabled={!isTop} required />
                   <button type="submit" className="card-reveal-button" disabled={!isTop}><UiSymbol kind="message" /> Lock in my guess <UiSymbol kind="next" /></button>
                 </form>
-            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' && isMultiplayer ? 'Peek at the answer privately' : card.category === 'teka-teki' ? t.revealAnswer : card.category === 'dare-santai' ? 'How to play' : 'Share your answers'}<UiSymbol kind="next" /></button>
+            ) : canFlip ? <button type="button" onClick={toggleFlip} disabled={!isTop || isFlipped} className="card-reveal-button"><UiSymbol kind={card.category === 'teka-teki' ? 'flip' : 'message'} />{card.category === 'teka-teki' && isMultiplayer ? 'Peek at the answer privately' : card.category === 'teka-teki' ? t.revealAnswer : card.category === 'dare-santai' ? 'How to play' : isMultiplayer ? 'Share your answers' : 'Explore the follow-up'}<UiSymbol kind="next" /></button>
             : <span className="conversation-prompt">No perfect answer. Just your answer.</span>}
             <div className="conversation-directions"><span><UiSymbol kind="back" /> {t.skipLeft}</span><span>{t.passRight} <UiSymbol kind="next" /></span></div>
           </footer>
         </div>
         <div className="swipe-card-back conversation-face conversation-answer backface-hidden rotate-y-180" aria-hidden={!isFlipped}>
-          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind="lock" /> THE REVEAL</span><button type="button" className="card-back-button" aria-label="Back to the question" disabled={!isTop || !isFlipped || answerRevealedToPartner} onClick={toggleFlip}><UiSymbol kind="flip" /></button></header>
+          <header className="conversation-top"><span className="conversation-category"><UiSymbol kind="lock" /> {card.category === 'teka-teki' ? 'THE ANSWER' : card.category === 'dare-santai' ? 'HOW TO PLAY' : 'A LITTLE MORE TO EXPLORE'}</span><button type="button" className="card-back-button" aria-label="Back to the question" disabled={!isTop || !isFlipped || answerRevealedToPartner} onClick={toggleFlip}><UiSymbol kind="flip" /></button></header>
           <div className="conversation-answer-body">
             <span className="conversation-answer-label">{card.flipContent.title}</span>
             <p className="question-text answer-text">{card.flipContent.description}</p>

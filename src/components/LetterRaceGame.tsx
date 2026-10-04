@@ -41,7 +41,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const multiplayer = useMultiplayer();
   const isMultiplayer = multiplayer.status === 'connected';
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
-  const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('letter_mode') === 'solo' ? 'solo' : sessionStorage.getItem('letter_mode') === 'together' || partner ? 'together' : 'solo');
+  const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('letter_mode') === 'together' ? 'together' : 'solo');
 
   const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => multiplayer.status === 'connected' ? 'wait' : readStringUnion(sessionStorage, 'letter_stage', ['wait', 'race', 'winner'] as const, 'wait'));
   const [letter, setLetter] = useState<string | null>(() => sessionStorage.getItem('letter_char') || null);
@@ -277,8 +277,9 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="text-center space-y-1.5">
               <h3 className="text-lg sm:text-xl font-black text-ink">Ready to Race?</h3>
               <p className="text-xs sm:text-sm text-ink-3 font-medium max-w-xs">
-                {isMultiplayer || localMode === 'solo'
-                  ? "A random letter will appear. Be the first to type a word starting with it!" 
+                {isMultiplayer
+                  ? "A random letter will appear. Be the first to type a word starting with it!"
+                  : localMode === 'solo' ? "A letter will appear after 3, 2, 1. Type a word starting with it, then tap Submit."
                   : "Put phone between you. When the letter appears, shout a word and be the first to tap your side!"}
               </p>
             </div>
@@ -329,6 +330,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="rotate-180 text-white text-center">
+                <span className="block text-sm font-black">{partner?.name || 'Player 2'}</span>
                 <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
                 <span className="inline-flex items-center gap-1.5 text-xs sm:text-base md:text-lg font-black bg-black/25 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">
                   <span>TAP IF YOU GOT IT!</span>
@@ -348,6 +350,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             >
               <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] scale-150"></div>
               <div className="text-white text-center">
+                <span className="block text-sm font-black">{profile?.name || 'Player 1'}</span>
                 <span className="block text-3xl sm:text-4xl font-black drop-shadow-lg mb-1 sm:mb-2">{letter}</span>
                 <span className="inline-flex items-center gap-1.5 text-xs sm:text-base md:text-lg font-black bg-black/25 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full backdrop-blur-sm group-active:scale-95 transition-transform">
                   <span>TAP IF YOU GOT IT!</span>
@@ -363,7 +366,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
             <div className="text-center">
               <h2 className="text-6xl sm:text-8xl font-black text-fuchsia-600 drop-shadow-xl mb-1">{letter}</h2>
               <p className="text-fuchsia-500 font-bold text-xs sm:text-sm">Type a real word starting with '{letter}' — at least two letters.</p>
-              <p className="text-[10px] text-ink-3 mt-1">Real words only. Play on the honour system.</p>
+              <p className="text-[10px] text-ink-3 mt-1">Honour system: you check the word; the game checks its starting letter.</p>
             </div>
             
             <form onSubmit={handleWordSubmit} className="w-full max-w-md mx-auto space-y-3">
@@ -398,10 +401,10 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
           <div className="completion-reveal flex-1 flex flex-col items-center justify-center p-3 sm:p-6 text-center animate-pop-in z-10">
             <GiphyReaction mood="win" seed={`letter-${letter}-${winner.name}`} compact />
             
-            <h3 className="text-xl sm:text-2xl font-black text-ink mb-1.5">{winner.name} Wins!</h3>
+            <h3 className="text-xl sm:text-2xl font-black text-ink mb-1.5">{!isMultiplayer && localMode === 'solo' ? 'Word found!' : `${winner.name} Wins!`}</h3>
             
             <div className="completion-word mb-4 sm:mb-6">
-              <p className="text-xs text-ink-3 font-semibold mb-0.5">Winning word for '{letter}':</p>
+              <p className="text-xs text-ink-3 font-semibold mb-0.5">{!isMultiplayer && localMode === 'together' ? `You claimed the letter '${letter}'` : `Your word for '${letter}':`}</p>
               <p className="text-xl sm:text-2xl font-black text-fuchsia-600">{winner.word}</p>
             </div>
             

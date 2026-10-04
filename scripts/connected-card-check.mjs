@@ -14,7 +14,7 @@ import { SwipeCard } from '/src/components/SwipeCard.tsx';
 import { SWIPE_CARDS } from '/src/data/questions.ts';
 import '/src/index.css'; import '/src/styles/play.css';
 window.sent = [];
-window.fixtureMp = {status:'connected',isHost:true, remoteProfile:{name:'Jamie',avatarId:'mochi'},messageListener:{current:null},sendMessage:msg=>window.sent.push(msg)};
+window.fixtureMp = {status:'connected',isHost:true, questionDecks:{},questionIndices:{},remoteProfile:{name:'Jamie',avatarId:'mochi'},messageListener:{current:null},sendMessage:msg=>window.sent.push(msg),subscribeMessage:fn=>{window.fixtureMp.messageListener.current=fn;return()=>{window.fixtureMp.messageListener.current=null}}};
 function Cards(){
  const [flipped,setFlipped]=React.useState(false); const [answer,setAnswer]=React.useState(null);
  const card=SWIPE_CARDS.filter(card=>card.category==='vibe-check').sort((a,b)=>b.question.length-a.question.length)[0];
@@ -32,12 +32,12 @@ try {
     const url=new URL(route.request().url());
     if(url.pathname==='/connected-card-fixture')return route.fulfill({contentType:'text/html',body:html});
     if(url.pathname==='/src/store/MultiplayerContext.tsx')return route.fulfill({contentType:'application/javascript',body:'export const useMultiplayer=()=>window.fixtureMp;'});
-    if(url.hostname!=='localhost' && !url.hostname.endsWith('googleapis.com') && !url.hostname.endsWith('gstatic.com'))return route.fulfill({contentType:'application/json',body:'null'});
+    if(url.origin!==new URL(baseUrl).origin && !url.hostname.endsWith('googleapis.com') && !url.hostname.endsWith('gstatic.com'))return route.fulfill({contentType:'application/json',body:'null'});
     return route.continue();
    });
    const page=await context.newPage(); page.on('pageerror',error=>errors.push(error.message));
    await page.goto(`${baseUrl}/connected-card-fixture?mode=${mode}`);
-   await page.locator('.question-text').first().waitFor();
+   await page.locator('.question-text').first().waitFor().catch(error=>{throw new Error(errors.join(' | ') || error.message)});
    await page.evaluate(()=>document.fonts.ready);
    await page.screenshot({path:`artifacts/cards-${width}-connected-${mode}.png`,fullPage:true});
    if(mode==='match') {

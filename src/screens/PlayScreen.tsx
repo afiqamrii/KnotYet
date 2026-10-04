@@ -393,7 +393,9 @@ export const PlayScreen: React.FC = () => {
     : true;
   const canAdvanceCurrentCard = !currentCard || multiplayer.status !== 'connected'
     ? true
-    : currentCard.category === 'teka-teki'
+    : currentCard.category === 'dare-santai'
+      ? true
+      : currentCard.category === 'teka-teki'
       ? Boolean(isRiddleAsker ? partnerCardAnswer : myCardAnswer) && riddleAnswerRevealed
       : Boolean(myCardAnswer && partnerCardAnswer);
 

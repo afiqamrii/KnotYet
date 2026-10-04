@@ -9,19 +9,21 @@ const fixture = `<!doctype html><html><head><meta name="viewport" content="width
 import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
 await import('/src/index.css');
 localStorage.setItem('jodohdeck_profile',JSON.stringify({name:'Alex',avatarId:'sunny',heartPoints:0}));
-sessionStorage.setItem('swipe_category','vibe-check');
+const solo=location.search.includes('solo'),dare=location.search.includes('dare'),category=dare?'dare-santai':'vibe-check';
+sessionStorage.setItem('swipe_category',category);
 const { SWIPE_CARDS } = await import('/src/data/questions.ts');
-const deck=SWIPE_CARDS.filter(c=>c.category==='vibe-check').slice(0,4).map(c=>c.id);
-sessionStorage.setItem('swipe_deck',JSON.stringify({category:'vibe-check',ids:deck}));
+const deck=SWIPE_CARDS.filter(c=>c.category===category).slice(0,4).map(c=>c.id);
+sessionStorage.setItem('swipe_deck',JSON.stringify({category,ids:deck}));
 const listeners=new Set();window.sent=[];window.receive=msg=>listeners.forEach(fn=>fn(msg));
 const host=!location.search.includes('guest');
-window.mp={status:'connected',isHost:host,isConnected:true,activeGame:'swipe',roomCode:'123456',remoteProfile:{name:'Jamie',avatarId:'mochi'},questionDecks:{swipe:deck},questionIndices:{swipe:0},chatMessages:[],unreadChatCount:0,latestIncomingMessage:null,subscribeMessage:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},sendMessage:msg=>window.sent.push(msg),clearUnreadChatCount:()=>{},sendChatMessage:()=>true};
+window.mp={status:solo?'disconnected':'connected',isHost:host,isConnected:!solo,activeGame:'swipe',roomCode:solo?null:'123456',remoteProfile:{name:'Jamie',avatarId:'mochi'},questionDecks:{swipe:deck},questionIndices:{swipe:0},chatMessages:[],unreadChatCount:0,latestIncomingMessage:null,subscribeMessage:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},sendMessage:msg=>window.sent.push(msg),clearUnreadChatCount:()=>{},sendChatMessage:()=>true};
 const React=(await import('/@id/react')).default;const {createRoot}=(await import('/@id/react-dom/client')).default;
 const {GameProvider}=await import('${gameContextUrl}');const {PlayScreen}=await import('/src/screens/PlayScreen.tsx');
 createRoot(document.getElementById('root')).render(React.createElement(GameProvider,null,React.createElement(React.Suspense,{fallback:'Loading'},React.createElement(PlayScreen))));
 </script></body></html>`;
 try {
-  for (const guest of [false, true]) {
+  for (const mode of ['host','guest','solo','dare']) {
+    const guest=mode==='guest';
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
@@ -33,14 +35,26 @@ try {
       return route.continue();
     });
     const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${base}/card-sync-fixture${guest ? '?guest' : ''}`);
+    await page.goto(`${base}/card-sync-fixture?${mode}`);
     await page.locator('#intro-swipe').waitFor({timeout: 10000}).catch(async e => { throw new Error(errors.join(' | ') || await page.locator('body').innerText() || e.message); });
     if (guest) await page.evaluate(() => window.receive({ type: 'START_GAME', payload: { game: 'swipe' } }));
-    else await page.getByRole('button', { name: 'Start together' }).click();
+    else await page.getByRole('button', { name: mode==='solo' ? 'Start with a card' : 'Start together' }).click();
     await page.locator('.game-action-skip').waitFor();
     assert.equal(await page.locator('.game-action-skip').isEnabled(), true, 'skip stays available without answers');
-    assert.equal(await page.locator('.game-action-next').isDisabled(), true);
-    if (guest) {
+    assert.equal(await page.locator('.game-action-next').isDisabled(), mode==='host'||guest);
+    if(mode==='solo') {
+      assert.equal(await page.locator('.conversation-turn').last().innerText(),'Your pace','solo has no phantom Player 2');
+      await page.getByRole('button',{name:'Explore the follow-up'}).click();
+      await page.getByRole('button',{name:'Back to the question',exact:true}).waitFor();
+      assert.match(await page.locator('.conversation-answer-body').last().innerText(),/\S/,'solo follow-up is reachable');
+      await page.getByRole('button',{name:'Back to the question',exact:true}).click();
+      await page.screenshot({path:'artifacts/review-solo-cards-mobile.png',fullPage:true});
+      await page.locator('.game-action-next').click();assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('swipe_index'))),1,'Answered advances the solo deck once');
+    } else if(mode==='dare') {
+      await page.getByRole('button',{name:'How to play',exact:true}).click();
+      assert.equal(await page.locator('.conversation-response input').count(),0,'challenge has no unnecessary answer form');
+      await page.locator('.game-action-next').click();assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('swipe_index'))),1,'online challenge finishes without typed answers');
+    } else if (guest) {
       assert.equal(await page.locator('.game-category-pill:enabled').count(), 0, 'guest cannot replace host deck');
       await page.locator('.game-action-skip').click();
       assert.equal(await page.evaluate(() => window.sent.filter(m => m.type === 'SWIPE_REQUEST').length), 1);

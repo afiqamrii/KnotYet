@@ -6,6 +6,7 @@ const executablePath = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrom
 const browser = await chromium.launch({ executablePath, headless: true });
 const componentSource = await (await fetch(`${baseUrl}/src/components/SpinWheel.tsx`)).text();
 const gameContextUrl = componentSource.match(/import \{[^}]*useGame[^}]*\} from "([^"]+)"/)[1];
+const multiplayerContextUrl = componentSource.match(/import \{[^}]*useMultiplayer[^}]*\} from "([^"]+)"/)[1];
 const fixture = `<!doctype html><html><body><main id="root"></main><script type="module">
   import RefreshRuntime from '/@react-refresh';
   RefreshRuntime.injectIntoGlobalHook(window);
@@ -20,7 +21,7 @@ const fixture = `<!doctype html><html><body><main id="root"></main><script type=
   const ReactDOMClient = (await import('/@id/react-dom/client')).default;
   const { AuthProvider } = await import('/src/store/AuthContext.tsx');
   const { GameProvider } = await import('${gameContextUrl}');
-  const { MultiplayerProvider } = await import('/src/store/MultiplayerContext.tsx');
+  const { MultiplayerProvider } = await import('${multiplayerContextUrl}');
   const { SpinWheel } = await import('/src/components/SpinWheel.tsx');
   ReactDOMClient.createRoot(document.getElementById('root')).render(
     React.createElement(AuthProvider, null,
