@@ -86,6 +86,16 @@ try {
   assert.equal(new Set(result.wheelSeen).size, result.wheelSeen.length, 'wheel prompts never repeat');
   assert.equal(result.exhaustedWheel, null, 'the wheel stays exhausted instead of recycling prompts');
   assert.deepEqual(result.stored, [...result.sharedIds, ...result.wheelSeen], 'wheel history stays stored after exhaustion');
+  const recovered = await page.evaluate(() => {
+    localStorage.setItem('knotyet_seen_questions', '{broken');
+    localStorage.setItem('jodohdeck_answered', JSON.stringify(['saved-question', null, 42]));
+    const fromLegacy = [...window.questionHistory.getSeenQuestionIds()];
+    localStorage.setItem('knotyet_seen_questions', JSON.stringify(['seen-question']));
+    localStorage.setItem('jodohdeck_answered', 'null');
+    return { fromLegacy, fromCurrent: [...window.questionHistory.getSeenQuestionIds()] };
+  });
+  assert.deepEqual(recovered.fromLegacy, ['saved-question'], 'a damaged current cache does not erase valid legacy history');
+  assert.deepEqual(recovered.fromCurrent, ['seen-question'], 'a damaged legacy cache does not erase current history');
   console.log('Question history: persisted, cloud exclusions, and no automatic recycling passed');
   await context.close();
 } finally { await browser.close(); }

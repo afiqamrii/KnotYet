@@ -17,9 +17,18 @@ export const InviteScreen: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [invite] = useState<FriendInvite | null>(() => {
     const fromLink = parseFriendInvite(location.search);
-    if (fromLink) { sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(fromLink)); return fromLink; }
+    if (fromLink) {
+      try { sessionStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(fromLink)); } catch { /* The current link remains usable without a browser cache. */ }
+      return fromLink;
+    }
     if (location.search) return null;
-    try { return JSON.parse(sessionStorage.getItem(PENDING_INVITE_KEY) || 'null'); } catch { return null; }
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(PENDING_INVITE_KEY) || 'null');
+      if (!stored || typeof stored !== 'object') return null;
+      const value = stored as Record<string, unknown>;
+      if (typeof value.id !== 'string' || typeof value.token !== 'string' || typeof value.name !== 'string' || typeof value.avatar !== 'string' || typeof value.rel !== 'string') return null;
+      return parseFriendInvite(new URLSearchParams({ cid: value.id, key: value.token, n: value.name, a: value.avatar, r: value.rel }).toString());
+    } catch { return null; }
   });
   const accept = async () => {
     if (!invite || busy) return;
@@ -34,7 +43,7 @@ export const InviteScreen: React.FC = () => {
       const { error: acceptError } = await supabase.rpc('accept_chat_invite', { invite_token: invite.token });
       if (acceptError) throw acceptError;
       sounds.playSuccess();
-      sessionStorage.removeItem(PENDING_INVITE_KEY);
+      try { sessionStorage.removeItem(PENDING_INVITE_KEY); } catch { /* A successful connection must not depend on optional cache cleanup. */ }
       await refreshCouple();
       navigate('/play');
     } catch {
@@ -59,7 +68,7 @@ export const InviteScreen: React.FC = () => {
           <div className="invite-perks"><span><Check size={18} /> Add each other to your circle</span><span><Check size={18} /> Chat and send game invites</span></div>
           <p className="invite-note">Your connection and chat history are securely saved to your account.</p>
           {error && <p role="alert" className="invite-error">{error}</p>}
-          <button className="btn-chunky btn-purple" disabled={busy} onClick={() => void accept()}>{busy ? 'Opening Google sign-inâ€¦' : user ? 'Accept & connect' : 'Sign in & accept invite'}<ArrowRight size={18} /></button>
+          <button className="btn-chunky btn-purple" disabled={busy} onClick={() => void accept()}>{busy ? user ? 'Connecting…' : 'Opening Google sign-in…' : user ? 'Accept & connect' : 'Sign in & accept invite'}<ArrowRight size={18} /></button>
           {!user && <p className="invite-note">An account is required so your friendship and messages stay connected.</p>}
         </>}
       </section>

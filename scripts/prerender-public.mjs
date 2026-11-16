@@ -6,6 +6,14 @@ import { createServer } from 'vite';
 
 const routes = [
   {
+    path: '/arcade',
+    source: '/src/screens/FreeArcadeScreen.tsx',
+    component: 'FreeArcadeScreen',
+    output: 'arcade/index.html',
+    title: 'Free games for a little us time | KnotYet',
+    description: 'Play Memory Match and Story Builder for free. A little memory, a little imagination, solo or together on one screen. No account needed.',
+  },
+  {
     path: '/',
     source: '/src/screens/LandingPage.tsx',
     component: 'LandingPage',

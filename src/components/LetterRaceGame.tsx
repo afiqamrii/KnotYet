@@ -1,8 +1,9 @@
 import { UiSymbol, RoundLabel } from './GameCardDesign';
 import { GiphyReaction } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, useRef, Component, ErrorInfo } from 'react';
-import { readJson, readStringUnion, STORAGE_KEYS, writeJson } from '../utils/storage';
+import { clearStorageKeys, readJson, STORAGE_KEYS, writeJson } from '../utils/storage';
 import confetti from 'canvas-confetti';
+import { restoreLetterSession, validateLetterSnapshot, type LetterRoundSnapshot } from '../utils/letterSession';
 import { Zap } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
@@ -43,31 +44,38 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
   const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('letter_mode') === 'together' ? 'together' : 'solo');
 
-  const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(() => multiplayer.status === 'connected' ? 'wait' : readStringUnion(sessionStorage, 'letter_stage', ['wait', 'race', 'winner'] as const, 'wait'));
-  const [letter, setLetter] = useState<string | null>(() => sessionStorage.getItem('letter_char') || null);
-  const [winner, setWinner] = useState<{name: string, word: string} | null>(() => {
-    try {
-      return readJson<{ name: string; word: string } | null>(sessionStorage, 'letter_winner', null);
-    } catch { return null; }
-  });
-  
+  const roomCode = multiplayer.roomCode || null;
+  const online = Boolean(roomCode) || isMultiplayer;
+  const [restored] = useState(() => restoreLetterSession(sessionStorage, roomCode, online));
+  const [synced, setSynced] = useState(!online || multiplayer.isHost);
+  const syncedRef = useRef(synced);
+  syncedRef.current = synced;
+  const [stage, setStage] = useState<'wait' | 'countdown' | 'race' | 'winner'>(restored?.stage || 'wait');
+  const [letter, setLetter] = useState<string | null>(restored?.letter || null);
+  const [winner, setWinner] = useState<{name: string, word: string} | null>(restored?.winner || null);
+
   const [countdown, setCountdown] = useState(3);
   const [inputValue, setInputValue] = useState('');
   const [submissionPending, setSubmissionPending] = useState(false);
   const stageRef = useRef(stage);
-  const roundIdRef = useRef(sessionStorage.getItem('letter_roundId') || 'local');
+  const roundIdRef = useRef(restored?.roundId || 'local');
+  const countdownEndsAt = useRef(restored?.countdownEndsAt || 0);
+  const snapshotRef = useRef<LetterRoundSnapshot | null>(null);
+  snapshotRef.current = roomCode ? { roomCode, roundId: roundIdRef.current, stage, letter, winner, remainingMs: stage === 'countdown' ? Math.max(0, Math.min(3000, countdownEndsAt.current - Date.now())) : 0 } : null;
   const countdownTimers = useRef<number[]>([]);
   useEffect(() => () => countdownTimers.current.forEach(window.clearTimeout), []);
 
   useEffect(() => {
+    if (online && !synced) return;
+    writeJson(sessionStorage, 'letter_session', { roomCode: online ? roomCode : null, roundId: roundIdRef.current, stage, letter, winner, remainingMs: stage === 'countdown' ? Math.max(0, Math.min(3000, countdownEndsAt.current - Date.now())) : 0, countdownEndsAt: countdownEndsAt.current });
     sessionStorage.setItem('letter_stage', stage);
     if (letter) sessionStorage.setItem('letter_char', letter); else sessionStorage.removeItem('letter_char');
     if (winner) sessionStorage.setItem('letter_winner', JSON.stringify(winner)); else sessionStorage.removeItem('letter_winner');
     sessionStorage.setItem('letter_mode', localMode);
-  }, [stage, letter, winner, localMode]);
+  }, [stage, letter, winner, localMode, online, synced, roomCode]);
 
   const startRace = () => {
-    if (stageRef.current !== 'wait' || (isMultiplayer && !multiplayer.isHost)) return;
+    if (!synced || (online && !isMultiplayer) || stageRef.current !== 'wait' || (isMultiplayer && !multiplayer.isHost)) return;
     if (multiplayer.status !== 'connected' && !checkLimit('solo')) return;
 
     const randomLetter = LETTERS[Math.floor(Math.random() * LETTERS.length)];
@@ -80,9 +88,13 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     beginCountdown(randomLetter, roundId);
   };
 
-  const beginCountdown = (char: string, roundId: string) => {
+  const beginCountdown = (char: string, roundId: string, remainingMs = 3000) => {
     if (!LETTERS.includes(char)) return;
     roundIdRef.current = roundId;
+    countdownEndsAt.current = Date.now() + remainingMs;
+    if (roomCode) snapshotRef.current = { roomCode, roundId, stage: 'countdown', letter: char, winner: null, remainingMs };
+    syncedRef.current = true;
+    setSynced(true);
     sessionStorage.setItem('letter_roundId', roundId);
     stageRef.current = 'countdown';
     setWinner(null);
@@ -90,21 +102,25 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     setSubmissionPending(false);
     setLetter(char);
     setStage('countdown');
-    setCountdown(3);
+    setCountdown(Math.max(1, Math.ceil(remainingMs / 1000)));
     sounds.playFlip();
 
     countdownTimers.current.forEach(window.clearTimeout);
-    countdownTimers.current = [
-      window.setTimeout(() => { setCountdown(2); sounds.playFlip(); }, 1000),
-      window.setTimeout(() => { setCountdown(1); sounds.playFlip(); }, 2000),
-      window.setTimeout(() => { stageRef.current = 'race'; setStage('race'); sounds.playSuccess(); }, 3000),
-    ];
+    countdownTimers.current = [];
+    if (remainingMs > 2000) countdownTimers.current.push(window.setTimeout(() => { setCountdown(2); sounds.playFlip(); }, remainingMs - 2000));
+    if (remainingMs > 1000) countdownTimers.current.push(window.setTimeout(() => { setCountdown(1); sounds.playFlip(); }, remainingMs - 1000));
+    countdownTimers.current.push(window.setTimeout(() => {
+      stageRef.current = 'race';
+      if (snapshotRef.current) snapshotRef.current = { ...snapshotRef.current, stage: 'race', remainingMs: 0 };
+      setStage('race');
+      sounds.playSuccess();
+    }, remainingMs));
   };
 
   const handleWordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const word = inputValue.trim().toUpperCase();
-    if (stageRef.current !== 'race' || submissionPending || !letter || !/^[A-Z]{2,30}$/.test(word) || !word.startsWith(letter)) return;
+    if (!synced || (online && !isMultiplayer) || stageRef.current !== 'race' || submissionPending || !letter || !/^[A-Z]{2,30}$/.test(word) || !word.startsWith(letter)) return;
     
     if (multiplayer.status === 'connected') {
       if (!multiplayer.isHost) {
@@ -121,6 +137,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
   const processWin = (winnerName: string, winningWord: string) => {
     if (stageRef.current !== 'race') return;
     stageRef.current = 'winner';
+    if (snapshotRef.current) snapshotRef.current = { ...snapshotRef.current, stage: 'winner', winner: { name: winnerName, word: winningWord }, remainingMs: 0 };
     setSubmissionPending(false);
     setWinner({ name: winnerName, word: winningWord });
     setStage('winner');
@@ -128,7 +145,7 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
     
     if (multiplayer.status !== 'connected') incrementPlayCount('solo');
-    addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
+    addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
   };
 
   // The host decides once, so simultaneous submissions cannot create two winners.
@@ -155,6 +172,8 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   const resetRound = useCallback(() => {
     stageRef.current = 'wait';
+    countdownEndsAt.current = 0;
+    if (snapshotRef.current) snapshotRef.current = { ...snapshotRef.current, stage: 'wait', letter: null, winner: null, remainingMs: 0 };
     countdownTimers.current.forEach(window.clearTimeout);
     setSubmissionPending(false);
     setLetter(null);
@@ -225,12 +244,61 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
     }
   }, [multiplayer.status, multiplayer.subscribeMessage, resetRound, stage, letter, partnerName]);
 
+  useEffect(() => {
+    if (restored?.stage === 'countdown' && (!online || multiplayer.isHost) && restored.letter) {
+      beginCountdown(restored.letter, restored.roundId, Math.max(0, Math.min(3000, restored.countdownEndsAt - Date.now())));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!online || !isMultiplayer) {
+      if (online && !multiplayer.isHost) { syncedRef.current = false; setSynced(false); }
+      return;
+    }
+    const sendSnapshot = () => {
+      const current = snapshotRef.current;
+      if (current) multiplayer.sendMessage({ type: 'LETTER_STATE', payload: { ...current, remainingMs: current.stage === 'countdown' ? Math.max(0, Math.min(3000, countdownEndsAt.current - Date.now())) : 0 } });
+    };
+    const unsubscribe = multiplayer.subscribeMessage(message => {
+      if (message.type === 'LETTER_REQUEST' && multiplayer.isHost) sendSnapshot();
+      else if (message.type === 'LETTER_STATE' && !multiplayer.isHost && validateLetterSnapshot(message.payload) && message.payload.roomCode === roomCode) {
+        const next = message.payload;
+        const oldStage = stageRef.current;
+        const oldRoundId = roundIdRef.current;
+        if (syncedRef.current && oldRoundId === next.roundId && oldStage === 'winner' && (next.stage === 'race' || next.stage === 'countdown')) return;
+        if (next.stage === 'countdown') {
+          if (!syncedRef.current || next.roundId !== oldRoundId || (oldStage !== 'race' && oldStage !== 'winner')) beginCountdown(next.letter!, next.roundId, next.remainingMs);
+        } else {
+          countdownTimers.current.forEach(window.clearTimeout);
+          if (next.stage === 'winner' && oldRoundId === next.roundId && oldStage === 'race') processWin(next.winner!.name, next.winner!.word);
+          roundIdRef.current = next.roundId;
+          snapshotRef.current = next;
+          countdownEndsAt.current = 0;
+          stageRef.current = next.stage;
+          setStage(next.stage);
+          setLetter(next.letter);
+          setWinner(next.winner);
+          setSubmissionPending(false);
+          syncedRef.current = true;
+          setSynced(true);
+        }
+      }
+    });
+    if (multiplayer.isHost) sendSnapshot();
+    else multiplayer.sendMessage({ type: 'LETTER_REQUEST' });
+    return unsubscribe;
+  }, [online, isMultiplayer, multiplayer.isHost, multiplayer.subscribeMessage, multiplayer.sendMessage, roomCode, addHeartPoints, multiplayer.remoteProfile?.accountId]);
+
+  useEffect(() => {
+    const current = snapshotRef.current;
+    if (isMultiplayer && multiplayer.isHost && current) multiplayer.sendMessage({ type: 'LETTER_STATE', payload: current });
+  }, [isMultiplayer, multiplayer.isHost, multiplayer.sendMessage, stage, letter, winner]);
+
   const handleEndGame = () => {
     if (onEndGame) {
       onEndGame();
     } else {
-      sessionStorage.removeItem('letter_stage');
-      sessionStorage.removeItem('letter_char');
+      clearStorageKeys(sessionStorage, ['letter_session', 'letter_stage', 'letter_char', 'letter_winner', 'letter_roundId']);
       
       const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
       stored.letter = false;
@@ -239,6 +307,14 @@ const LetterRaceGameInner: React.FC<Props> = ({ onEndGame }) => {
       window.location.reload();
     }
   };
+
+  if (online && (!synced || !isMultiplayer)) return (
+    <section className="game-card activity-card p-6 text-center space-y-3" role="status">
+      <h2 className="font-black text-xl">Restoring your letter round…</h2>
+      <p>Your countdown, letter, and result will resume with the host.</p>
+      <button type="button" className="btn-chunky btn-white px-4 py-2" disabled={!isMultiplayer} onClick={() => multiplayer.sendMessage({ type: 'LETTER_REQUEST' })}>Sync round</button>
+    </section>
+  );
 
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">

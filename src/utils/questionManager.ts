@@ -45,17 +45,15 @@ function getQuestionMoodHistory(): QuestionMood[] {
  */
 export function getSeenQuestionIds(additionalSeenIds?: Iterable<string>): Set<string> {
   const set = new Set<string>();
-  try {
-    const seenStored = localStorage.getItem(STORAGE_KEY_SEEN);
-    if (seenStored) {
-      JSON.parse(seenStored).forEach((id: string) => set.add(id));
+  for (const key of [STORAGE_KEY_SEEN, STORAGE_KEY_ANSWERED]) {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(key) || '[]');
+      if (Array.isArray(stored)) {
+        for (const id of stored) if (typeof id === 'string') set.add(id);
+      }
+    } catch {
+      // One damaged legacy cache must not hide the other saved history.
     }
-    const answeredStored = localStorage.getItem(STORAGE_KEY_ANSWERED);
-    if (answeredStored) {
-      JSON.parse(answeredStored).forEach((id: string) => set.add(id));
-    }
-  } catch (e) {
-    console.error('Error reading seen question IDs:', e);
   }
   if (additionalSeenIds) {
     for (const id of additionalSeenIds) if (typeof id === 'string') set.add(id);

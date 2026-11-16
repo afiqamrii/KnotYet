@@ -19,7 +19,7 @@ const React=(await import('/@id/react')).default;const ReactDOM=(await import('/
 const {MultiplayerProvider,useMultiplayer}=await import('${raceRoomContextUrl}');
 const {GameProvider,useGame}=await import('${raceGameContextUrl}');
 const {SecretNumberRaceGame}=await import('/src/components/SecretNumberRaceGame.tsx');
-function Profile({name,avatar,children}){const game=useGame();React.useEffect(()=>game.setProfile({name,avatarId:avatar,heartPoints:0}),[]);return children}
+function Profile({name,avatar,children}){const game=useGame();React.useEffect(()=>{void game.setProfile({name,avatarId:avatar,heartPoints:0});},[]);return children}
 function Player({role}){const room=useMultiplayer();React.useEffect(()=>{window[role+'Api']=room},[room,role]);return React.createElement('section',{id:role},React.createElement(SecretNumberRaceGame,{onEndGame:()=>{}}))}
 function App(){return React.createElement(React.Fragment,null,React.createElement(MultiplayerProvider,null,React.createElement(GameProvider,null,React.createElement(Profile,{name:'Host',avatar:'sunny'},React.createElement(Player,{role:'host'})))),React.createElement(MultiplayerProvider,null,React.createElement(GameProvider,null,React.createElement(Profile,{name:'Guest',avatar:'mochi'},React.createElement(Player,{role:'guest'})))))}
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
@@ -55,7 +55,13 @@ try {
   await page.waitForTimeout(2100);
   await page.locator('#host #secret-race-answer').fill(String(correct));
   await page.locator('#guest #secret-race-answer').fill(String(correct));
-  await Promise.all([page.locator('#host').getByRole('button', { name: /Submit answer/ }).click(), page.locator('#guest').getByRole('button', { name: /Submit answer/ }).click()]);
+  await page.waitForFunction(() => [...document.querySelectorAll('.secret-race-answer-form button[type="submit"]')].length === 2 && [...document.querySelectorAll('.secret-race-answer-form button[type="submit"]')].every(button => !button.disabled));
+  // Two concurrent Playwright clicks share a mouse and can miss each other.
+  // Submit the real forms in one task to exercise the near-simultaneous case.
+  await page.evaluate(() => {
+    document.querySelector('#host .secret-race-answer-form').requestSubmit();
+    document.querySelector('#guest .secret-race-answer-form').requestSubmit();
+  });
   await page.getByText('Photo finish — it’s a tie!').first().waitFor({ timeout: 3000 });
   assert.match(await page.locator('#host').innerText(), /Photo finish/, 'near-simultaneous correct submissions result in a tie');
   await page.locator('#host').getByRole('button', { name: /Next round/ }).click();

@@ -10,7 +10,11 @@
     "typecheck": "tsc -b --pretty false",
     "check": "npm run typecheck && npm run build",
     "smoke": "node scripts/smoke.mjs",
-    "test:games": "node scripts/review-check.mjs"
+    "test:games": "node scripts/review-check.mjs",
+    "test:public": "node scripts/public-deck-check.mjs",
+    "test:accounts": "node scripts/account-chat-regression-check.mjs",
+    "test:local-games": "node scripts/local-activities-check.mjs",
+    "test:progress": "node scripts/progress-persistence-check.mjs && node scripts/progress-provider-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",

@@ -17,13 +17,14 @@ sessionStorage.setItem('swipe_deck',JSON.stringify({category,ids:deck}));
 const listeners=new Set();window.sent=[];window.receive=msg=>listeners.forEach(fn=>fn(msg));
 const host=!location.search.includes('guest');
 window.mp={status:solo?'disconnected':'connected',isHost:host,isConnected:!solo,activeGame:'swipe',roomCode:solo?null:'123456',remoteProfile:{name:'Jamie',avatarId:'mochi'},questionDecks:{swipe:deck},questionIndices:{swipe:0},chatMessages:[],unreadChatCount:0,latestIncomingMessage:null,subscribeMessage:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},sendMessage:msg=>window.sent.push(msg),clearUnreadChatCount:()=>{},sendChatMessage:()=>true};
+window.mp.leaveRoom=()=>{window.mp.status='disconnected';window.mp.activeGame='lobby';window.renderApp();};window.mp.setGame=game=>{window.mp.activeGame=game;window.renderApp();};
 const React=(await import('/@id/react')).default;const {createRoot}=(await import('/@id/react-dom/client')).default;
 const {GameProvider}=await import('${gameContextUrl}');const {PlayScreen}=await import('/src/screens/PlayScreen.tsx');
-createRoot(document.getElementById('root')).render(React.createElement(GameProvider,null,React.createElement(React.Suspense,{fallback:'Loading'},React.createElement(PlayScreen))));
+const root=createRoot(document.getElementById('root'));window.renderApp=()=>root.render(React.createElement(GameProvider,null,React.createElement(React.Suspense,{fallback:'Loading'},React.createElement(PlayScreen))));window.renderApp();
 </script></body></html>`;
 try {
-  for (const mode of ['host','guest','solo','dare']) {
-    const guest=mode==='guest';
+  for (const mode of ['host','guest','guest-leave','solo','dare']) {
+    const guest=mode.startsWith('guest');
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
@@ -50,6 +51,28 @@ try {
       await page.getByRole('button',{name:'Back to the question',exact:true}).click();
       await page.screenshot({path:'artifacts/review-solo-cards-mobile.png',fullPage:true});
       await page.locator('.game-action-next').click();assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('swipe_index'))),1,'Answered advances the solo deck once');
+      for (let index=1;index<4;index++) await page.locator('.game-action-skip').click();
+      const completion=page.getByRole('dialog',{name:'Deck Completed!'});await completion.waitFor();
+      const completionBounds=await completion.boundingBox();
+      assert.ok(completionBounds.x>=0&&completionBounds.x+completionBounds.width<=390&&completionBounds.y>=0&&completionBounds.y+completionBounds.height<=844,'completion fits the phone viewport');
+      await page.screenshot({path:'artifacts/review-deck-completion-mobile.png',fullPage:true});
+      assert.equal(await completion.evaluate(el=>el.contains(document.activeElement)),true,'completion takes keyboard focus');
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await completion.evaluate(el=>el.contains(document.activeElement)),true,'completion traps keyboard focus');
+      await completion.getByRole('button',{name:'Change Category'}).click();
+      await page.waitForFunction(()=>sessionStorage.getItem('swipe_index')==='0'&&sessionStorage.getItem('swipe_category')==='all');
+      const length=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('swipe_deck')).ids.length);
+      for(let index=0;index<length;index++) await page.locator('.game-action-skip').click();
+      await completion.waitFor();
+      await completion.getByRole('button',{name:'Change Category'}).click();
+      await page.waitForFunction(()=>sessionStorage.getItem('swipe_index')==='0');
+      await page.locator('.game-action-skip').click();
+      assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('swipe_index'))),1,'changing category after an all-cards deck releases the completed card');
+      const finalLength=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('swipe_deck')).ids.length);
+      for(let index=1;index<finalLength;index++)await page.locator('.game-action-skip').click();
+      await completion.waitFor();await page.keyboard.press('Escape');
+      await page.locator('#intro-swipe').waitFor();
+      assert.equal(await completion.count(),0,'Escape finishes instead of silently starting a new deck');
     } else if(mode==='dare') {
       await page.getByRole('button',{name:'How to play',exact:true}).click();
       assert.equal(await page.locator('.conversation-response input').count(),0,'challenge has no unnecessary answer form');
@@ -58,6 +81,35 @@ try {
       assert.equal(await page.locator('.game-category-pill:enabled').count(), 0, 'guest cannot replace host deck');
       await page.locator('.game-action-skip').click();
       assert.equal(await page.evaluate(() => window.sent.filter(m => m.type === 'SWIPE_REQUEST').length), 1);
+      const deck=await page.evaluate(()=>window.mp.questionDecks.swipe);
+      for(let index=0;index<deck.length;index++) {
+        await page.evaluate(cardId=>window.receive({type:'SWIPE_ACTION',payload:{direction:'left',cardId}}),deck[index]);
+        if(index<deck.length-1)await page.waitForFunction(expected=>Number(sessionStorage.getItem('swipe_index'))===expected,index+1);
+      }
+      await page.getByRole('dialog',{name:'Deck Completed!'}).waitFor();
+      assert.equal(await page.getByRole('button',{name:'Replay This Deck'}).count(),0,'guest waits for the host instead of restarting independently');
+      assert.equal(await page.getByRole('button',{name:'Leave room',exact:true}).count(),1,'guest always has an independent exit');
+      if(mode==='guest-leave') {
+        await page.getByRole('button',{name:'Leave room',exact:true}).click();await page.locator('#intro-swipe').waitFor();
+        assert.equal(await page.getByRole('dialog',{name:'Deck Completed!'}).count(),0);
+        await context.close();continue;
+      }
+      await page.evaluate(()=>{window.mp.questionDecks={swipe:[...window.mp.questionDecks.swipe].reverse()};window.mp.questionIndices={swipe:0};window.renderApp();});
+      await page.waitForFunction(()=>!document.querySelector('[aria-labelledby="deck-complete-title"]')&&sessionStorage.getItem('swipe_index')==='0');
+      const nextDeck=[...deck].reverse();
+      for(let index=0;index<nextDeck.length;index++) {
+        await page.evaluate(({cardId,nextIndex})=>{window.mp.questionIndices={swipe:nextIndex};window.receive({type:'SWIPE_ACTION',payload:{direction:'left',cardId}});},{cardId:nextDeck[index],nextIndex:Math.min(index+1,nextDeck.length-1)});
+        if(index<nextDeck.length-1)await page.waitForFunction(expected=>Number(sessionStorage.getItem('swipe_index'))===expected,index+1);
+      }
+      await page.getByRole('dialog',{name:'Deck Completed!'}).waitFor();
+      await page.evaluate(()=>{window.mp.status='partner_left';window.renderApp();});
+      await page.waitForFunction(()=>!document.querySelector('[aria-labelledby="deck-complete-title"]'));
+      await page.keyboard.press('Escape');
+      assert.equal(await page.evaluate(()=>Number(sessionStorage.getItem('swipe_index'))),3,'Escape during partner-away cannot restart a completed deck');
+      await page.evaluate(()=>{window.mp.status='connected';window.renderApp();});
+      await page.getByRole('dialog',{name:'Deck Completed!'}).waitFor();
+      await page.evaluate(()=>{window.receive({type:'END_GAME'});window.mp.activeGame='lobby';window.renderApp();});
+      await page.waitForFunction(()=>!document.querySelector('[aria-labelledby="deck-complete-title"]'));
     } else {
       const before = await page.evaluate(() => window.sent.filter(m => m.type === 'SYNC_QUESTION_IDS').at(-1).payload);
       await page.evaluate(cardId => { const msg={type:'SWIPE_REQUEST',payload:{direction:'left',cardId}};window.receive(msg);window.receive(msg); }, before.questionIds[0]);
@@ -78,5 +130,5 @@ try {
     await context.close();
   }
   assert.deepEqual(errors, []);
-  console.log('Card shell: skip, single host advancement, stale-answer rejection, category reset and guest controls passed.');
+  console.log('Card shell: skip, single host advancement, stale-answer rejection, category reset, completion focus/restart and synchronized guest completion passed.');
 } finally { await browser.close(); }

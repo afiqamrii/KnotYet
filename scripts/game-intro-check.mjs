@@ -13,7 +13,7 @@ import { GameModeNav } from '/src/components/GameModeNav.tsx';
 import '/src/index.css';import '/src/styles/play.css';import '/src/styles/play-layout.css';
 window.starts=0;
 function App(){const [game,setGame]=React.useState('swipe');const [show,setShow]=React.useState(true);window.changeGame=setGame;window.showIntro=setShow;
-return React.createElement('div',{className:'arcade-play'},React.createElement('div',{className:'play-console'},React.createElement('header',{className:'play-header'},React.createElement(GameModeNav,{currentTab:game,onSelect:setGame,labels:{swipe:'Icebreaker Cards',quiz:'Guess My Heart',wheel:'Spin Wheel',number:'Number Guesser',letter:'Letter Race',match:'Couple Match',choices:'This or That'}})),React.createElement('main',{className:'arcade-play-main'},show?React.createElement(GameIntro,{gameType:game,onStart:()=>window.starts++}):React.createElement('p',null,'Closed'))));}
+return React.createElement('div',{className:'arcade-play'},React.createElement('div',{className:'play-console'},React.createElement('header',{className:'play-header'},React.createElement(GameModeNav,{currentTab:game,onSelect:setGame,labels:{swipe:'Icebreaker Cards',quiz:'Guess My Heart',wheel:'Spin Wheel',number:'Number Guesser',letter:'Letter Race',match:'Couple Match',choices:'This or That',memory:'Memory Match',story:'Story Builder'}})),React.createElement('main',{className:'arcade-play-main'},show?React.createElement(GameIntro,{gameType:game,onStart:()=>window.starts++}):React.createElement('p',null,'Closed'))));}
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
 </script></body></html>`;
 const mock = `import React from '/node_modules/.vite/deps/react.js';
@@ -30,7 +30,7 @@ async function setup(viewport={width:1280,height:850}) {
     const url=new URL(route.request().url());
     if(url.pathname==='/intro-fixture') return route.fulfill({contentType:'text/html',body:fixture});
     if(url.pathname==='/src/store/MultiplayerContext.tsx') return route.fulfill({contentType:'application/javascript',body:mock});
-    if(url.hostname!=='localhost') return route.fulfill({status:204,body:''});
+    if(url.origin!==new URL(base).origin) return route.fulfill({status:204,body:''});
     return route.continue();
   });
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
@@ -93,7 +93,7 @@ try {
   for(const width of [320,390,1024,1440]) {
     const {context,page}=await setup({width,height:900});
     const nav=page.getByRole('navigation',{name:'Choose your game'});
-    assert.equal(await nav.getByRole('button').count(),7,'all offline games are discoverable');
+    assert.equal(await nav.getByRole('button').count(),9,'all offline games are discoverable');
     const metrics=await nav.evaluate(el=>({width:document.documentElement.scrollWidth,viewport:innerWidth,buttons:[...el.querySelectorAll('button')].map(button=>({left:button.getBoundingClientRect().left,right:button.getBoundingClientRect().right,height:button.getBoundingClientRect().height}))}));
     assert.ok(metrics.width<=width+1,`picker overflow at ${width}: ${JSON.stringify(metrics)}`);
     assert.ok(metrics.buttons.every(button=>button.left>=0&&button.right<=width+1&&button.height>=44),'picker controls remain visible and touch sized');
@@ -103,5 +103,5 @@ try {
     await context.close();
   }
   assert.deepEqual(errors,[]);
-  console.log('Game intro: timer cleanup, duplicate/cross-game packets, host authority, and 7-game picker at 320/390/1024/1440 passed');
+  console.log('Game intro: timer cleanup, duplicate/cross-game packets, host authority, and 9-game picker at 320/390/1024/1440 passed');
 } finally {await browser.close();}

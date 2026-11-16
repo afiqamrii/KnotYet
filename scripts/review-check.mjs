@@ -5,6 +5,15 @@ process.env.SMOKE_URL = base;
 process.env.KNOTYET_TEST_URL = base;
 
 const checks = [
+  './multiplayer-protocol-check.mjs',
+  './local-activities-check.mjs',
+  './progress-persistence-check.mjs',
+  './progress-provider-check.mjs',
+  './session-recovery-check.mjs',
+  './number-recovery-check.mjs',
+  './letter-recovery-check.mjs',
+  './history-account-check.mjs',
+  './navigation-check.mjs',
   './question-content-check.mjs',
   './question-rotation-check.mjs',
   './question-history-check.mjs',

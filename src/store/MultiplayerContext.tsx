@@ -3,6 +3,9 @@ import Peer, { DataConnection } from 'peerjs';
 import { UserProfile } from './GameContext';
 import { sounds } from '../utils/audio';
 import type { Choice, ChoiceRound } from '../utils/choiceGame';
+import type { NumberRoundSnapshot } from '../utils/numberSession';
+import { isMultiplayerMessage } from '../utils/multiplayerProtocol';
+import type { LetterRoundSnapshot } from '../utils/letterSession';
 
 export type GameMode = 'lobby' | 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter' | 'secret-race' | 'choices';
 
@@ -55,7 +58,9 @@ export type MultiplayerMessage =
   | { type: 'MATCH_RESTART'; payload?: { questionIds?: string[] } }
   | { type: 'QUIZ_RESTART'; payload?: { questionIds?: string[] } }
   | { type: 'NUM_SET_SECRET'; payload: number }
-  | { type: 'NUM_GUESS'; payload: { val: number; name?: string } | number }
+  | { type: 'NUM_GUESS'; payload: { val: number; name?: string; round?: number } | number }
+  | { type: 'NUM_REQUEST' }
+  | { type: 'NUM_STATE'; payload: NumberRoundSnapshot }
   | { type: 'NUM_NEXT' }
   | { type: 'SECRET_RACE_START'; payload: SecretRaceState }
   | { type: 'SECRET_RACE_STATE'; payload: SecretRaceState }
@@ -70,6 +75,8 @@ export type MultiplayerMessage =
   | { type: 'LETTER_WORD_SUBMIT'; payload: string | { word: string; roundId: string } }
   | { type: 'LETTER_RESULT'; payload: { name: string; word: string; roundId: string } }
   | { type: 'LETTER_NEXT' }
+  | { type: 'LETTER_REQUEST' }
+  | { type: 'LETTER_STATE'; payload: LetterRoundSnapshot }
   | { type: 'START_GAME'; payload: { game: GameMode; questionIds?: string[] } }
   | { type: 'START_COUNTDOWN'; payload: { game: GameMode } }
   | { type: 'END_GAME' }
@@ -113,10 +120,6 @@ export const useMultiplayer = () => {
   return ctx;
 };
 
-const isMultiplayerMessage = (value: unknown): value is MultiplayerMessage => (
-  typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
-);
-
 const getPeerId = (code: string) => `jodohdeck-v2-${code}`;
 const getRestoredGame = (): GameMode => {
   const savedGame = sessionStorage.getItem('mp_activeGame');
@@ -157,6 +160,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const localProfileRef = useRef<UserProfile | null>(null);
   const hasConnectedRef = useRef(false);
   const remoteLeftRef = useRef(false);
+  const receivedChatIds = useRef(new Set<string>());
   const messageSubscribers = useRef(new Set<(msg: MultiplayerMessage) => void>());
   const subscribeMessage = useCallback((listener: (msg: MultiplayerMessage) => void) => {
     messageSubscribers.current.add(listener);
@@ -165,6 +169,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const cleanup = useCallback((preserveSession = false) => {
     if (!preserveSession) {
+      receivedChatIds.current.clear();
       sessionStorage.removeItem('mp_roomCode');
       sessionStorage.removeItem('mp_isHost');
       sessionStorage.removeItem('mp_activeGame');
@@ -240,7 +245,11 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const msg = data;
       
       if (msg.type === 'PROFILE_SYNC') {
-        setState(s => ({ ...s, remoteProfile: msg.payload }));
+        const incoming = msg.payload;
+        if (!incoming || typeof incoming.name !== 'string' || typeof incoming.avatarId !== 'string' || !Number.isFinite(incoming.heartPoints)) return;
+        const safeProfile: UserProfile = { name: incoming.name.slice(0, 60), avatarId: incoming.avatarId.slice(0, 60), heartPoints: Math.max(0, incoming.heartPoints) };
+        if (typeof incoming.accountId === 'string' && incoming.accountId.length <= 128) safeProfile.accountId = incoming.accountId;
+        setState(s => ({ ...s, remoteProfile: safeProfile }));
       } else if (msg.type === 'SET_GAME') {
         setState(s => ({
           ...s,
@@ -255,7 +264,8 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setState(s => ({ ...s, activeGame: 'lobby' }));
         messageSubscribers.current.forEach(listener => listener(msg));
       } else if (msg.type === 'CHAT_MESSAGE') {
-        if (!msg.payload || typeof msg.payload.text !== 'string' || !msg.payload.text.trim() || typeof msg.payload.id !== 'string') return;
+        if (receivedChatIds.current.has(msg.payload.id)) return;
+        receivedChatIds.current.add(msg.payload.id);
         const incoming = { ...msg.payload, senderId: 'partner', text: msg.payload.text.slice(0, 2000) };
         setState(s => ({
           ...s,
@@ -380,7 +390,12 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (connRef.current && connRef.current.open) {
       connRef.current.send({ type: 'LEAVE_ROOM' });
     }
-    setTimeout(cleanup, 100);
+    const connection = connRef.current;
+    const peer = peerRef.current;
+    setTimeout(() => {
+      // A quick join/create action may already have replaced the room.
+      if (connRef.current === connection && peerRef.current === peer) cleanup();
+    }, 100);
   }, [cleanup]);
 
   const setGame = useCallback((game: GameMode) => {

@@ -17,6 +17,8 @@ I defined the product concept, experience, feature set, game ideas, interaction 
 Users can:
 
 - Try a public conversation deck without signing in.
+- Play Memory Match and Story Builder in the free arcade without an account.
+- Find games by mood, save favourites, and return to recent activities.
 - Sign in with Google and maintain a persistent profile.
 - Add and connect with another person through invite-based flows.
 - Play conversation and guessing games solo, on one device, or through multiplayer rooms.
@@ -102,6 +104,8 @@ Current game modes include conversation cards and several lightweight competitiv
 - This or That
 - Secret Number Race
 - Spin Wheel activities
+- Memory Match (solo/cooperative on one screen)
+- Story Builder (solo/shared writing, with text export)
 
 ## Testing & Reliability Work
 
@@ -152,9 +156,15 @@ npm run typecheck
 npm run build
 npm run smoke
 npm run test:games
+npm run test:public
+npm run test:accounts
+npm run test:progress
+npm run test:local-games
 ```
 
 The Supabase project configuration is supplied through environment variables.
+
+Browser suites expect the Vite server on port 5174: `npm run dev -- --host 127.0.0.1 --port 5174`. Public routes include `/try` for conversation cards and `/arcade` for the free local games. `npm run test:games` includes the new local games, progress-concurrency checks, and navigation fixtures. `npm run smoke` covers current public routes, account/chat providers, and multiplayer UI/recovery fixtures without modifying real accounts. See `docs/UI_REDESIGN.md` for coverage and production verification limits.
 
 ## Development Status
 

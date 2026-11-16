@@ -1,4 +1,5 @@
-import { Heart, Sparkles } from 'lucide-react';
+import { Heart, Sparkles, Moon, Star, Feather } from 'lucide-react';
+import type { ArtworkKind } from '../data/gameCatalog';
 import '../styles/arcade-art.css';
 
 export const BrandMark = () => (
@@ -6,7 +7,7 @@ export const BrandMark = () => (
 );
 
 /** Small, resolution-independent illustrations keep the arcade crisp on every screen. */
-export const GameArtwork = ({ kind, compact = false }: { kind: 'cards' | 'heart' | 'wheel' | 'number' | 'letter' | 'match'; compact?: boolean }) => (
+export const GameArtwork = ({ kind, compact = false }: { kind: ArtworkKind; compact?: boolean }) => (
   <div className={`game-art game-art-${kind}${compact ? ' game-art-compact' : ''}`} aria-hidden="true">
     <span className="art-spark art-spark-one">✦</span><span className="art-spark art-spark-two">✧</span>
     {kind === 'cards' && <div className="art-card-fan"><div /><div /><div><Heart fill="currentColor" /><span>let’s talk</span></div></div>}
@@ -15,6 +16,8 @@ export const GameArtwork = ({ kind, compact = false }: { kind: 'cards' | 'heart'
     {kind === 'number' && <div className="art-numbers"><span>7</span><span>?</span><span>3</span></div>}
     {kind === 'letter' && <div className="art-letters"><span>A</span><span>B</span><span>GO!</span></div>}
     {kind === 'match' && <div className="art-match"><span><Heart fill="currentColor" /></span><span><Heart fill="currentColor" /></span><Sparkles /></div>}
+    {kind === 'memory' && <div className="art-memory"><span><Moon fill="currentColor" /></span><span><Star fill="currentColor" /></span><span><Heart fill="currentColor" /></span><span><Heart fill="currentColor" /></span></div>}
+    {kind === 'story' && <div className="art-story"><div><span>Once upon<br />an us…</span><i /><i /><i /></div><Feather /><span className="art-story-star">✦</span></div>}
   </div>
 );
 

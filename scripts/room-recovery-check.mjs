@@ -53,7 +53,7 @@ class Peer extends Emitter {
   destroy() { this.destroyed = true; this.open = false; peers.delete(this.id); for (const conn of [...connections]) conn.close(); }
   reconnect() { this.open = true; this.emit('open', this.id); }
 }
-window.__peerMock = { drop: () => { for (const conn of [...connections]) conn.close(); } };
+window.__peerMock = { drop: () => { for (const conn of [...connections]) conn.close(); }, inject: value => { for (const conn of [...connections]) conn.emit('data', value); } };
 export default Peer;
 `;
 const fixture = `<!doctype html><html><body><main id="root"></main><script type="module">
@@ -109,6 +109,18 @@ try {
   }));
   assert.ok(subscriptions.screen.includes('SYNC_QUESTION_IDS'), 'play screen receives the question sync');
   assert.ok(subscriptions.game.includes('SYNC_QUESTION_IDS'), 'active game also receives the same sync');
+  const malformed=[{type:'SET_GAME',payload:'missing-game'},{type:'CARD_SUBMIT',payload:{cardId:'q1',answer:null}},{type:'SYNC_QUESTION_IDS',payload:null},{type:'NUM_GUESS',payload:{val:NaN}},{type:'SECRET_RACE_STATE',payload:{}},{type:'CHAT_MESSAGE',payload:{id:'broken',text:'hello'}},{type:'UNKNOWN'}];
+  await page.evaluate(messages=>messages.forEach(message=>window.__peerMock.inject(message)),malformed);
+  assert.deepEqual(await page.evaluate(()=>({screen:window.receivedByScreen,game:window.receivedByGame})),subscriptions,'malformed packets never reach game listeners');
+  assert.equal(await page.evaluate(()=>window.guestApi.activeGame),'quiz','invalid packets cannot replace the active game');
+  await page.evaluate(()=>{
+    const message={type:'CHAT_MESSAGE',payload:{id:'replayed',senderId:'host',senderName:'Host',senderAvatar:'sunny',text:'Hello again',timestamp:Date.now()}};
+    window.__peerMock.inject(message);window.__peerMock.inject(message);
+  });
+  await page.waitForFunction(()=>window.guestApi.chatMessages.length===1);
+  assert.equal(await page.evaluate(()=>window.guestApi.unreadChatCount),1,'duplicate packets count as one unread message');
+  await page.evaluate(()=>{window.guestApi.clearUnreadChatCount();window.__peerMock.inject({type:'CHAT_MESSAGE',payload:{id:'replayed',senderId:'host',senderName:'Host',senderAvatar:'sunny',text:'Hello again',timestamp:Date.now()}});});
+  await page.waitForFunction(()=>window.guestApi.unreadChatCount===0);
   await page.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     window.__peerMock.drop();
@@ -131,7 +143,16 @@ try {
   await page.waitForFunction(() => window.hostApi.status === 'partner_left' && window.guestApi.status === 'disconnected');
   await page.waitForTimeout(4500);
   assert.equal(await page.evaluate(() => window.hostApi.status), 'partner_left', 'an explicit leave does not trigger reconnection');
-  console.log('ROOM: background drop reconnects, restores the game, and explicit leave stays closed.');
+  await page.evaluate(()=>{
+    window.hostApi.hostRoom('5678',{name:'Host',avatarId:'sunny',heartPoints:0});
+    window.guestApi.leaveRoom();
+    window.guestApi.joinRoom('5678',{name:'Guest',avatarId:'mochi',heartPoints:0});
+  });
+  await page.waitForFunction(()=>window.guestApi.status==='connected'&&window.guestApi.roomCode==='5678');
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(()=>window.guestApi.status),'connected','an earlier leave timer cannot close a newly joined room');
+  assert.deepEqual(errors,[]);
+  console.log('ROOM: reconnect restores the game, malformed packets are rejected, chat duplicates are ignored, and delayed leave cannot close a new room.');
   await context.close();
 } finally {
   await browser.close();

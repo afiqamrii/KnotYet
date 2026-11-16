@@ -2,6 +2,7 @@ import { UiSymbol, RoundLabel } from './GameCardDesign';
 import { GiphyReaction, ReactionDialog } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { readStringUnion } from '../utils/storage';
+import { restoreQuestionSession } from '../utils/questionSession';
 import confetti from 'canvas-confetti';
 import { Trophy, HeartHandshake, RefreshCw, Sparkles } from 'lucide-react';
 import { MATCH_QUESTIONS, MatchQuestion } from '../data/questions';
@@ -51,18 +52,8 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (multiplayer.status === 'connected' && !multiplayer.isHost) {
       return getMatchQuestionsByIds(multiplayer.questionDecks.match || []);
     }
-    try {
-      const stored = sessionStorage.getItem('match_questions');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const restored = getMatchQuestionsByIds(parsed.map(item => item.id));
-          if (restored.length === parsed.length) return restored;
-          ['match_currentIndex', 'match_stage', 'match_myAnswer', 'match_partnerAnswer', 'match_score', 'match_completed'].forEach(key => sessionStorage.removeItem(key));
-        }
-      }
-    } catch {}
-    return getShuffledMatchQuestions(10, progress?.answered_questions);
+    return restoreQuestionSession(sessionStorage, 'match', getMatchQuestionsByIds)
+      ?? getShuffledMatchQuestions(10, progress?.answered_questions);
   });
   useEffect(() => {
     if (multiplayer.status !== 'connected' || multiplayer.isHost || !multiplayer.questionDecks.match) return;
@@ -138,7 +129,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       completedRef.current = true;
       setCompleted(true);
       setPointsToast(null);
-      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
+      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED'] });
     }
   }, [currentIndex, questions.length, addHeartPoints, multiplayer.status]);
@@ -229,7 +220,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
       
         if (isMatch) {
           setScore((s) => s + 1);
-          addHeartPoints(15, multiplayer.status === 'connected');
+          addHeartPoints(15, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
           showToast("+15 hearts", true);
           sounds.playSuccess();
           confetti({
@@ -237,7 +228,7 @@ export const MatchGameInner: React.FC<Props> = ({ onEndGame }) => {
             colors: ['#FF2D9B', '#10B981']
           });
         } else {
-          addHeartPoints(5, multiplayer.status === 'connected');
+          addHeartPoints(5, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
           showToast("+5 hearts for playing together", false);
           sounds.playMismatch();
         }

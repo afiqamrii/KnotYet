@@ -1,5 +1,6 @@
 import React, { lazy, useMemo, useState } from 'react';
-import { Layers, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, MessageCircle, X, Gamepad2, Clock3, ArrowUpRight, MousePointerClick } from 'lucide-react';
+import { Layers, Heart, Users, Sparkles, RotateCw, Music, Volume2, VolumeX, Check, MessageCircle, X, Gamepad2, Clock3, ArrowUpRight, MousePointerClick, Shuffle, Search, AlertCircle } from 'lucide-react';
+import { GAME_CATALOG, isLocalGame, isOfflineGame, rememberGame, type PlayableGameId } from '../data/gameCatalog';
 import { SWIPE_CARDS, type CardCategory } from '../data/questions';
 import { getShuffledSwipeCards, getSwipeCardsByIds, markQuestionAsSeen } from '../utils/questionManager';
 import { SwipeCard } from '../components/SwipeCard';
@@ -8,7 +9,7 @@ import { SummaryModal } from '../components/SummaryModal';
 import { getAvatar } from '../components/AvatarPicker';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
-import { useMultiplayer, type GameMode, type MultiplayerMessage } from '../store/MultiplayerContext';
+import { useMultiplayer, type MultiplayerMessage } from '../store/MultiplayerContext';
 import { useFriends } from '../store/FriendsContext';
 import { InGameChat } from '../components/InGameChat';
 import { sounds } from '../utils/audio';
@@ -17,6 +18,7 @@ import { LoadingScreen } from '../components/LoadingScreen';
 import { BrandMark } from '../components/ArcadeArt';
 import { GameModeNav } from '../components/GameModeNav';
 import { MultiplayerWaitingRoom } from '../components/MultiplayerWaitingRoom';
+import { useChatDialog } from '../components/useChatDialog';
 import '../styles/play.css';
 import '../styles/play-layout.css';
 import '../styles/completion.css';
@@ -33,20 +35,30 @@ const FriendsModal = lazy(() => import('../components/FriendsModal').then((modul
 const ProfileScreen = lazy(() => import('./ProfileScreen').then((module) => ({ default: module.ProfileScreen })));
 const GameIntro = lazy(() => import('../components/GameIntro').then((module) => ({ default: module.GameIntro })));
 const MultiplayerLobby = lazy(() => import('../components/MultiplayerLobby').then((module) => ({ default: module.MultiplayerLobby })));
+const GameLibrary = lazy(() => import('../components/GameLibrary').then(module => ({ default: module.GameLibrary })));
+const MemoryMatchGame = lazy(() => import('../components/MemoryMatchGame').then(module => ({ default: module.MemoryMatchGame })));
+const StoryBuilderGame = lazy(() => import('../components/StoryBuilderGame').then(module => ({ default: module.StoryBuilderGame })));
 
-type ActiveTab = Exclude<GameMode, 'lobby'>;
-const ACTIVE_TABS: readonly ActiveTab[] = ['swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race', 'choices'];
+type ActiveTab = PlayableGameId;
+const ACTIVE_TABS: readonly ActiveTab[] = [...GAME_CATALOG.map(game => game.id), 'secret-race'];
 const isActiveTab = (value: string | null): value is ActiveTab => value !== null && ACTIVE_TABS.includes(value as ActiveTab);
+const OFFLINE_TABS = ACTIVE_TABS.filter(tab => tab !== 'secret-race');
+const readIntroState = (): Record<string, boolean> => {
+  const stored = readJson<unknown>(sessionStorage, STORAGE_KEYS.introShown, {});
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+  return Object.fromEntries(Object.entries(stored).filter(([key, value]) => isActiveTab(key) && typeof value === 'boolean'));
+};
 export const PlayScreen: React.FC = () => {
-  const { profile, partner, t, addHeartPoints, recordAnsweredQuestion } = useGame();
-  const { couple, progress, isLoading, checkLimit, incrementPlayCount } = useAuth();
+  const { profile, partner, t, addHeartPoints, recordAnsweredQuestion, progressSaveError, isSavingProgress, clearProgressSaveError } = useGame();
+  const { couple, progress, isLoading, checkLimit, incrementPlayCount, progressError, clearProgressError } = useAuth();
   const multiplayer = useMultiplayer();
   const friends = useFriends();
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   const [activeTab, setActiveTabState] = useState<ActiveTab>(() => {
     const storedTab = localStorage.getItem('knotyet_activeTab');
-    return isActiveTab(storedTab) ? storedTab : 'swipe';
+    return isActiveTab(storedTab) && storedTab !== 'secret-race' ? storedTab : 'swipe';
   });
 
   const setActiveTab = (tab: ActiveTab) => {
@@ -99,6 +111,8 @@ export const PlayScreen: React.FC = () => {
   const [effectVolume, setEffectVolume] = useState(sounds.effectVolume);
   const [musicVolume, setMusicVolume] = useState(sounds.musicVolume);
   const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const disconnectDialogRef = useChatDialog(isDisconnectModalOpen && multiplayer.status === 'connected', () => setIsDisconnectModalOpen(false));
+  const partnerAwayDialogRef = useChatDialog(multiplayer.status === 'partner_left', () => undefined);
   const sessionRestoredRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -106,13 +120,10 @@ export const PlayScreen: React.FC = () => {
   }, []);
 
   // Track which game intros have been shown this session (so it only shows once per game per session)
-  const [introShown, setIntroShown] = useState<Record<string, boolean>>(() => {
-    try {
-      return readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
-    } catch { return {}; }
-  });
+  const [introShown, setIntroShown] = useState<Record<string, boolean>>(readIntroState);
 
   const markIntroShown = (tab: ActiveTab) => {
+    if (isOfflineGame(tab)) rememberGame(tab);
     setIntroShown(prev => {
       const next = { ...prev, [tab]: true };
       writeJson(sessionStorage, STORAGE_KEYS.introShown, next);
@@ -134,23 +145,34 @@ export const PlayScreen: React.FC = () => {
     setIsEndGameModalOpen(true);
   };
 
+  const resetSwipeRound = () => {
+    lastAdvancedCard.current = null;
+    setCardIndex(0);
+    setRoundCounter(value => value + 1);
+    setAnsweredCount(0);
+    setSkippedCount(0);
+    setIsCardFlipped(false);
+    setMyCardAnswer(null);
+    setPartnerCardAnswer(null);
+    setRiddleAnswerRevealed(false);
+    setIsSummaryOpen(false);
+  };
+
   const confirmEndGame = () => {
     const currentTabToReset = multiplayer.status === 'connected' && multiplayer.activeGame !== 'lobby'
       ? multiplayer.activeGame
       : activeTab;
-    const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
+    const stored = readIntroState();
     stored[currentTabToReset] = false;
     stored[activeTab] = false;
     writeJson(sessionStorage, STORAGE_KEYS.introShown, stored);
     
     // Clear all game-specific session states
     clearStorageKeys(sessionStorage, GAME_SESSION_KEYS);
-    setCardIndex(0);
-    setRoundCounter(value => value + 1);
-    setIsCardFlipped(false);
-    setMyCardAnswer(null);
-    setPartnerCardAnswer(null);
-    setRiddleAnswerRevealed(false);
+    // Local creations are shared with the free arcade. Only an explicit end of
+    // that activity may erase its saved board/story; ending another game cannot.
+    if (isLocalGame(currentTabToReset)) sessionStorage.removeItem(`knotyet_${currentTabToReset}_v1`);
+    resetSwipeRound();
 
     setIntroShown(stored);
 
@@ -201,7 +223,7 @@ export const PlayScreen: React.FC = () => {
       }
       setIsRoomModalOpen(true);
       if (savedActiveGame) {
-        if (isActiveTab(savedActiveGame)) setActiveTab(savedActiveGame);
+        if (isActiveTab(savedActiveGame) && savedActiveGame !== 'secret-race') setActiveTab(savedActiveGame);
       }
     }
   }, [profile, multiplayer.joinRoom, multiplayer.hostRoom, multiplayer.status]);
@@ -253,7 +275,15 @@ export const PlayScreen: React.FC = () => {
   }, [multiplayer.status, multiplayer.isHost, currentTab, selectedCategory, roundCounter, filteredCards, cardIndex]);
   React.useEffect(() => {
     if (multiplayer.status === 'connected' && !multiplayer.isHost && multiplayer.questionDecks.swipe) {
-      setCardIndex(multiplayer.questionIndices.swipe || 0);
+      const nextIndex = multiplayer.questionIndices.swipe || 0;
+      setCardIndex(nextIndex);
+      if (nextIndex === 0) {
+        // The host's next deck releases both players from the completion view.
+        setIsSummaryOpen(false);
+        setAnsweredCount(0);
+        setSkippedCount(0);
+        lastAdvancedCard.current = null;
+      }
     }
   }, [multiplayer.status, multiplayer.isHost, multiplayer.questionDecks.swipe, multiplayer.questionIndices.swipe]);
 
@@ -283,12 +313,18 @@ export const PlayScreen: React.FC = () => {
 
 
   const handleTabClick = (tab: ActiveTab) => {
+    if (multiplayer.status === 'connected' && isLocalGame(tab)) return;
     sounds.playFlip();
     setActiveTab(tab);
-    if (multiplayer.status === 'connected') {
+    if (multiplayer.status === 'connected' && !isLocalGame(tab)) {
       markIntroNotShown(tab);
       multiplayer.setGame(tab);
     }
+  };
+
+  const chooseSurpriseGame = () => {
+    const alternatives = OFFLINE_TABS.filter(tab => tab !== currentTab);
+    handleTabClick(alternatives[Math.floor(Math.random() * alternatives.length)]);
   };
 
   const executeSwipe = (direction: 'left' | 'right') => {
@@ -313,7 +349,7 @@ export const PlayScreen: React.FC = () => {
     } else {
       if (multiplayer.status !== 'connected') incrementPlayCount('solo');
       setIsSummaryOpen(true);
-      addHeartPoints(HEART_POINTS.COMPLETE_DECK, multiplayer.status === 'connected');
+      addHeartPoints(HEART_POINTS.COMPLETE_DECK, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
     }
   };
 
@@ -342,16 +378,11 @@ export const PlayScreen: React.FC = () => {
           markIntroShown(msg.payload.game);
         } else if (msg.type === 'END_GAME') {
           const currentTabToReset = multiplayer.activeGame !== 'lobby' ? multiplayer.activeGame : activeTab;
-          const stored = readJson<Record<string, boolean>>(sessionStorage, STORAGE_KEYS.introShown, {});
+          const stored = readIntroState();
           stored[currentTabToReset] = false;
           writeJson(sessionStorage, STORAGE_KEYS.introShown, stored);
           clearStorageKeys(sessionStorage, GAME_SESSION_KEYS);
-          setCardIndex(0);
-          setRoundCounter(value => value + 1);
-          setIsCardFlipped(false);
-          setMyCardAnswer(null);
-          setPartnerCardAnswer(null);
-          setRiddleAnswerRevealed(false);
+          resetSwipeRound();
           setIntroShown(stored);
         } else if (msg.type === 'SWIPE_REQUEST' && currentTab === 'swipe' && multiplayer.isHost && msg.payload.cardId === filteredCards[cardIndex]?.id) {
           handleSwipe(msg.payload.direction);
@@ -419,6 +450,8 @@ export const PlayScreen: React.FC = () => {
   // Desktop keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // A held key must never skip an entire deck or repeatedly flip a card.
+      if (e.defaultPrevented || e.repeat || e.isComposing) return;
       // Close open modals on Escape
       if (e.key === 'Escape') {
         if (isEndGameModalOpen) { setIsEndGameModalOpen(false); return; }
@@ -427,7 +460,8 @@ export const PlayScreen: React.FC = () => {
         if (isProfileOpen) { setIsProfileOpen(false); return; }
         if (isMusicMenuOpen) { setIsMusicMenuOpen(false); return; }
         if (isDisconnectModalOpen) { setIsDisconnectModalOpen(false); return; }
-        if (isSummaryOpen) { setIsSummaryOpen(false); return; }
+        if (isSummaryOpen) return; // The completion dialog owns Escape.
+        if (isLibraryOpen) { setIsLibraryOpen(false); return; }
         return;
       }
 
@@ -436,7 +470,7 @@ export const PlayScreen: React.FC = () => {
       if (e.altKey || e.ctrlKey || e.metaKey || target?.closest('button, a, input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
 
       // If any modal is open, don't trigger game hotkeys
-      if (isFriendsModalOpen || isRoomModalOpen || isProfileOpen || isMusicMenuOpen || isDisconnectModalOpen || isEndGameModalOpen || isSummaryOpen) {
+      if (isFriendsModalOpen || isRoomModalOpen || isProfileOpen || isMusicMenuOpen || isDisconnectModalOpen || isEndGameModalOpen || isSummaryOpen || isLibraryOpen || multiplayer.status === 'partner_left') {
         return;
       }
 
@@ -449,6 +483,8 @@ export const PlayScreen: React.FC = () => {
         if (e.key === '5') { handleTabClick('letter'); return; }
         if (e.key === '6') { handleTabClick('match'); return; }
         if (e.key === '7') { handleTabClick('choices'); return; }
+        if (e.key === '8') { handleTabClick('memory'); return; }
+        if (e.key === '9') { handleTabClick('story'); return; }
       }
 
       // In Swipe game:
@@ -476,18 +512,26 @@ export const PlayScreen: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     isEndGameModalOpen, isFriendsModalOpen, isRoomModalOpen, isProfileOpen, 
-    isMusicMenuOpen, isDisconnectModalOpen, isSummaryOpen, multiplayer.status, 
+    isMusicMenuOpen, isDisconnectModalOpen, isSummaryOpen, isLibraryOpen, multiplayer.status,
     currentTab, introShown, handleSwipe, handleTabClick, isCardFlipped, isPlayingGame,
     currentCard?.category, isRiddleAsker, canAdvanceCurrentCard
   ]);
 
   const handleRestartDeck = () => {
+    if (multiplayer.status === 'partner_left' || (multiplayer.status === 'connected' && !multiplayer.isHost)) return;
     sessionStorage.removeItem('swipe_deck');
-    setCardIndex(0);
-    setAnsweredCount(0);
-    setSkippedCount(0);
-    setRoundCounter(prev => prev + 1); // Trigger new cards
-    setIsSummaryOpen(false);
+    resetSwipeRound();
+  };
+
+  const finishDeck = () => {
+    if (multiplayer.status === 'partner_left') return;
+    if (multiplayer.status === 'connected' && !multiplayer.isHost) {
+      multiplayer.leaveRoom();
+      markIntroNotShown('swipe');
+      setActiveTab('swipe');
+      sessionStorage.removeItem('swipe_deck');
+      resetSwipeRound();
+    } else confirmEndGame();
   };
 
   const handleCategoryChange = (cat: CardCategory | 'all') => {
@@ -542,6 +586,8 @@ export const PlayScreen: React.FC = () => {
           </div>
         </div>
 
+        {(progressSaveError || progressError) && <div className="arcade-save-notice" role="alert"><AlertCircle size={17} /><span>{progressSaveError || progressError}</span><button type="button" aria-label="Dismiss progress notice" onClick={() => { clearProgressSaveError(); clearProgressError(); }}><X size={16} /></button></div>}
+        {isSavingProgress && !progressSaveError && !progressError && <span className="sr-only" role="status">Saving your progress</span>}
         {!isPlayingGame && (
           <header className="play-header arcade-play-header">
             <div className="arcade-account-row">
@@ -607,12 +653,14 @@ export const PlayScreen: React.FC = () => {
                 <h1>Less scrolling.<br className="arcade-mobile-break" /> <span>More us.</span></h1>
                 <p>{multiplayer.status === 'connected' ? 'Your person is here. Let the good times begin.' : 'Pick a game, grab your person, and make a little memory.'}</p>
               </div>
-              <div className="arcade-together-sticker" aria-hidden="true"><Heart fill="currentColor" /><span>Good times<br />come in twos.</span><Sparkles /></div>
+              {multiplayer.status !== 'connected'
+                ? <div className="arcade-discover-actions"><button type="button" className="arcade-library-button" onClick={() => setIsLibraryOpen(true)}><Search size={17} /><span>Explore games<small>Search, save, find your mood</small></span></button><button type="button" className="arcade-surprise-button" onClick={chooseSurpriseGame}><Shuffle aria-hidden="true" /><span>Surprise me<small>Find our next game</small></span><ArrowUpRight aria-hidden="true" /></button></div>
+                : <div className="arcade-together-sticker" aria-hidden="true"><Heart fill="currentColor" /><span>Good times<br />come in twos.</span><Sparkles /></div>}
             </div>
 
             {multiplayer.status !== 'connected' && (
               <GameModeNav currentTab={currentTab} onSelect={handleTabClick}
-                labels={{ swipe: t.tabSwipe, quiz: t.tabQuiz, wheel: t.tabWheel, number: t.tabNumber || 'Number Guesser', letter: t.tabLetter || 'Letter Race', match: 'Couple Match', choices: 'This or That', 'secret-race': 'Secret Number Race' }}
+                labels={{ swipe: t.tabSwipe, quiz: t.tabQuiz, wheel: t.tabWheel, number: t.tabNumber || 'Number Guesser', letter: t.tabLetter || 'Letter Race', match: 'Couple Match', choices: 'This or That', 'secret-race': 'Secret Number Race', memory: 'Memory Match', story: 'Story Builder' }}
               />
             )}
           </header>
@@ -795,6 +843,8 @@ export const PlayScreen: React.FC = () => {
                   ? <LetterRaceGame onEndGame={handleEndGame} />
                   : <GameIntro gameType="letter" onStart={() => markIntroShown('letter')} />
               )}
+              {currentTab === 'memory' && (introShown.memory ? <MemoryMatchGame onEndGame={handleEndGame} /> : <GameIntro gameType="memory" onStart={() => markIntroShown('memory')} />)}
+              {currentTab === 'story' && (introShown.story ? <StoryBuilderGame onEndGame={handleEndGame} /> : <GameIntro gameType="story" onStart={() => markIntroShown('story')} />)}
             </>
           )}
         </main>
@@ -810,12 +860,15 @@ export const PlayScreen: React.FC = () => {
         />
 
         <SummaryModal
-          isOpen={isSummaryOpen}
+          isOpen={isSummaryOpen && multiplayer.status !== 'partner_left'}
           answeredCount={answeredCount}
           skippedCount={skippedCount}
           categoryLabel={selectedCategory === 'all' ? t.catAll : selectedCategory}
+          canRestart={multiplayer.status !== 'partner_left' && (multiplayer.status !== 'connected' || multiplayer.isHost)}
+          onFinish={finishDeck}
+          finishLabel={multiplayer.status === 'connected' ? (multiplayer.isHost ? 'Back to lobby' : 'Leave room') : 'Back to games'}
           onRestart={handleRestartDeck}
-          onSelectCategory={() => { setIsSummaryOpen(false); setSelectedCategory('all'); }}
+          onSelectCategory={() => { handleRestartDeck(); setSelectedCategory('all'); }}
         />
 
         {isProfileOpen && (
@@ -838,6 +891,7 @@ export const PlayScreen: React.FC = () => {
         />
 
         <InGameChat />
+        {isLibraryOpen && <GameLibrary currentGame={currentTab} onClose={() => setIsLibraryOpen(false)} onSelect={handleTabClick} />}
 
         {/* In-App End Game Confirmation Modal */}
         <EndGameModal
@@ -853,19 +907,19 @@ export const PlayScreen: React.FC = () => {
             currentTab === 'number' ? 'Number Guesser' :
             currentTab === 'secret-race' ? 'Secret Number Race' :
             currentTab === 'letter' ? 'Letter Race' :
-            currentTab === 'choices' ? 'This or That' : 'Game'
+            currentTab === 'choices' ? 'This or That' : currentTab === 'memory' ? 'Memory Match' : currentTab === 'story' ? 'Story Builder' : 'Game'
           }
         />
         
         {/* Custom Disconnect Modal for Main App */}
         {isDisconnectModalOpen && multiplayer.status === 'connected' && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in">
+            <div ref={disconnectDialogRef} role="dialog" aria-modal="true" aria-labelledby="disconnect-title" aria-describedby="disconnect-description" tabIndex={-1} className="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl animate-pop-in">
               <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
                 <Users className="w-8 h-8 text-red-500" />
               </div>
-              <h3 className="text-xl font-black text-ink mb-2">Disconnect?</h3>
-              <p className="text-sm text-ink-3 mb-6">Are you sure you want to leave the room? The game will end for both of you.</p>
+              <h3 id="disconnect-title" className="text-xl font-black text-ink mb-2">Disconnect?</h3>
+              <p id="disconnect-description" className="text-sm text-ink-3 mb-6">Are you sure you want to leave the room? The game will end for both of you.</p>
               <div className="flex gap-3">
                 <button onClick={() => setIsDisconnectModalOpen(false)} className="flex-1 py-3 rounded-2xl font-bold text-ink-3 bg-stone-100 hover:bg-stone-200 transition">
                   Cancel
@@ -881,7 +935,7 @@ export const PlayScreen: React.FC = () => {
         {/* Partner Left Modal */}
         {multiplayer.status === 'partner_left' && (
           <div className="partner-away-overlay" role="presentation">
-            <section className="partner-away-card" role="alertdialog" aria-modal="true" aria-labelledby="partner-away-title" aria-describedby="partner-away-description">
+            <section ref={partnerAwayDialogRef} tabIndex={-1} className="partner-away-card" role="alertdialog" aria-modal="true" aria-labelledby="partner-away-title" aria-describedby="partner-away-description">
               <div className="partner-away-icon" aria-hidden="true"><Users /></div>
               <span className="partner-away-kicker">A LITTLE PAUSE</span>
               <h3 id="partner-away-title">Your partner disconnected</h3>

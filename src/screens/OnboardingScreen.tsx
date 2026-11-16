@@ -10,14 +10,17 @@ export const OnboardingScreen: React.FC = () => {
   const [name, setName] = useState('');
   const [avatarId, setAvatarId] = useState('sunny');
   const [step, setStep] = useState<'auth' | 'avatar' | 'name'>('auth');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleFinish = () => {
-    if (!name.trim()) return;
-    setProfile({
-      name: name.trim(),
-      avatarId,
-      heartPoints: 0,
-    });
+  const handleFinish = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true); setError('');
+    try {
+      const result = await setProfile({ name: name.trim(), avatarId, heartPoints: 0 });
+      if (!result.ok) setError(result.error || 'Your profile could not be saved. Please try again.');
+    } catch { setError('Your profile could not be saved. Please try again.'); }
+    finally { setSaving(false); }
   };
 
   return (
@@ -55,6 +58,7 @@ export const OnboardingScreen: React.FC = () => {
       <div className="w-full max-w-md sm:max-w-xl game-card rounded-b-none sm:rounded-b-[2.5rem] rounded-t-[2.5rem] p-6 sm:p-8 space-y-5 z-20 relative shadow-2xl"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)', marginBottom: 0 }}
       >
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         {step === 'auth' ? (
           <div className="flex flex-col h-full justify-center space-y-4 pt-10">
             <button
@@ -141,8 +145,8 @@ export const OnboardingScreen: React.FC = () => {
 
             <button
               className={`btn-chunky w-full text-sm ${name.trim() ? 'btn-pink' : 'btn-white opacity-60'}`}
-              onClick={handleFinish}
-              disabled={!name.trim()}
+              onClick={() => void handleFinish()}
+              disabled={saving || !name.trim()}
             >
               {t.onboardStart}
             </button>

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
-import { ArrowRight, Dices, Hash, Heart, HeartHandshake, Layers3, Lightbulb, Play, Sparkles, TextCursor, Users, type LucideProps } from 'lucide-react';
+import { ArrowRight, Dices, Hash, Heart, HeartHandshake, Layers3, Lightbulb, Play, Sparkles, TextCursor, Users, Grid2X2, Feather, type LucideProps } from 'lucide-react';
+import { isLocalGame, type PlayableGameId } from '../data/gameCatalog';
 import { GameArtwork } from './ArcadeArt';
 import { sounds } from '../utils/audio';
 import { useMultiplayer } from '../store/MultiplayerContext';
 
-type GameType = 'swipe' | 'quiz' | 'wheel' | 'match' | 'number' | 'letter' | 'secret-race' | 'choices';
+type GameType = PlayableGameId;
 
 interface GameIntroConfig {
   title: string;
@@ -18,6 +19,16 @@ interface GameIntroConfig {
 }
 
 const GAME_CONFIGS: Record<GameType, GameIntroConfig> = {
+  memory: {
+    title: 'Memory Match', eyebrow: 'A little brain date', subtitle: 'Find the pairs. Cheer each other on. Two minds make a lovely team.', accent: '#d5f578', icon: Grid2X2,
+    steps: [{ title: 'Choose your board', description: 'Pick a comfortable challenge and play solo or take turns.' }, { title: 'Turn over two cards', description: 'Remember what you see and look for a matching pair.' }, { title: 'Find them all', description: 'Enjoy the small victories. There is no countdown to beat.' }],
+    buttonText: 'Find our first match', tipText: 'Play on one screen. Your board stays here if you refresh.',
+  },
+  story: {
+    title: 'Story Builder', eyebrow: 'A story only you could write', subtitle: 'Start with a spark. Add a sentence. See where your imagination takes you.', accent: '#f9d77e', icon: Feather,
+    steps: [{ title: 'Pick a beginning', description: 'Choose a story starter and name your storytellers.' }, { title: 'Take turns adding a line', description: 'Follow the thread or send it somewhere wonderfully unexpected.' }, { title: 'Keep your creation', description: 'Finish when it feels right, then copy or download your story.' }],
+    buttonText: 'Once upon an us', tipText: 'Solo or together on one screen. Your story stays in this tab until you start fresh.',
+  },
   swipe: {
     title: 'Icebreaker Cards', eyebrow: 'Conversation', subtitle: 'Quick answers, unexpected laughs, and a little room for the deeper stuff.', accent: '#ff829e', icon: Layers3,
     steps: [
@@ -104,7 +115,7 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
   const multiplayer = useMultiplayer();
   const [phase, setPhase] = useState<'intro' | 'countdown' | 'go'>('intro');
   const [countdownNum, setCountdownNum] = useState(3);
-  const isMultiplayer = multiplayer.status === 'connected';
+  const isMultiplayer = multiplayer.status === 'connected' && !isLocalGame(gameType);
 
   const timerIds = useRef<number[]>([]);
   const phaseRef = useRef<'intro' | 'countdown' | 'go'>('intro');
@@ -141,7 +152,7 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
     setCountdownNum(3);
     sounds.playFlip();
 
-    if (broadcast && isMultiplayer) {
+    if (broadcast && isMultiplayer && !isLocalGame(gameType)) {
       multiplayer.sendMessage({ type: 'START_COUNTDOWN', payload: { game: gameType } });
     }
 
@@ -152,7 +163,7 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
       window.setTimeout(() => {
         // The host commits the start, so both devices use the same round.
         if (isMultiplayer && !multiplayer.isHost) return;
-        if (broadcast && isMultiplayer) multiplayer.sendMessage({ type: 'START_GAME', payload: { game: gameType } });
+        if (broadcast && isMultiplayer && !isLocalGame(gameType)) multiplayer.sendMessage({ type: 'START_GAME', payload: { game: gameType } });
         finishCountdown();
       }, 3700),
     ];
@@ -195,7 +206,7 @@ export const GameIntro = ({ gameType, onStart, countdownTrigger }: GameIntroProp
           <GameArtwork kind={artworkKind} />
         </div>
         <div className="arcade-scene-caption">
-          <span className="arcade-player-chip"><Users aria-hidden="true" /> {gameType === 'secret-race' ? 'Two devices' : gameType === 'quiz' || gameType === 'match' ? 'Same phone or online' : 'Solo or together'}</span>
+          <span className="arcade-player-chip"><Users aria-hidden="true" /> {isLocalGame(gameType) ? 'Solo or one screen' : gameType === 'secret-race' ? 'Two devices' : gameType === 'quiz' || gameType === 'match' ? 'Same phone or online' : 'Solo or together'}</span>
           <span className="arcade-handwritten">{gameType === 'swipe' ? 'Skip the small talk.' : gameType === 'letter' || gameType === 'number' ? 'A little friendly rivalry.' : 'Better with your person.'}</span>
         </div>
       </div>

@@ -75,7 +75,7 @@ export const SpinWheel: React.FC<Props> = ({ onEndGame, reservedQuestionIds = []
     if (!key || rewardedSpins.current.has(key)) return;
     rewardedSpins.current.add(key);
     if (multiplayer.status !== 'connected') incrementPlayCount('solo');
-    addHeartPoints(HEART_POINTS.COMPLETE_WHEEL, multiplayer.status === 'connected');
+    addHeartPoints(HEART_POINTS.COMPLETE_WHEEL, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
     sounds.playSuccess();
     confetti({ particleCount: 90, spread: 100, origin: { y: 0.6 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15', '#F97316'] });
   }, [multiplayer.status, incrementPlayCount, addHeartPoints]);

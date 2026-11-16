@@ -2,6 +2,7 @@ import React from 'react';
 import { Heart, RefreshCw, Share2, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
 import { sounds } from '../utils/audio';
 import { useGame } from '../store/GameContext';
+import { useChatDialog } from './useChatDialog';
 
 interface SummaryModalProps {
   isOpen: boolean;
@@ -10,12 +11,16 @@ interface SummaryModalProps {
   categoryLabel: string;
   onRestart: () => void;
   onSelectCategory: () => void;
+  canRestart?: boolean;
+  onFinish: () => void;
+  finishLabel?: string;
 }
 
 export const SummaryModal: React.FC<SummaryModalProps> = ({
-  isOpen, answeredCount, skippedCount, categoryLabel, onRestart, onSelectCategory
+  isOpen, answeredCount, skippedCount, categoryLabel, onRestart, onSelectCategory, canRestart = true, onFinish, finishLabel = 'Back to games'
 }) => {
   const { t } = useGame();
+  const dialogRef = useChatDialog(isOpen, onFinish);
   if (!isOpen) return null;
 
   const handleShare = () => {
@@ -30,7 +35,7 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
 
   return (
     <div className="completion-overlay">
-      <section className="completion-sheet" role="dialog" aria-modal="true" aria-labelledby="deck-complete-title">
+      <div ref={dialogRef} tabIndex={-1} className="completion-sheet" role="dialog" aria-modal="true" aria-labelledby="deck-complete-title">
         <header className="completion-heading">
           <span className="completion-kicker"><Sparkles aria-hidden="true" /> ICEBREAKER CARDS</span>
           <span className="completion-symbol completion-symbol-pink"><Heart aria-hidden="true" /></span>
@@ -52,17 +57,18 @@ export const SummaryModal: React.FC<SummaryModalProps> = ({
         <p className="completion-note">{t.summaryVibeText}</p>
 
         <div className="completion-actions">
-          <button type="button" onClick={onRestart} className="completion-button completion-button-primary">
+          {canRestart ? <><button type="button" onClick={onRestart} className="completion-button completion-button-primary">
             <RefreshCw aria-hidden="true" /> {t.summaryRestart}
           </button>
           <button type="button" onClick={onSelectCategory} className="completion-button completion-button-secondary">
             {t.summaryChangeCategory} <ArrowRight aria-hidden="true" />
-          </button>
+          </button></> : <p role="status">Waiting for your host to choose the next deck.</p>}
+          <button type="button" onClick={onFinish} className="completion-button completion-button-secondary">{finishLabel} <ArrowRight aria-hidden="true" /></button>
           <button type="button" onClick={handleShare} className="completion-share">
             <Share2 aria-hidden="true" /> {t.summaryShare}
           </button>
         </div>
-      </section>
+      </div>
     </div>
   );
 };

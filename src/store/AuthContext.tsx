@@ -1,6 +1,7 @@
-﻿import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
+import { createLegacyMigrationRunner, updateDailyPlayCount } from '../utils/progressPersistence';
 
 const clearAccountCache = () => {
   [
@@ -10,7 +11,9 @@ const clearAccountCache = () => {
     'jodohdeck_partner',
     'jodohdeck_answered',
     'knotyet_seen_questions',
-  ].forEach(key => localStorage.removeItem(key));
+  ].forEach(key => {
+    try { localStorage.removeItem(key); } catch { /* Optional cache cleanup must never block an account change. */ }
+  });
 };
 interface AuthContextType {
   session: Session | null;
@@ -22,9 +25,12 @@ interface AuthContextType {
   signInWithGoogle: (returnPath?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProgress: () => Promise<void>;
+  refreshProfile: () => Promise<boolean>;
   refreshCouple: () => Promise<void>;
   incrementPlayCount: (type: 'solo' | 'multiplayer') => Promise<void>;
   checkLimit: (type: 'solo' | 'multiplayer') => boolean;
+  progressError: string | null;
+  clearProgressError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -37,9 +43,12 @@ const AuthContext = createContext<AuthContextType>({
   signInWithGoogle: async () => {},
   signOut: async () => {},
   refreshProgress: async () => {},
+  refreshProfile: async () => false,
   refreshCouple: async () => {},
   incrementPlayCount: async () => {},
   checkLimit: () => true,
+  progressError: null,
+  clearProgressError: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -51,86 +60,121 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [couple, setCouple] = useState<CoupleProgress | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionResolved, setSessionResolved] = useState(false);
+  const accountRef = useRef<string | null>(null);
+  const accountVersion = useRef(0);
+  const accountAbort = useRef(new AbortController());
+  const progressReadVersion = useRef(0);
+  const profileReadVersion = useRef(0);
+  const coupleReadVersion = useRef(0);
+  const [progressError, setProgressError] = useState<string | null>(null);
+  const [runLegacyMigration] = useState(createLegacyMigrationRunner);
   
   // Keep game callers working while play remains unrestricted during review.
   const checkLimit: AuthContextType['checkLimit'] = () => true;
 
+  const refreshProfile = async () => {
+    if (!user || accountRef.current !== user.id) return false;
+    const version = accountVersion.current;
+    const request = ++profileReadVersion.current;
+    const signal = accountAbort.current.signal;
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).abortSignal(signal).single();
+      if (accountRef.current !== user.id || accountVersion.current !== version || request !== profileReadVersion.current || signal.aborted) return false;
+      if (error || !data) return false;
+      setProfile(data);
+      return true;
+    } catch { return false; }
+  };
+
   const refreshProgress = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from('user_progress')
-      .select('*')
-      .eq('user_id', user.id)
-      .single();
-      
-    if (data && !error) {
-      const today = new Date().toISOString().split('T')[0];
-      if (data.last_reset_date !== today) {
-        // Perform daily reset
-        const { data: updatedData } = await supabase
-          .from('user_progress')
-          .update({
-             last_reset_date: today,
-             play_together_count: 0,
-             solo_play_count: 0
-          })
-          .eq('user_id', user.id)
-          .select()
-          .single();
-          
-        if (updatedData) {
-          setProgress(updatedData);
-          return;
-        }
+    if (!user || accountRef.current !== user.id) return;
+    const version = accountVersion.current;
+    const request = ++progressReadVersion.current;
+    const signal = accountAbort.current.signal;
+    const isCurrent = () => accountRef.current === user.id && accountVersion.current === version && request === progressReadVersion.current;
+    let importError: string | null = null;
+    try {
+      await runLegacyMigration(supabase, localStorage, user.id, signal);
+    } catch {
+      importError = 'Your earlier progress could not be imported yet. It is still saved on this device. Refresh to try again.';
+    }
+    if (!isCurrent()) return;
+    try {
+      const data = await updateDailyPlayCount(supabase, user.id, signal);
+      if (isCurrent()) {
+        setProgress(data as unknown as UserProgress);
+        setProgressError(importError);
       }
-      setProgress(data);
+    } catch {
+      if (isCurrent()) setProgressError('We could not refresh your progress. Check your connection and try again.');
     }
   };
 
   const refreshCouple = async () => {
-    if (!user) return;
+    if (!user || accountRef.current !== user.id) return;
+    const version = accountVersion.current;
+    const request = ++coupleReadVersion.current;
     const { data, error } = await supabase
       .from('couples')
       .select('*')
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
-      .single();
+      .abortSignal(accountAbort.current.signal).maybeSingle();
       
-    if (data && !error) {
+    if (accountRef.current !== user.id || accountVersion.current !== version || request !== coupleReadVersion.current) return;
+    if (!error) {
       setCouple(data);
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        void supabase.realtime.setAuth(session.access_token);
-        setUser(session.user);
-      } else {
-        localStorage.removeItem('knotyet_guest_active');
-        localStorage.removeItem('knotyet_guest_id');
-        setUser(null);
-        setIsLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      if (session?.user) {
-        // Postgres Change subscriptions use the current JWT for RLS. Refresh it
-        // whenever Auth rotates the session so chat does not silently go stale.
-        void supabase.realtime.setAuth(session.access_token);
-        setUser(session.user);
-      } else {
-        if (event === 'SIGNED_OUT') clearAccountCache();
-        setUser(null);
+    let active = true;
+    let authEventReceived = false;
+    if (accountAbort.current.signal.aborted) accountAbort.current = new AbortController();
+    const applySession = (nextSession: Session | null) => {
+      if (!active) return;
+      const nextId = nextSession?.user.id ?? null;
+      if (accountRef.current !== nextId) {
+        if (accountRef.current) clearAccountCache();
+        accountAbort.current.abort();
+        accountAbort.current = new AbortController();
+        accountVersion.current += 1;
+        accountRef.current = nextId;
         setProfile(null);
         setProgress(null);
         setCouple(null);
+        setIsLoading(Boolean(nextId));
+        setProgressError(null);
       }
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      setSessionResolved(true);
+      if (nextSession) {
+        void supabase.realtime.setAuth(nextSession.access_token).catch(() => {});
+      } else {
+        try {
+          localStorage.removeItem('knotyet_guest_active');
+          localStorage.removeItem('knotyet_guest_id');
+        } catch { /* Authentication still settles when browser storage is blocked. */ }
+        setIsLoading(false);
+      }
+    };
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      // An auth event is newer than the bootstrap snapshot (e.g. sign-out).
+      if (!authEventReceived) applySession(session);
+    }).catch(() => {
+      if (!authEventReceived) applySession(null);
     });
 
-    return () => subscription.unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      authEventReceived = true;
+      if (event === 'SIGNED_OUT') clearAccountCache();
+      applySession(session);
+    });
+
+    return () => { active = false; accountAbort.current.abort(); accountVersion.current += 1; subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -139,75 +183,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!user) {
         setProfile(null);
         setProgress(null);
-        setIsLoading(false);
+        setCouple(null);
+        if (sessionResolved) setIsLoading(false);
         return;
       }
 
       setIsLoading(true);
       // Fetch Profile
+      const profileRequest = ++profileReadVersion.current;
       let { data: prof } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
       
-      if (!ignore) setProfile(prof);
+      if (ignore || accountRef.current !== user.id) return;
+      if (profileRequest === profileReadVersion.current) setProfile(prof);
 
-      // --- MIGRATION LOGIC ---
-      const hasMigrated = localStorage.getItem('jodohdeck_migrated_to_cloud');
-      if (!hasMigrated) {
-        try {
-          const localProfileStr = localStorage.getItem('jodohdeck_profile');
-          const localAnsweredStr = localStorage.getItem('jodohdeck_answered');
-          let localPoints = 0;
-          let localAnswered: string[] = [];
-          let localName = '';
-          let localAvatarId = '';
-          
-          if (localProfileStr) {
-            const lp = JSON.parse(localProfileStr);
-            if (lp.heartPoints) localPoints = lp.heartPoints;
-            if (lp.name) localName = lp.name;
-            if (lp.avatarId) localAvatarId = lp.avatarId;
-          }
-          if (localAnsweredStr) {
-            localAnswered = JSON.parse(localAnsweredStr);
-          }
-
-          if (localName || localAvatarId) {
-             await supabase.from('profiles').update({
-               name: localName || prof.name,
-               avatar_id: localAvatarId || prof.avatar_id
-             }).eq('id', user.id);
-             
-             // Update local state to reflect the migration instantly
-             prof = { ...prof, name: localName || prof.name, avatar_id: localAvatarId || prof.avatar_id };
-             if (!ignore) setProfile(prof);
-          }
-
-          if (localPoints > 0 || localAnswered.length > 0) {
-            // Update Supabase to merge local progress
-            await supabase.from('user_progress').update({
-              heart_points: localPoints,
-              answered_questions: localAnswered
-            }).eq('user_id', user.id);
-          }
-          localStorage.setItem('jodohdeck_migrated_to_cloud', 'true');
-        } catch (e) {
-          console.error('Failed to migrate local storage to Supabase:', e);
-        }
-      }
-
-      // Fetch Progress
-      await refreshProgress();
-      await refreshCouple();
+      // Refresh also retries an unfinished, account-owned legacy import.
+      if (ignore || accountRef.current !== user.id) return;
+      await Promise.all([refreshProgress(), refreshCouple()]);
       
       if (!ignore) setIsLoading(false);
     }
 
-    fetchUserData();
+    void fetchUserData().catch(error => {
+      console.error('Could not load account data:', error);
+    }).finally(() => {
+      if (!ignore && sessionResolved) setIsLoading(false);
+    });
     return () => { ignore = true; };
-  }, [user]);
+  }, [user, sessionResolved]);
 
   const signInWithGoogle = async (returnPath?: string) => {
     const safePath = returnPath === '/invite' ? '/invite' : '/';
@@ -233,22 +239,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   
   const incrementPlayCount = async (type: 'solo' | 'multiplayer') => {
-    if (!user || !progress) return;
-    const field = type === 'solo' ? 'solo_play_count' : 'play_together_count';
-    const newCount = (progress[field] || 0) + 1;
-    
-    const { data } = await supabase
-      .from('user_progress')
-      .update({ [field]: newCount })
-      .eq('user_id', user.id)
-      .select()
-      .single();
-      
-    if (data) setProgress(data);
+    if (!user || accountRef.current !== user.id) return;
+    const version = accountVersion.current;
+    try {
+      await updateDailyPlayCount(supabase, user.id, accountAbort.current.signal, type);
+      if (accountRef.current === user.id && accountVersion.current === version) await refreshProgress();
+    } catch {
+      if (accountRef.current === user.id && accountVersion.current === version) setProgressError('We could not confirm your play count. Refresh your progress before playing again.');
+    }
   };
-  
+
+  useEffect(() => {
+    if (!user) return;
+    const refresh = () => {
+      if (document.visibilityState !== 'hidden') void Promise.all([refreshProgress(), refreshCouple()]);
+    };
+    const channel = supabase.channel(`progress-${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user_progress', filter: `user_id=eq.${user.id}` }, () => { void refreshProgress(); });
+    if (couple?.id) channel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'couples', filter: `id=eq.${couple.id}` }, () => { void refreshCouple(); });
+    channel.subscribe();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => {
+      void supabase.removeChannel(channel);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+    };
+  }, [user?.id, couple?.id]);
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshCouple, incrementPlayCount, checkLimit }}>
+    <AuthContext.Provider value={{ session, user, profile, progress, couple, isLoading, signInWithGoogle, signOut, refreshProgress, refreshProfile, refreshCouple, incrementPlayCount, checkLimit, progressError, clearProgressError: () => setProgressError(null) }}>
       {children}
     </AuthContext.Provider>
   );

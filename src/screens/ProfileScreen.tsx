@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Check, Copy, Gamepad2, Heart, Link2, LogOut, MessageCircle, Pencil, Share2, ShieldCheck, Star, Users, X } from 'lucide-react';
 import { useGame, HEART_POINTS, type RelationshipType } from '../store/GameContext';
@@ -32,10 +32,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const currentAccount = useRef(user?.id);
+  currentAccount.current = user?.id;
   const invitedFrom = useRef(new Set<string>());
   const titleRef = useRef<HTMLHeadingElement>(null);
   const dialogRef = useChatDialog(true, () => { if (!busy) view === 'main' ? onClose() : changeView('main'); });
   const [inviteLink, setInviteLink] = useState('');
+
+  useEffect(() => {
+    setView('main'); setBusy(false); setError(''); setNotice(''); setInviteLink('');
+    invitedFrom.current = new Set();
+  }, [user?.id]);
 
   function changeView(next: ProfileView) {
     setError('');
@@ -81,13 +88,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
     changeView('invite');
   };
   const openFriends = () => { onClose(); onOpenFriends?.(); };
-  const saveProfile = (event: React.FormEvent) => {
+  const saveProfile = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!editName.trim()) return;
-    setProfile({ ...profile, name: editName.trim(), avatarId: editAvatar });
-    changeView('main');
-    setNotice('Profile updated. Looking good!');
-    sounds.playSuccess();
+    if (!editName.trim() || busy) return;
+    const accountId = user?.id;
+    setBusy(true); setError('');
+    try {
+      const result = await setProfile({ ...profile, name: editName.trim(), avatarId: editAvatar });
+      if (currentAccount.current !== accountId) return;
+      if (!result.ok) { setError(result.error || 'Your profile could not be saved. Please try again.'); return; }
+      changeView('main');
+      setNotice('Profile updated. Looking good!');
+      sounds.playSuccess();
+    } catch { if (currentAccount.current === accountId) setError('Your profile could not be saved. Your changes are still here.'); }
+    finally { if (currentAccount.current === accountId) setBusy(false); }
   };
   const copyInvite = async () => {
     setError('');
@@ -211,7 +225,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
           </section>
         </>}
 
-        {view === 'edit' && <form className="profile-edit-layout" onSubmit={saveProfile}>
+        {view === 'edit' && <form className="profile-edit-layout" onSubmit={event => void saveProfile(event)} aria-busy={busy}>
           <section className="profile-edit-preview" aria-label="Character preview">
             <span className="profile-eyebrow">MEET YOUR GAME-NIGHT SELF</span>
             <Avatar avatarId={editAvatar} size={150} />
@@ -220,9 +234,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose, onOpenFri
             <p>A little character.<br />A whole lot of you.</p>
           </section>
           <div className="profile-edit-fields">
-            <div className="profile-name-field"><label htmlFor="profile-name">{t.profileName}</label><input id="profile-name" name="displayName" autoComplete="nickname" maxLength={20} required value={editName} onChange={event => setEditName(event.target.value)} aria-describedby="profile-name-help" /><span id="profile-name-help">The name your person sees. <span>{editName.length}/20</span></span></div>
-            <div className="profile-character-field"><h2>{t.profileAvatar}</h2><p>Pick your little sidekick.</p><AvatarPicker selected={editAvatar} onChange={id => { setEditAvatar(id); sounds.playFlip(); }} /></div>
-            <div className="profile-form-actions"><button type="button" className="profile-button" onClick={() => changeView('main')}>Cancel</button><button type="submit" className="profile-button profile-primary" disabled={!editName.trim()}><Check size={17} aria-hidden="true" /> Save profile</button></div>
+            <div className="profile-name-field"><label htmlFor="profile-name">{t.profileName}</label><input id="profile-name" disabled={busy} name="displayName" autoComplete="nickname" maxLength={20} required value={editName} onChange={event => setEditName(event.target.value)} aria-describedby="profile-name-help" /><span id="profile-name-help">The name your person sees. <span>{editName.length}/20</span></span></div>
+            <div className="profile-character-field"><h2>{t.profileAvatar}</h2><p>Pick your little sidekick.</p><AvatarPicker selected={editAvatar} onChange={id => { if (!busy) { setEditAvatar(id); sounds.playFlip(); } }} /></div>
+            <div className="profile-form-actions"><button type="button" className="profile-button" disabled={busy} onClick={() => changeView('main')}>Cancel</button><button type="submit" className="profile-button profile-primary" disabled={busy || !editName.trim()}><Check size={17} aria-hidden="true" /> {busy ? 'Saving…' : 'Save profile'}</button></div>
           </div>
         </form>}
 

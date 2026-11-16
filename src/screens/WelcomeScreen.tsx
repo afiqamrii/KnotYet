@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../store/AuthContext';
 import { useGame } from '../store/GameContext';
 import { AVATARS, Avatar } from '../components/AvatarPicker';
@@ -24,22 +24,31 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
   const [step, setStep] = useState<'welcome' | 'avatar' | 'name' | 'creating'>('welcome');
   const [name, setName] = useState(user?.user_metadata?.full_name?.split(' ')[0] || '');
   const [avatarId, setAvatarId] = useState('sunny');
+  const [error, setError] = useState('');
+  const saving = useRef(false);
+  const currentAccount = useRef(user?.id);
+  currentAccount.current = user?.id;
+  const mounted = useRef(true);
 
-  useEffect(() => {
-    if (step !== 'creating') return;
-    const timer = window.setTimeout(() => {
-      setProfile({ name: name.trim(), avatarId, heartPoints: 0 });
-      onComplete();
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [step, name, avatarId, setProfile, onComplete]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'player one';
   const activeStep = step === 'welcome' ? 0 : step === 'avatar' ? 1 : 2;
 
-  const handleFinish = (event: React.FormEvent) => {
+  const handleFinish = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (name.trim()) setStep('creating');
+    if (!name.trim() || saving.current) return;
+    const accountId = user?.id;
+    saving.current = true;
+    setError(''); setStep('creating');
+    try {
+      const result = await setProfile({ name: name.trim(), avatarId, heartPoints: 0 });
+      if (!mounted.current || currentAccount.current !== accountId) return;
+      if (result.ok) onComplete();
+      else { setError(result.error || 'Your profile could not be saved. Please try again.'); setStep('name'); }
+    } catch {
+      if (mounted.current && currentAccount.current === accountId) { setError('Your profile could not be saved. Please try again.'); setStep('name'); }
+    } finally { saving.current = false; }
   };
 
   return (
@@ -113,7 +122,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
             )}
 
             {step === 'name' && (
-              <form onSubmit={handleFinish}>
+              <form onSubmit={event => void handleFinish(event)}>
                 <button type="button" className="setup-back" onClick={() => setStep('avatar')}><ArrowLeft size={16} /> Back</button>
                 <span className="setup-eyebrow">ONE LAST LITTLE THING</span>
                 <h1>Make a <span>name for yourself.</span></h1>
@@ -122,6 +131,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
                 <label className="setup-field-label" htmlFor="setup-player-name">Your player name</label>
                 <input id="setup-player-name" className="setup-input" type="text" autoComplete="nickname" maxLength={20} value={name} onChange={event => setName(event.target.value)} placeholder="What should we call you?" autoFocus required aria-describedby="setup-name-hint" />
                 <p className="setup-field-hint" id="setup-name-hint">Up to 20 characters. Make it yours.</p>
+                {error && <p className="signin-error" role="alert">{error}</p>}
                 <div className="setup-points-note"><Heart size={20} /><p>Start at <strong>0 Heart Points.</strong> Play together and watch your connection grow.</p></div>
                 <button type="submit" className="setup-button setup-button-primary" disabled={!name.trim()}>Let's play <Gamepad2 size={20} /></button>
               </form>
@@ -131,8 +141,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
               <div className="setup-creating" role="status" aria-live="polite">
                 <div className="setup-ready-avatar"><Avatar avatarId={avatarId} size={100} /><span><Check size={25} /></span></div>
                 <span className="setup-eyebrow">YOUR NEXT GOOD TIME IS LOADING</span>
-                <h1>You're in, <span>{name.trim()}!</span></h1>
-                <p className="setup-description">Getting your game room ready.</p>
+                <h1>One moment, <span>{name.trim()}.</span></h1>
+                <p className="setup-description">Saving your player profile.</p>
                 <div className="setup-loading-track" aria-hidden="true"><span /></div>
               </div>
             )}

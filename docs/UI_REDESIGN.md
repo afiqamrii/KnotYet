@@ -1,5 +1,77 @@
 ﻿# KnotYet UI audit and redesign
 
+## Review and improvements — 16 November 2026
+
+This review covers the current public deck, game picker, saved gameplay, account lifecycle, and cloud chat implementation. The older sections below are historical notes; their guest-entry, environment, and peer-only chat descriptions should not be treated as current behavior. The current app gates `/play` behind sign-in and stores direct messages in Supabase.
+
+### User experience changes
+
+- **Free deck:** a compact introduction, themes beside the card on desktop, and a compact theme row on phones bring the activity closer to the top of the page. The cream, purple, lime, and outlined arcade styling is retained.
+- **Save cards:** bookmark individual prompts and filter the library to saved cards, with an actionable empty state. Only card identifiers are stored in this browser; no answers are collected by this feature.
+- **Resume and navigate:** the selected card, asking player, and follow-up state survive refresh within the same tab. Previous restores the preceding question. Choosing the already-active theme no longer resets the conversation. Invalid or blocked browser storage falls back safely.
+- **Complete a deck:** the sixth card leads to a deliberate completion view with a new-theme action and replay, rather than unexpectedly looping. Follow-up toggles retain focus, library selections move focus to the player, and completion transitions keep keyboard users in the activity.
+- **Choose a game:** full titles replace ambiguous mobile abbreviations. The two-column phone picker provides larger targets, and “Surprise me” selects a different available offline game without immediately starting it.
+- **Free arcade:** `/arcade` offers Memory Match and Story Builder without signing in. Both also appear in the signed-in game picker; they are clearly described as solo/same-screen games, with no unsupported online mode.
+- **Memory Match:** shuffled 6/8-pair boards, solo or cooperative turns, explicit mismatch dismissal, accessible card labels, progress recovery, and a completion summary.
+- **Story Builder:** six original starters, alternating authors, editable names/title, eight-line or early completion, undo, draft recovery, copy, and a downloadable text story. Destructive resets require confirmation; ending unrelated games preserves saved creations.
+- **Game library:** nine-game catalog, search, mood filters, solo filtering, browser-saved favourites, recent games, useful empty states, and focus-contained navigation. Landing cards show approximate durations and supported play modes.
+- **Chat:** people search, persistent drafts, durable account-scoped unsent messages, retry/discard actions, and scroll-preserving earlier-message loading.
+
+### Bugs repaired
+
+| Severity | Before | Result |
+| --- | --- | --- |
+| High | Account bootstrap, progress, and couple requests could resolve after sign-out/account change and repopulate stale state. Failed loading could leave a spinner. | Account identity/version guards reject obsolete results; loading settles on errors. |
+| High | Queued question-history RPCs could run under the next signed-in account. | Each account has its own queue and abort signal; old requests and late results are discarded. |
+| High | Chat polling replaced local conversation state, losing failed messages and their Retry controls. | Server messages merge by ID, preserving pending/failed messages and read receipts. Rejected sends become retryable failures. |
+| Medium | Chat fetched the oldest 1,000 messages across all contacts, eventually omitting new replies and crowding out quieter conversations. | Fetch 50 messages per conversation with a stable timestamp/ID cursor, load earlier pages on demand, and count unread messages independently of the loaded page. |
+| High | Rapid rewards and daily-count resets wrote stale absolute totals; both peers awarded the same shared result. | Conditional compare-and-swap updates retry confirmed conflicts, local queues preserve order, and only the host awards a shared couple when the room participant matches the other member. Uncertain network failures are surfaced instead of blindly replayed. |
+| High | Legacy migration could overwrite newer cloud progress and mark failed imports complete. | Preserve cloud profile details, merge points with max, union question history through the existing atomic RPC, claim the cache for one account, and mark complete only after successful writes. Concurrent realtime refreshes share one in-flight import; failures can resume. |
+| Medium | Failed question history was marked locally seen with no later retry. | Account-scoped pending IDs retry on reconnect, focus, or the next login; old accounts cannot replay into new ones. |
+| Medium | Saved contacts were all presented as online; duplicate realtime events inflated unread counts; hidden tabs could mark messages read. | Presence remains unknown until known, labels say “Connected account,” duplicates do not add unread counts, and hidden threads do not mark messages read. |
+| Medium | Quiz/Match restored indices, stages, and completion independently of their decks. | Validate deck, answers, index, stage, and completion together; incomplete saves restart cleanly. |
+| Medium | One damaged history cache discarded its healthy companion; reset missed Number winner and Letter round keys. | Parse each history source independently and reset the missing keys. |
+| Medium | JSON `null` in intro state crashed the picker; an online-only saved game left no offline selection. | Validate intro shape and restore an available offline game. |
+| Medium | Held keys advanced multiple cards; gameplay shortcuts ran behind a disconnected-partner overlay. | Ignore repeated/composing keys and pause shortcuts under the overlay. Leave-room dialogs now contain and restore keyboard focus. |
+
+### Verification
+
+The follow-up review also repaired these reproducible issues:
+
+- Number Guesser and Letter Race lost shared turn/countdown/result state after refresh. Room-scoped snapshots and host synchronization now restore the current round and reject stale updates.
+- Completing an Icebreaker deck could leave the last card stuck after choosing the same category, trap a guest without an exit, or leave a dialog over the lobby. Completion now contains keyboard focus, offers explicit exits, respects host restart authority, and pauses beneath reconnect UI.
+- Malformed peer packets could reach game handlers unchecked; duplicate room-chat packets increased unread counts; an old leave timer could close a newly joined room. Incoming protocol validation, message deduplication, and connection-specific cleanup cover these cases.
+- Chat refreshes after more than 50 incoming messages could leave an unreachable history gap. Pagination now re-anchors safely, and per-message outbox records prevent concurrent browser tabs from overwriting one another's unsent messages.
+- Blocked browser storage could interrupt account transitions or invitation acceptance. Cache operations are optional, and restored invitation data is validated before use.
+- Profile edits previously reported success before the cloud write completed and could later revert to stale account data. Saving now waits for confirmation, refreshes the canonical profile, preserves unsaved edits on failure, and guards late responses after account changes.
+- Filter/reset actions removed focused UI controls, some library touch targets were too small, and long story author names overflowed phones. Focus destinations, 44px targets, accurate filtered-empty messages, and wrapping names address these issues.
+
+Run a Vite server with `npm run dev -- --host 127.0.0.1 --port 5174`, then use:
+
+```powershell
+npm run build
+npm run test:public
+npm run test:games
+npm run test:accounts
+npm run smoke
+```
+
+The new public-deck regression checks cover saving/removing, refresh, previous/turn order, completion, reselecting themes, focus, malformed/restricted storage, and 320/390/768/1440px layouts. Navigation fixtures cover five widths plus short laptop viewports. Screenshots are under `artifacts/public-deck/`, `artifacts/upgrade/`, `artifacts/local-activities/`, `artifacts/library-*.png`, and `artifacts/chat-upgrade-*.png`. The gameplay suite includes local activities, concurrent progress writes, midnight resets, migration retries, saved-session recovery, account-switch history, and existing game logic checks. Public smoke coverage uses actual routes; provider fixtures use controlled cloud responses.
+
+Auth/chat regression fixtures exercise the actual providers with controlled responses, including late bootstrap, sign-out during reads, latest-history ordering, failed/retrying sends, read receipts, and contact refresh races. These establish client behavior; they do not verify production RLS, a live Google OAuth round-trip, or real account delivery. No hosted data, schema, or deployment was changed.
+
+The legacy `scripts/chat-ui-check.mjs` fails at its removed “Start playing” guest CTA and seeds the retired local chat store. It has not been treated as a passing check; the new account/chat suite verifies the current providers and FriendsModal at 320/390/1366px, including focus containment/restoration and enabled invitations for connected contacts.
+
+The older `profile-check.mjs` and `profile-states-check.mjs` also target retired guest/unsigned-invite flows. Current profile saving is covered by `profile-save-check.mjs` using the real providers and screens, including failed saves, retry, setup, account switching, and canonical profile refresh.
+
+### Remaining production boundaries
+
+1. **Live verification:** exercise sign-in, invite acceptance, account switching, message retry/read receipts, and room reconnect with two dedicated test accounts against deployed database policies. Local fixture checks do not establish these production guarantees.
+2. **Authoritative reward ledger:** conditional writes fix lost updates, but a transport error can still leave the client uncertain whether a reward committed. Exactly-once retry across devices needs server-owned event IDs and an idempotent reward endpoint. Peer profile IDs support normal game association; they are not a security boundary or proof of identity. Database policies remain responsible for access control.
+3. **Device-local recovery:** chat outbox/drafts and saved favourites remain on this browser. Story/Memory progress remains in the current tab. These features deliberately explain where data is retained; they do not promise cross-device sync.
+
+Supabase API behavior was checked against its [auth event documentation](https://supabase.com/docs/reference/javascript/auth-onauthstatechange) and installed client types while reviewing account lifecycle and cancellation.
+
 ## Project structure
 
 KnotYet is a React 18 / TypeScript / Vite application. Tailwind utilities, Lucide icons, Framer Motion, and canvas-confetti support its interface and game feedback; no additional UI framework was needed.

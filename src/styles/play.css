@@ -93,6 +93,12 @@
 .arcade-together-sticker span { font: 700 16px/1.15 'Outfit', sans-serif; }
 .arcade-together-sticker > svg:first-child { width: 28px; height: 28px; fill: #ff829e; transform: rotate(-10deg); }
 .arcade-together-sticker > svg:last-child { width: 20px; height: 20px; align-self: flex-start; }
+.arcade-surprise-button { display: flex; align-items: center; gap: 11px; flex-shrink: 0; min-height: 52px; padding: 10px 15px; border: 1.5px solid #241d35; border-radius: 14px; background: #d5f578; box-shadow: 3px 3px 0 #241d35; text-align: left; transition: transform .15s, box-shadow .15s; }
+.arcade-surprise-button:hover { transform: translateY(-2px); box-shadow: 3px 5px 0 #241d35; }
+.arcade-surprise-button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #241d35; }
+.arcade-surprise-button > svg { width: 19px; height: 19px; }
+.arcade-surprise-button > span { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.arcade-surprise-button small { display: block; margin-top: 3px; font: 500 10px 'DM Sans',sans-serif; color: #4c503f; }
 
 /* The game selector feels like a shelf of cartridges. */
 .arcade-play .arcade-mode-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0 0 4px; border: 0; border-radius: 0; background: transparent; }
@@ -379,3 +385,20 @@
 @media (max-width: 359px) {
   .arcade-play .arcade-mode-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Full titles keep the picker understandable without remembering nicknames. */
+@media (max-width: 639px) {
+  .arcade-play .arcade-mode-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .arcade-play .game-mode-tab { flex-direction: row; justify-content: flex-start; min-height: 54px; padding: 9px; gap: 8px; }
+  .arcade-play .game-mode-copy { text-align: left; }
+  .arcade-play .game-mode-label { font-size: 12px; line-height: 1.25; }
+  .arcade-play-welcome { flex-wrap: wrap; gap: 14px; }
+  .arcade-surprise-button { min-height: 44px; padding: 8px 12px; gap: 8px; }
+  .arcade-surprise-button > span { font-size: 13px; }
+  .arcade-surprise-button small { display: none; }
+}
+/* Discovery controls are secondary to the selected game and its start action. */
+.arcade-discover-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.arcade-library-button{display:flex;align-items:center;gap:9px;min-height:52px;padding:10px 14px;border:1.5px solid #cfc2df;border-radius:14px;background:#f1eafa;color:#51386e;text-align:left}.arcade-library-button>span{font-size:14px;font-weight:750;line-height:1.2}.arcade-library-button small{display:block;margin-top:3px;font-size:10px;font-weight:500}.arcade-library-button:hover{border-color:#7650e8;background:#e8ddfa}.arcade-save-notice{display:flex;align-items:center;gap:9px;padding:10px 20px;background:#fff0d6;color:#7b4d17;font-size:12px;line-height:1.5}.arcade-save-notice>svg{flex-shrink:0}.arcade-save-notice>span{flex:1}.arcade-save-notice button{display:grid;place-items:center;width:44px;height:44px;flex-shrink:0;border:0;background:transparent;border-radius:8px}.arcade-mode-nav .game-mode-memory{--tile-color:#d5f578}.arcade-mode-nav .game-mode-story{--tile-color:#ffe5a0}
+@media(min-width:640px) and (max-width:1099px){.arcade-play .arcade-mode-nav{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(min-width:1100px){.arcade-play .arcade-mode-nav{grid-template-columns:repeat(9,minmax(0,1fr))}.arcade-play .game-mode-description{display:none}.arcade-play .game-mode-tab{align-items:center}}
+@media(max-width:639px){.arcade-discover-actions{gap:8px}.arcade-library-button{min-height:44px;padding:8px 11px}.arcade-library-button>span{font-size:13px}.arcade-library-button small{display:none}}

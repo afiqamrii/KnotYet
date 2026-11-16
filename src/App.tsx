@@ -10,6 +10,7 @@ import { PublicConversationDeck } from './screens/PublicConversationDeck';
 const WelcomeScreen = lazy(() => import('./screens/WelcomeScreen').then((module) => ({ default: module.WelcomeScreen })));
 const InviteScreen = lazy(() => import('./screens/InviteScreen').then((module) => ({ default: module.InviteScreen })));
 const PlayRoute = lazy(() => import('./routing/PlayRoute').then((module) => ({ default: module.PlayRoute })));
+const FreeArcadeScreen = lazy(() => import('./screens/FreeArcadeScreen').then(module => ({ default: module.FreeArcadeScreen })));
 
 const ProtectedRoute = ({ children, requireProfile = true }: { children: React.ReactNode; requireProfile?: boolean }) => {
   const { user, isLoading } = useAuth();
@@ -50,6 +51,7 @@ const AppRoutes = () => {
       <Route path="/play" element={<ProtectedRoute><PlayRoute /></ProtectedRoute>} />
       <Route path="/invite" element={<InviteScreen />} />
       <Route path="/try" element={<PublicConversationDeck />} />
+      <Route path="/arcade" element={<FreeArcadeScreen />} />
       <Route path="*" element={<Navigate to="/" replace />} />
       <Route path={'/privacy'} element={<PrivacyPolicy />} />
     </Routes>

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, Check, CheckCheck, Clock3, Copy, Link2, MessageCircle, Play, Send, Share2, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { useFriends, Friend, DirectMessage } from '../store/FriendsContext';
@@ -8,6 +8,7 @@ import { Avatar } from './AvatarPicker';
 import { UiSymbol } from './GameCardDesign';
 import { useChatDialog } from './useChatDialog';
 import { sounds } from '../utils/audio';
+import { readChatDraft, writeChatDraft } from '../utils/chatPersistence';
 import '../styles/chat.css';
 
 interface FriendsModalProps {
@@ -38,17 +39,18 @@ const relationshipLabel = (type: string) => RELATIONSHIPS.find(item => item.type
 
 const ChatDoodle = () => <div className="chat-doodle" aria-hidden="true"><MessageCircle /><MessageCircle /><span /></div>;
 
-function DeliveryStatus({ message, retry }: { message: DirectMessage; retry: () => void }) {
+function DeliveryStatus({ message, retry, discard }: { message: DirectMessage; retry: () => void; discard: () => void }) {
   if (message.status === 'read') return <span className="is-read"><CheckCheck /> Read</span>;
   if (message.status === 'delivered' || message.status === 'sent') return <span><Check /> Sent</span>;
-  if (message.status === 'failed') return <><span className="is-failed" title={message.error}>Not delivered</span><button className="chat-retry" onClick={retry}>Retry</button></>;
+  if (message.status === 'failed') return <><span className="is-failed" title={message.error}>Not confirmed</span><button className="chat-retry" onClick={retry}>Retry</button><button className="chat-retry" onClick={discard} aria-label={`Discard unsent message: ${message.text}`}>Discard</button></>;
   if (message.status === 'sending') return <span><Clock3 /> Sending</span>;
   return <span><Clock3 /> Waiting for partner</span>;
 }
 
 export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onLaunchMultiplayer }) => {
   const { friends, removeFriend, getConversation, sendDirectMessage, retryDirectMessage, createInviteLink,
-    activeChatFriendId, setActiveChatFriendId, myChatId, connectionStatus, connectionError } = useFriends();
+    activeChatFriendId, setActiveChatFriendId, myChatId, connectionStatus, connectionError,
+    contactsLoading, outboxWarning, getHistoryState, loadOlderMessages, discardFailedMessage, refreshContacts } = useFriends();
   const { profile } = useGame();
   const multiplayer = useMultiplayer();
   const [view, setView] = useState<'list' | 'add' | 'chat'>('list');
@@ -57,13 +59,22 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
   const [copiedLink, setCopiedLink] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [inputText, setInputText] = useState('');
+  const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const draftRef = useRef({ accountId: myChatId, friendId: selectedId, text: inputText });
+  draftRef.current = { accountId: myChatId, friendId: selectedId, text: inputText };
+  const drafts = useRef<Record<string, string>>({});
+  const scrollAnchor = useRef<{ height: number; top: number } | null>(null);
+  const stickToBottom = useRef(true);
   const selectedFriend = friends.find(friend => friend.id === selectedId) ?? null;
   const chatMessages = selectedFriend ? getConversation(selectedFriend.id) : [];
+  const history = selectedFriend ? getHistoryState(selectedFriend.id) : { hasMore: false, loading: false };
+  const visibleFriends = friends.filter(friend => friend.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const failedCount = chatMessages.filter(message => message.senderId === myChatId && message.status === 'failed').length;
   const closeModal = () => { setActiveChatFriendId(null); setView('list'); onClose(); };
   const dialogRef = useChatDialog(isOpen, closeModal);
 
@@ -74,12 +85,22 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
     }
   }, [isOpen, activeChatFriendId]);
 
-  useEffect(() => {
-    if (isOpen && view === 'chat' && messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  useLayoutEffect(() => {
+    const feed = messagesRef.current;
+    if (!isOpen || view !== 'chat' || !feed) return;
+    if (scrollAnchor.current) {
+      feed.scrollTop = scrollAnchor.current.top + feed.scrollHeight - scrollAnchor.current.height;
+      scrollAnchor.current = null;
+    } else if (stickToBottom.current) feed.scrollTop = feed.scrollHeight;
   }, [isOpen, view, selectedId, chatMessages.length]);
 
   useEffect(() => () => clearTimeout(copyTimer.current), []);
-  useEffect(() => { setError(''); setInputText(''); setConfirmRemove(false); }, [selectedId, view]);
+  useEffect(() => { drafts.current = {}; setInputText(''); setSearch(''); setSelectedId(null); setView('list'); }, [myChatId]);
+  useEffect(() => {
+    setError(''); setConfirmRemove(false); stickToBottom.current = true; scrollAnchor.current = null;
+    setInputText(selectedId ? drafts.current[selectedId] ?? readChatDraft(myChatId, selectedId) : '');
+    if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  }, [selectedId, view, myChatId]);
 
   if (!isOpen || !profile) return null;
 
@@ -91,13 +112,32 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
   };
   const openAdd = () => { setView('add'); setActiveChatFriendId(null); setError(''); };
   const backToList = () => { setView('list'); setActiveChatFriendId(null); };
+  const editDraft = (text: string) => {
+    setInputText(text);
+    if (!selectedId) return;
+    drafts.current[selectedId] = text;
+    writeChatDraft(myChatId, selectedId, text);
+  };
+  const loadEarlier = async () => {
+    if (!selectedFriend || history.loading) return;
+    if (messagesRef.current) scrollAnchor.current = { height: messagesRef.current.scrollHeight, top: messagesRef.current.scrollTop };
+    await loadOlderMessages(selectedFriend.id);
+    requestAnimationFrame(() => { scrollAnchor.current = null; });
+  };
   const sendText = async (text: string, quick = false) => {
     if (!text.trim() || !selectedFriend || sending) return;
     setError(''); setSending(true);
     try {
       const result = await sendDirectMessage(selectedFriend.id, text.trim(), quick);
-      if (result.ok) { if (!quick) setInputText(''); }
-      else setError(result.error || 'Your message could not be sent. Please try again.');
+      if ((result.ok || result.queued) && !quick && draftRef.current.accountId === myChatId) {
+        const currentDraft = drafts.current[selectedFriend.id] ?? text;
+        if (currentDraft === text) {
+          drafts.current[selectedFriend.id] = '';
+          writeChatDraft(myChatId, selectedFriend.id, '');
+          if (draftRef.current.friendId === selectedFriend.id && draftRef.current.text === text) setInputText('');
+        }
+      }
+      if (!result.ok && draftRef.current.friendId === selectedFriend.id) setError(result.error || 'Your message could not be sent. Please try again.');
     } catch { setError('Your message could not be sent. Your draft is still here.'); }
     finally { setSending(false); }
   };
@@ -162,12 +202,16 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
         <div className="chat-layout" data-view={view}>
           <aside className="chat-sidebar" aria-label="Friends">
             <button className="chat-add-button" onClick={openAdd}><UserPlus size={18} /> Invite your person</button>
+            <label className="chat-search"><span className="sr-only">Search your people</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Find your person…" /></label>
             <div className="chat-section-label"><span>Your people</span><span>{friends.length}</span></div>
-            {friends.length === 0 ? <div className="chat-welcome"><ChatDoodle /><h3>Better with two.</h3><p>Your circle starts with one invite. Bring your favourite person along.</p><button className="chat-secondary" onClick={openAdd}>Get an invite link <Link2 /></button></div>
-            : <div className="chat-friend-list">{friends.map(friend => <button key={friend.id} className="chat-friend" aria-current={view === 'chat' && selectedId === friend.id ? 'true' : undefined} onClick={() => openChat(friend)}>
-                <Avatar avatarId={friend.avatarId} size={43} /><span className="chat-friend-copy"><strong>{friend.name}</strong><small>{friend.lastMessage || (friend.linked ? 'Say a little hello' : 'Saved profile · invite to connect')}</small></span>{(friend.unreadCount || 0) > 0 ? <span className="chat-unread" aria-label={`${friend.unreadCount} unread messages`}>{friend.unreadCount! > 99 ? '99+' : friend.unreadCount}</span> : <span className={`chat-friend-label ${friend.linked && friend.isOnline ? 'is-linked' : ''}`} title={friend.linked ? friend.isOnline ? 'Online' : 'Offline' : 'Saved on this device'} />}
+            {contactsLoading && friends.length === 0 && <p className="chat-sync-state" role="status">Loading your circle…</p>}
+            {!contactsLoading && connectionStatus === 'error' && <div className="chat-sync-state" role="status"><p>Your circle could not sync.</p><button className="chat-secondary" onClick={() => void refreshContacts()}>Try again</button></div>}
+            {friends.length === 0 && !contactsLoading ? <div className="chat-welcome"><ChatDoodle /><h3>Better with two.</h3><p>Your circle starts with one invite. Bring your favourite person along.</p><button className="chat-secondary" onClick={openAdd}>Get an invite link <Link2 /></button></div>
+            : <div className="chat-friend-list">{visibleFriends.map(friend => <button key={friend.id} className="chat-friend" aria-current={view === 'chat' && selectedId === friend.id ? 'true' : undefined} onClick={() => openChat(friend)}>
+                <Avatar avatarId={friend.avatarId} size={43} /><span className="chat-friend-copy"><strong>{friend.name}</strong><small>{friend.lastMessage || (friend.linked ? 'Say a little hello' : 'Saved profile · invite to connect')}</small></span>{(friend.unreadCount || 0) > 0 ? <span className="chat-unread" aria-label={`${friend.unreadCount} unread messages`}>{friend.unreadCount! > 99 ? '99+' : friend.unreadCount}</span> : <span className={`chat-friend-label ${friend.linked ? 'is-linked' : ''}`} title={friend.linked ? friend.isOnline ? 'Online' : 'Connected account' : 'Saved on this device'} />}
               </button>)}</div>}
-            <p className="chat-sidebar-note">Messages sync securely to your account.<br />Come back anytime on this device.</p>
+            {friends.length > 0 && visibleFriends.length === 0 && <p className="chat-sync-state" role="status">No one matches “{search}”.</p>}
+            <p className="chat-sidebar-note">Messages sync to your account.<br />Drafts and unsent messages stay on this device until sent or discarded.</p>
           </aside>
           <section className="chat-main">
             {view === 'list' && <div className="chat-welcome"><ChatDoodle /><h3>A little closer, even from afar.</h3><p>{friends.length ? 'Pick someone from your circle to say hello, swap a little banter, or invite them to a game.' : 'Send an invite, connect your accounts, and let the good conversations begin.'}</p><button className="chat-primary" onClick={openAdd}><UserPlus /> Invite someone</button><div className="chat-steps"><span><b>1</b>Share your link</span><span><b>2</b>They accept</span><span><b>3</b>Chat & play</span></div></div>}
@@ -185,22 +229,25 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({ isOpen, onClose, onL
               </div>
             </>}
             {view === 'chat' && selectedFriend && <>
-              <div className="chat-thread-header"><div className="chat-person"><button className="chat-icon-button chat-back" onClick={backToList} aria-label="Back to friends"><ArrowLeft /></button><Avatar avatarId={selectedFriend.avatarId} size={40} /><div><h3>{selectedFriend.name}</h3><p>{relationshipLabel(selectedFriend.relationshipType)} · {selectedFriend.linked ? selectedFriend.isOnline ? 'Here with you' : 'Away right now' : 'Saved on this device'}</p></div></div><div className="chat-thread-actions"><button className="chat-primary" onClick={() => void createGameInvite(selectedFriend)} disabled={!selectedFriend.linked || sending} aria-label={`Invite ${selectedFriend.name} to play`}><Play /><span>Let’s play</span></button><button className="chat-icon-button" onClick={() => setConfirmRemove(true)} aria-label={`Remove ${selectedFriend.name} from your circle`} title="Remove from your circle"><Trash2 /></button></div></div>
+              <div className="chat-thread-header"><div className="chat-person"><button className="chat-icon-button chat-back" onClick={backToList} aria-label="Back to friends"><ArrowLeft /></button><Avatar avatarId={selectedFriend.avatarId} size={40} /><div><h3>{selectedFriend.name}</h3><p>{relationshipLabel(selectedFriend.relationshipType)} · {selectedFriend.linked ? selectedFriend.isOnline ? 'Here with you' : 'Connected account' : 'Saved on this device'}</p></div></div><div className="chat-thread-actions"><button className="chat-primary" onClick={() => void createGameInvite(selectedFriend)} disabled={!selectedFriend.linked || sending} aria-label={`Invite ${selectedFriend.name} to play`}><Play /><span>Let’s play</span></button><button className="chat-icon-button" onClick={() => setConfirmRemove(true)} aria-label={`Remove ${selectedFriend.name} from your circle`} title="Remove from your circle"><Trash2 /></button></div></div>
               {confirmRemove && <div className="chat-remove-confirm"><p>Remove {selectedFriend.name} and this chat from your account?</p><div><button className="chat-secondary" onClick={() => setConfirmRemove(false)}>Keep them</button><button className="chat-secondary" onClick={() => void removeSelectedFriend()}>Remove chat</button></div></div>}
               {!selectedFriend.linked ? <div className="chat-linked-notice"><Link2 /><span>This profile is saved on your device. Share an invite to connect your accounts and chat.</span></div>
               : connectionStatus !== 'online' ? <div className="chat-linked-notice"><Clock3 /><span>{connectionStatus === 'connecting' ? 'Connecting your chat. Messages will wait here until you are connected.' : connectionError || 'Chat is reconnecting. Your messages will wait here.'}</span></div>
-              : !selectedFriend.isOnline && <div className="chat-linked-notice"><Clock3 /><span>They are away. Your message will be waiting in their account.</span></div>}
-              <div className="chat-feed" ref={messagesRef} role="log" aria-live="polite" aria-label={`Conversation with ${selectedFriend.name}`}>
+              : selectedFriend.isOnline === false && <div className="chat-linked-notice"><Clock3 /><span>They are away. Your message will be waiting in their account.</span></div>}
+              {outboxWarning && <p className="chat-error" role="status">{outboxWarning}</p>}
+              {failedCount > 0 && <p className="chat-outbox-note" role="status">{failedCount} {failedCount === 1 ? 'message needs' : 'messages need'} a retry. Your outbox stays on this device.</p>}
+              <div className="chat-feed" ref={messagesRef} onScroll={() => { const feed = messagesRef.current; if (feed) stickToBottom.current = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80; }} role="log" aria-live="polite" aria-busy={history.loading} aria-label={`Conversation with ${selectedFriend.name}`}>
+                {history.hasMore && <div className="chat-history"><button className="chat-secondary" onClick={() => void loadEarlier()} disabled={history.loading}>{history.loading ? 'Loading earlier messages…' : 'Load earlier messages'}</button>{history.error && <p role="status">{history.error}</p>}</div>}
                 {chatMessages.length === 0 ? <div className="chat-welcome"><ChatDoodle /><h3>{selectedFriend.linked ? `Hey, ${selectedFriend.name}.` : 'One invite away.'}</h3><p>{selectedFriend.linked ? 'A sweet hello, a little banter, or “one more round?” Make the first move.' : 'A name and avatar do not connect two devices. Send your person an invite link to start chatting.'}</p>{!selectedFriend.linked && <button className="chat-primary" onClick={openAdd}><Link2 /> Get an invite link</button>}</div>
                 : chatMessages.map(message => {
                   const mine = message.senderId === myChatId;
                   return <div className={`chat-message ${mine ? 'is-mine' : ''}`} key={message.id}>{!mine && <Avatar avatarId={message.senderAvatar} size={28} />}<div className="chat-message-body">
                     {message.gameInvite ? <div className="chat-game-invite"><span><UiSymbol kind="game" /> Your next good time</span><strong>#{message.gameInvite.roomCode}</strong><p>{message.text}</p><button className="chat-primary" onClick={() => { if (mine) launchRoom(message.gameInvite!.roomCode); else { multiplayer.joinRoom(message.gameInvite!.roomCode, profile); closeModal(); } }}><Play />{mine ? 'Open your room' : 'Join their room'}</button></div> : <div className={`chat-bubble ${message.isQuickReaction && CHAT_REACTIONS.some(reaction => reaction.emoji === message.text) ? 'chat-reaction-bubble' : ''}`}>{message.text}</div>}
-                    <div className="chat-message-meta"><time dateTime={new Date(message.timestamp).toISOString()}>{timeOf(message.timestamp)}</time>{mine && <DeliveryStatus message={message} retry={() => void retry(message)} />}</div>
+                    <div className="chat-message-meta"><time dateTime={new Date(message.timestamp).toISOString()}>{timeOf(message.timestamp)}</time>{mine && <DeliveryStatus message={message} retry={() => void retry(message)} discard={() => discardFailedMessage(message.friendId, message.id)} />}</div>
                   </div></div>;
                 })}
               </div>
-              {selectedFriend.linked && <><div className="chat-reaction-strip" aria-label="Send a quick reaction">{CHAT_REACTIONS.map(reaction => <button type="button" key={reaction.emoji} disabled={sending} onClick={() => void sendText(reaction.emoji, true)} aria-label={reaction.label} title={reaction.label}>{reaction.emoji}</button>)}</div><div className="chat-quick-replies" aria-label="Quick replies">{QUICK_REPLIES.map(text => <button key={text} disabled={sending} onClick={() => void sendText(text, true)}>{text}</button>)}</div><form className="chat-composer" onSubmit={event => { event.preventDefault(); void sendText(inputText); }}><input aria-label={`Message ${selectedFriend.name}`} value={inputText} onChange={event => setInputText(event.target.value)} placeholder={`A little note for ${selectedFriend.name}...`} maxLength={500} autoComplete="off" /><button type="submit" disabled={!inputText.trim() || sending} aria-label="Send message"><Send /></button></form></>}
+              {selectedFriend.linked && <><div className="chat-reaction-strip" aria-label="Send a quick reaction">{CHAT_REACTIONS.map(reaction => <button type="button" key={reaction.emoji} disabled={sending} onClick={() => void sendText(reaction.emoji, true)} aria-label={reaction.label} title={reaction.label}>{reaction.emoji}</button>)}</div><div className="chat-quick-replies" aria-label="Quick replies">{QUICK_REPLIES.map(text => <button key={text} disabled={sending} onClick={() => void sendText(text, true)}>{text}</button>)}</div><form className="chat-composer" onSubmit={event => { event.preventDefault(); void sendText(inputText); }}><input aria-label={`Message ${selectedFriend.name}`} value={inputText} onChange={event => editDraft(event.target.value)} placeholder={`A little note for ${selectedFriend.name}...`} maxLength={500} autoComplete="off" /><button type="submit" disabled={!inputText.trim() || sending} aria-label="Send message"><Send /></button></form></>}
             </>}
             {error && <p className="chat-error" role="alert">{error}</p>}
           </section>

@@ -228,7 +228,7 @@ export const SecretNumberRaceGame: React.FC<Props> = ({ onEndGame }) => {
   useEffect(() => {
     if (!state || (state.phase !== 'result' && state.phase !== 'complete') || rewardedRounds.current.has(state.matchId)) return;
     rewardedRounds.current.add(state.matchId);
-    addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, true);
+    addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, true, multiplayer.isHost, multiplayer.remoteProfile?.accountId);
   }, [state, addHeartPoints]);
 
   if (multiplayer.status !== 'connected') return <section className="secret-race-card secret-race-empty"><Users /><h2>Secret Number Race is made for two.</h2><p>Open a Play Together room, then pick this game from your shared lobby.</p></section>;

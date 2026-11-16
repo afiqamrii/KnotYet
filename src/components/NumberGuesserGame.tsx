@@ -1,7 +1,8 @@
 import { RoundLabel } from './GameCardDesign';
 import { GiphyReaction } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, useRef, Component, ErrorInfo } from 'react';
-import { readJson } from '../utils/storage';
+import { writeJson } from '../utils/storage';
+import { restoreNumberSession, validateNumberSnapshot, type NumberGuess, type NumberRoundSnapshot } from '../utils/numberSession';
 import confetti from 'canvas-confetti';
 import { ArrowDown, ArrowUp, Minus, Plus, Sparkles, Target } from 'lucide-react';
 import { sounds } from '../utils/audio';
@@ -43,34 +44,31 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const partnerName = multiplayer.remoteProfile?.name || partner?.name || 'Partner';
   const [localMode, setLocalMode] = useState<'solo' | 'together'>(() => sessionStorage.getItem('num_mode') === 'together' ? 'together' : 'solo');
 
-  const [stage, setStage] = useState<'setup' | 'guess' | 'reveal'>(() => {
-    if (multiplayer.status === 'connected') return 'guess';
-    const s = sessionStorage.getItem('num_stage');
-    return (s === 'reveal' || s === 'guess') ? s as 'reveal' | 'guess' : 'setup';
-  });
-  const [secretNumber, setSecretNumber] = useState<number | null>(() => (
-    multiplayer.status === 'connected' && !multiplayer.isHost
-      ? multiplayer.numberSecret
-      : Number(sessionStorage.getItem('num_secret')) || null
-  ));
-  const [guesses, setGuesses] = useState<{ value: number; hint: 'higher' | 'lower'; guesser?: string }[]>(() => {
-    if (multiplayer.status === 'connected') return [];
-    try {
-      return readJson<Array<{ value: number; hint: 'higher' | 'lower'; guesser?: string }>>(sessionStorage, 'num_guesses', []);
-    } catch { return []; }
-  });
+  const roomCode = multiplayer.roomCode || null;
+  const online = Boolean(roomCode) || multiplayer.status === 'connected';
+  const [restored] = useState(() => restoreNumberSession(sessionStorage, roomCode, online));
+  const [synced, setSynced] = useState(!online || multiplayer.isHost);
+  const [stage, setStage] = useState<'setup' | 'guess' | 'reveal'>(restored?.stage || (online ? 'guess' : 'setup'));
+  const [secretNumber, setSecretNumber] = useState<number | null>(restored?.secret ?? (online && !multiplayer.isHost ? multiplayer.numberSecret : null));
+  const [guesses, setGuesses] = useState<NumberGuess[]>(restored?.guesses || []);
   const [inputValue, setInputValue] = useState('');
-  const [winnerName, setWinnerName] = useState<string | null>(() => sessionStorage.getItem('num_winner'));
+  const [winnerName, setWinnerName] = useState<string | null>(restored?.winnerName || null);
   
   const [localP1Name, setLocalP1Name] = useState(() => sessionStorage.getItem('num_p1') || profile?.name || 'Player 1');
   const [localP2Name, setLocalP2Name] = useState(() => sessionStorage.getItem('num_p2') || partner?.name || 'Player 2');
 
-  const [round, setRound] = useState(() => Number(sessionStorage.getItem('num_round')) || 1);
+  const [round, setRound] = useState(restored?.round || 1);
   const [hintPopup, setHintPopup] = useState<{ hint: 'higher' | 'lower' } | null>(null);
   const roundFinished = useRef(stage === 'reveal');
+  const turnPending = useRef(false);
   const processedGuesses = useRef(new Set(guesses.map(guess => guess.value)));
   const hintTimer = useRef<number>();
+  const snapshotRef = useRef<NumberRoundSnapshot | null>(null);
+  const syncedRef = useRef(synced);
+  syncedRef.current = synced;
+  snapshotRef.current = roomCode && secretNumber !== null && stage !== 'setup' ? { roomCode, round, secret: secretNumber, guesses, stage, winnerName } : null;
   useEffect(() => () => window.clearTimeout(hintTimer.current), []);
+  useEffect(() => { turnPending.current = false; }, [guesses, stage]);
 
   const isP1Turn = guesses.length % 2 === 0;
   
@@ -101,11 +99,11 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
 
   // Generate secret number on mount if missing
   useEffect(() => {
-    if (secretNumber === null && (multiplayer.status !== 'connected' || multiplayer.isHost)) {
+    if (secretNumber === null && (!online || multiplayer.isHost)) {
       const randomSecret = Math.floor(Math.random() * (MAX_NUM - MIN_NUM + 1)) + MIN_NUM;
       setSecretNumber(randomSecret);
     }
-  }, [secretNumber, multiplayer.status, multiplayer.isHost]);
+  }, [secretNumber, online, multiplayer.isHost]);
   useEffect(() => {
     if (multiplayer.status === 'connected' && multiplayer.isHost && secretNumber !== null) {
       multiplayer.sendMessage({ type: 'NUM_SET_SECRET', payload: secretNumber });
@@ -118,6 +116,8 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   }, [multiplayer.status, multiplayer.isHost, multiplayer.numberSecret]);
 
   useEffect(() => {
+    if (online && !synced) return;
+    if (secretNumber !== null) writeJson(sessionStorage, 'num_session', { roomCode: online ? roomCode : null, round, secret: secretNumber, guesses, stage, winnerName });
     sessionStorage.setItem('num_stage', stage);
     if (secretNumber) sessionStorage.setItem('num_secret', secretNumber.toString()); else sessionStorage.removeItem('num_secret');
     sessionStorage.setItem('num_guesses', JSON.stringify(guesses));
@@ -126,23 +126,26 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     sessionStorage.setItem('num_p2', localP2Name);
     sessionStorage.setItem('num_mode', localMode);
     if (winnerName) sessionStorage.setItem('num_winner', winnerName); else sessionStorage.removeItem('num_winner');
-  }, [stage, secretNumber, guesses, round, localP1Name, localP2Name, localMode, winnerName]);
+  }, [stage, secretNumber, guesses, round, localP1Name, localP2Name, localMode, winnerName, online, synced, roomCode]);
 
   const processGuess = (val: number, guesser: string) => {
-    if (stage !== 'guess' || roundFinished.current || secretNumber === null || !Number.isInteger(val) || val < lowerBound || val > upperBound || processedGuesses.current.has(val)) return;
+    if (stage !== 'guess' || roundFinished.current || turnPending.current || secretNumber === null || !Number.isInteger(val) || val < lowerBound || val > upperBound || processedGuesses.current.has(val)) return;
+    turnPending.current = true;
     processedGuesses.current.add(val);
     
     if (val === secretNumber) {
       // Win
       roundFinished.current = true;
+      if (snapshotRef.current) snapshotRef.current = { ...snapshotRef.current, stage: 'reveal', winnerName: guesser };
       setWinnerName(guesser);
       setStage('reveal');
       sounds.playSuccess();
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       if (multiplayer.status !== 'connected') incrementPlayCount('solo');
-      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected');
+      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
     } else {
       const hint = val < secretNumber ? 'higher' : 'lower';
+      if (snapshotRef.current) snapshotRef.current = { ...snapshotRef.current, guesses: [{ value: val, hint, guesser }, ...snapshotRef.current.guesses] };
       setGuesses(prev => [{ value: val, hint, guesser }, ...prev]);
       sounds.playMismatch();
       
@@ -159,7 +162,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const handleGuess = (e: React.FormEvent) => {
     e.preventDefault();
     const val = Number(inputValue);
-    if (!guessIsValid || !isMyTurn || secretNumber === null || stage !== 'guess' || roundFinished.current) return;
+    if (!synced || turnPending.current || (online && multiplayer.status !== 'connected') || !guessIsValid || !isMyTurn || secretNumber === null || stage !== 'guess' || roundFinished.current) return;
 
     if (multiplayer.status !== 'connected' && !checkLimit('solo')) return;
 
@@ -167,7 +170,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     const guesser = multiplayer.status === 'connected' ? (profile?.name || 'Player') : currentTurnName;
 
     if (multiplayer.status === 'connected') {
-      multiplayer.sendMessage({ type: 'NUM_GUESS', payload: { val, name: guesser } });
+      multiplayer.sendMessage({ type: 'NUM_GUESS', payload: { val, name: guesser, round } });
     }
     processGuess(val, guesser || 'Player');
     setInputValue('');
@@ -193,6 +196,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   const executeNextRound = useCallback(() => {
     if (!roundFinished.current) return;
     roundFinished.current = false;
+    snapshotRef.current = null;
     processedGuesses.current.clear();
     window.clearTimeout(hintTimer.current);
     setHintPopup(null);
@@ -212,17 +216,53 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
           setSecretNumber(msg.payload);
           sounds.playFlip();
         } else if (msg.type === 'NUM_GUESS') {
-          if (isMyTurn) return;
+          if (!synced || isMyTurn || (typeof msg.payload === 'object' && msg.payload.round !== undefined && msg.payload.round !== round)) return;
           const guessVal = typeof msg.payload === 'object' ? msg.payload.val : msg.payload;
           const guessName = typeof msg.payload === 'object' ? msg.payload.name : undefined;
           processGuess(guessVal, guessName || multiplayer.remoteProfile?.name || 'Partner');
         } else if (msg.type === 'NUM_NEXT') {
-          executeNextRound();
+          if (!multiplayer.isHost) executeNextRound();
         }
       });
     }
-  }, [multiplayer.status, multiplayer.subscribeMessage, executeNextRound, secretNumber, multiplayer.remoteProfile, stage, lowerBound, upperBound, isMyTurn]);
+  }, [multiplayer.status, multiplayer.subscribeMessage, executeNextRound, secretNumber, multiplayer.remoteProfile, stage, lowerBound, upperBound, isMyTurn, round, synced]);
 
+
+  useEffect(() => {
+    if (!online || multiplayer.status !== 'connected') {
+      if (online && !multiplayer.isHost) { syncedRef.current = false; setSynced(false); }
+      return;
+    }
+    const unsubscribe = multiplayer.subscribeMessage(message => {
+      if (message.type === 'NUM_REQUEST' && multiplayer.isHost && snapshotRef.current) {
+        multiplayer.sendMessage({ type: 'NUM_STATE', payload: snapshotRef.current });
+      } else if (message.type === 'NUM_STATE' && !multiplayer.isHost && validateNumberSnapshot(message.payload) && message.payload.roomCode === roomCode) {
+        const next = message.payload;
+        const previous = snapshotRef.current;
+        if (syncedRef.current && previous && (next.round < previous.round || (next.round === previous.round && (next.guesses.length < previous.guesses.length || (previous.stage === 'reveal' && next.stage !== 'reveal'))))) return;
+        const completedNow = next.stage === 'reveal' && (!previous || previous.round !== next.round || !roundFinished.current);
+        snapshotRef.current = next;
+        roundFinished.current = next.stage === 'reveal';
+        processedGuesses.current = new Set(next.guesses.map(guess => guess.value));
+        setSecretNumber(next.secret);
+        setRound(next.round);
+        setGuesses(next.guesses);
+        setStage(next.stage);
+        setWinnerName(next.winnerName);
+        setInputValue('');
+        syncedRef.current = true;
+        setSynced(true);
+        if (completedNow) addHeartPoints(HEART_POINTS.COMPLETE_QUIZ, true, false, multiplayer.remoteProfile?.accountId);
+      }
+    });
+    if (!multiplayer.isHost) multiplayer.sendMessage({ type: 'NUM_REQUEST' });
+    else if (snapshotRef.current) multiplayer.sendMessage({ type: 'NUM_STATE', payload: snapshotRef.current });
+    return unsubscribe;
+  }, [online, multiplayer.status, multiplayer.isHost, multiplayer.sendMessage, multiplayer.subscribeMessage, roomCode, addHeartPoints, multiplayer.remoteProfile?.accountId]);
+
+  useEffect(() => {
+    if (multiplayer.status === 'connected' && multiplayer.isHost && snapshotRef.current) multiplayer.sendMessage({ type: 'NUM_STATE', payload: snapshotRef.current });
+  }, [multiplayer.status, multiplayer.isHost, multiplayer.sendMessage, round, secretNumber, guesses, stage, winnerName]);
 
   const handleEndGame = () => {
     if (onEndGame) {
@@ -250,6 +290,14 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [stage, handleNextRound]);
+
+  if (online && (!synced || multiplayer.status !== 'connected')) return (
+    <section className="game-card activity-card p-6 text-center space-y-3" role="status">
+      <h2 className="font-black text-xl">Restoring your number round…</h2>
+      <p>Your guesses and turn will resume together when the host reconnects.</p>
+      <button type="button" className="btn-chunky btn-white px-4 py-2" disabled={multiplayer.status !== 'connected'} onClick={() => multiplayer.sendMessage({ type: 'NUM_REQUEST' })}>Sync round</button>
+    </section>
+  );
 
   return (
     <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">

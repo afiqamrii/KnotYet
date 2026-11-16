@@ -2,6 +2,7 @@ import { UiSymbol, RoundLabel } from './GameCardDesign';
 import { GiphyReaction, ReactionDialog } from './GiphyReaction';
 import React, { useState, useEffect, useCallback, useRef, Component, ErrorInfo } from 'react';
 import { readStringUnion } from '../utils/storage';
+import { restoreQuestionSession } from '../utils/questionSession';
 import confetti from 'canvas-confetti';
 import { Heart, Sparkles, RefreshCw, Trophy } from 'lucide-react';
 import { GuessQuizItem } from '../data/questions';
@@ -56,18 +57,8 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
     if (multiplayer.status === 'connected' && !multiplayer.isHost) {
       return getGuessQuestionsByIds(multiplayer.questionDecks.quiz || []);
     }
-    try {
-      const stored = sessionStorage.getItem('guess_questions');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const restored = getGuessQuestionsByIds(parsed.map(item => item.id));
-          if (restored.length === parsed.length) return restored;
-          ['guess_currentIndex', 'guess_stage', 'guess_actualAnswer', 'guess_guessedAnswer', 'guess_score', 'guess_completed', 'guess_isMySecret'].forEach(key => sessionStorage.removeItem(key));
-        }
-      }
-    } catch {}
-    return getShuffledGuessQuestions(10, progress?.answered_questions);
+    return restoreQuestionSession(sessionStorage, 'guess', getGuessQuestionsByIds)
+      ?? getShuffledGuessQuestions(10, progress?.answered_questions);
   });
   useEffect(() => {
     if (multiplayer.status !== 'connected' || multiplayer.isHost || !multiplayer.questionDecks.quiz) return;
@@ -143,7 +134,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
       setCompleted(true);
       setPointsToast(null);
       if (multiplayer.status !== 'connected') incrementPlayCount('solo');
-      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ + (score === questions.length ? HEART_POINTS.PERFECT_QUIZ : 0), multiplayer.status === 'connected');
+      addHeartPoints(HEART_POINTS.COMPLETE_QUIZ + (score === questions.length ? HEART_POINTS.PERFECT_QUIZ : 0), multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
       confetti({ particleCount: 150, spread: 120, origin: { y: 0.5 }, colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15'] });
     }
   }, [currentIndex, score, addHeartPoints, multiplayer.status, incrementPlayCount, questions.length]);
@@ -199,7 +190,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
 
     if (isMatch) {
       setScore((p) => p + 1);
-      addHeartPoints(EARN, multiplayer.status === 'connected');
+      addHeartPoints(EARN, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
       showToast(t.earnedPoints(EARN), true);
       sounds.playSuccess();
       confetti({
@@ -207,7 +198,7 @@ const CoupleGuessGameInner: React.FC<Props> = ({ onEndGame }) => {
         colors: ['#FF2D9B', '#7C3AED', '#06B6D4', '#10B981', '#FACC15'],
       });
     } else {
-      deductHeartPoints(DEDUCT, multiplayer.status === 'connected');
+      deductHeartPoints(DEDUCT, multiplayer.status === 'connected', multiplayer.isHost, multiplayer.remoteProfile?.accountId);
       showToast(t.deductedPoints(DEDUCT), false);
       sounds.playMismatch();
     }
