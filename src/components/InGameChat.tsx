@@ -19,14 +19,16 @@ const DESKTOP_CHAT = '(min-width: 1440px)';
 
 export const InGameChat: React.FC = () => {
   const { status, chatMessages, unreadChatCount, latestIncomingMessage, sendChatMessage, clearUnreadChatCount, remoteProfile } = useMultiplayer();
-  const [isOpen, setIsOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia(DESKTOP_CHAT).matches);
+  const [visibility, setVisibility] = useState<'auto' | 'open' | 'closed'>('auto');
   const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia(DESKTOP_CHAT).matches);
   const [inputText, setInputText] = useState('');
   const [activeToast, setActiveToast] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
   const feedRef = useRef<HTMLDivElement>(null);
-  const wasConnected = useRef(false);
   const connected = status === 'connected';
+  // Automatic desktop docking must not become an unsolicited phone overlay
+  // when the viewport narrows. Explicit choices remain stable across resizing.
+  const isOpen = connected && (visibility === 'open' || (visibility === 'auto' && isDesktop));
   const partnerName = remoteProfile?.name || 'Your person';
   const partnerAvatar = remoteProfile?.avatarId || 'sunny';
 
@@ -36,12 +38,6 @@ export const InGameChat: React.FC = () => {
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
   }, []);
-
-  useEffect(() => {
-    if (connected && !wasConnected.current && window.matchMedia(DESKTOP_CHAT).matches) setIsOpen(true);
-    wasConnected.current = connected;
-    if (!connected) setIsOpen(false);
-  }, [connected]);
 
   useEffect(() => {
     const docked = connected && isOpen && isDesktop;
@@ -64,13 +60,13 @@ export const InGameChat: React.FC = () => {
 
   useEffect(() => {
     if (!isOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setIsOpen(false); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setVisibility('closed'); };
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isOpen]);
 
   const openChat = () => {
-    setIsOpen(true);
+    setVisibility('open');
     setActiveToast(null);
     clearUnreadChatCount();
     sounds.playFlip();
@@ -94,7 +90,7 @@ export const InGameChat: React.FC = () => {
     {isOpen && <aside className="chat-window room-chat-dock" aria-labelledby="room-chat-title">
       <header className="chat-masthead">
         <div className="chat-masthead-title"><Avatar avatarId={partnerAvatar} size={43} /><div><span className="room-chat-eyebrow">PLAYING TOGETHER</span><h2 id="room-chat-title">Chat with {partnerName}</h2><p className="room-chat-status">Live in your room</p></div></div>
-        <button type="button" className="chat-icon-button" onClick={() => setIsOpen(false)} aria-label="Minimize room chat" title="Minimize chat"><PanelRightClose /></button>
+        <button type="button" className="chat-icon-button" onClick={() => setVisibility('closed')} aria-label="Minimize room chat" title="Minimize chat"><PanelRightClose /></button>
       </header>
       <div className="chat-feed" ref={feedRef} role="log" aria-live="polite" aria-label="Room conversation">
         {chatMessages.length === 0 ? <div className="chat-welcome"><div className="chat-doodle" aria-hidden="true"><MessageCircle /><MessageCircle /><span /></div><h3>Talk while<br />you play.</h3><p>Tease a guess, celebrate a win, or send a sweet note. This chat stays beside your game.</p></div>

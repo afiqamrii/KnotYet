@@ -22,7 +22,7 @@ window.setRoom=update;export const useMultiplayer=()=>React.useSyncExternalStore
 
 async function setup(width=390, storage={intro:'null', tab:'swipe'}, height=900) {
   const context=await browser.newContext({viewport:{width,height},reducedMotion:'reduce'});
-  await context.addInitScript(({intro,tab})=>{sessionStorage.setItem('knotyet_introShown',intro);localStorage.setItem('knotyet_activeTab',tab);}, storage);
+  await context.addInitScript(({intro,tab,roomOpen})=>{sessionStorage.setItem('knotyet_introShown',intro);localStorage.setItem('knotyet_activeTab',tab);if(roomOpen)sessionStorage.setItem('knotyet_openRoom','true');}, storage);
   await context.route('**/*',route=>{
     const url=new URL(route.request().url());
     if(url.pathname==='/navigation-fixture') return route.fulfill({contentType:'text/html',body:html});
@@ -117,6 +117,33 @@ try {
     assert.equal(await dialog.getByRole('button',{name:'Leave room'}).evaluate(el=>el===document.activeElement),true,'partner-away keyboard focus stays in dialog');
     await page.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true})));
     assert.equal(await page.evaluate(()=>sessionStorage.getItem('swipe_index')),index,'paused-room shortcut cannot change cards');
+    await dialog.getByRole('button',{name:'Leave room',exact:true}).click();
+    await page.locator('#intro-swipe').waitFor();
+    assert.equal(await page.getByRole('navigation',{name:'Choose your game'}).count(),1,'leaving a paused online round returns to the picker');
+    await context.close();
+  }
+  {
+    const {context,page}=await setup(390,{intro:'{"swipe":true,"number":true}',tab:'swipe'});
+    await page.locator('.arcade-card-stack').waitFor();
+    await page.evaluate(()=>{
+      sessionStorage.setItem('num_session','stale-online-round');
+      sessionStorage.setItem('letter_session','stale-online-round');
+      sessionStorage.setItem('knotyet_story_v1','saved-story');
+      window.setRoom({status:'joining',activeGame:'number',roomCode:'1234',isHost:false});
+    });
+    await page.getByRole('button',{name:'Cancel',exact:true}).click();
+    await page.locator('#intro-number').waitFor();
+    assert.deepEqual(await page.evaluate(()=>[sessionStorage.getItem('num_session'),sessionStorage.getItem('letter_session'),sessionStorage.getItem('knotyet_story_v1')]),[null,null,'saved-story'],'cancelling reconnect clears shared rounds while keeping local creations');
+    assert.equal(await page.getByRole('navigation',{name:'Choose your game'}).count(),1,'cancelled reconnect cannot leave an unsynchronized game active');
+    await context.close();
+  }
+  {
+    const {context,page}=await setup(390,{intro:'{"number":true}',tab:'number',roomOpen:true});
+    await page.evaluate(()=>window.setRoom({status:'error',activeGame:'number',roomCode:'1234',error:'Room unavailable'}));
+    await page.getByRole('alert').filter({hasText:'Room unavailable'}).waitFor();
+    await page.getByRole('button',{name:'Close room dialog',exact:true}).click();
+    await page.locator('#intro-number').waitFor();
+    assert.equal(await page.getByRole('navigation',{name:'Choose your game'}).count(),1,'closing a failed room restore releases the online game');
     await context.close();
   }
   {

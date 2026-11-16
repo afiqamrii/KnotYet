@@ -147,3 +147,6 @@
   .arcade-play[data-playing='true'] .arcade-session-controls { gap: 7px; }
   .arcade-play .global-sound-toggle { width: 44px; border-width: 0; background: transparent; }
 }
+@media (max-width: 359px) {
+  .arcade-play[data-playing='true'] .arcade-session-clock { display: none; }
+}

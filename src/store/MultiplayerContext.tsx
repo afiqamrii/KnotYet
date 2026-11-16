@@ -121,6 +121,7 @@ export const useMultiplayer = () => {
 };
 
 const getPeerId = (code: string) => `jodohdeck-v2-${code}`;
+const CONNECTION_TIMEOUT_MS = 15000;
 const getRestoredGame = (): GameMode => {
   const savedGame = sessionStorage.getItem('mp_activeGame');
   return savedGame && ['lobby', 'swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race', 'choices'].includes(savedGame)
@@ -159,6 +160,9 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const connRef = useRef<DataConnection | null>(null);
   const localProfileRef = useRef<UserProfile | null>(null);
   const hasConnectedRef = useRef(false);
+  const recoveringRef = useRef(false);
+  const connectionDeadlineRef = useRef<number | null>(null);
+  const connectionAttemptVersion = useRef(0);
   const remoteLeftRef = useRef(false);
   const receivedChatIds = useRef(new Set<string>());
   const messageSubscribers = useRef(new Set<(msg: MultiplayerMessage) => void>());
@@ -167,7 +171,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return () => { messageSubscribers.current.delete(listener); };
   }, []);
 
+  const clearConnectionDeadline = useCallback(() => {
+    connectionAttemptVersion.current += 1;
+    if (connectionDeadlineRef.current !== null) window.clearTimeout(connectionDeadlineRef.current);
+    connectionDeadlineRef.current = null;
+  }, []);
+
   const cleanup = useCallback((preserveSession = false) => {
+    clearConnectionDeadline();
     if (!preserveSession) {
       receivedChatIds.current.clear();
       sessionStorage.removeItem('mp_roomCode');
@@ -201,7 +212,30 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       numberSecret: null,
       wheelSpin: null,
     });
-  }, []);
+  }, [clearConnectionDeadline]);
+
+  const failConnectionAttempt = useCallback((peer: Peer, message: string) => {
+    if (peerRef.current !== peer) return;
+    clearConnectionDeadline();
+    // Detach before closing: synchronous or delayed close events from this
+    // attempt must not affect its replacement or overwrite the error state.
+    const connection = connRef.current;
+    connRef.current = null;
+    peerRef.current = null;
+    connection?.close();
+    peer.destroy();
+    const canRecover = recoveringRef.current || hasConnectedRef.current;
+    setState(s => ({ ...s, isConnected: false, status: canRecover ? 'partner_left' : 'error', error: canRecover ? null : message }));
+  }, [clearConnectionDeadline]);
+
+  const startConnectionDeadline = useCallback((peer: Peer, message: string) => {
+    clearConnectionDeadline();
+    const version = connectionAttemptVersion.current;
+    connectionDeadlineRef.current = window.setTimeout(() => {
+      if (connectionAttemptVersion.current !== version) return;
+      failConnectionAttempt(peer, message);
+    }, CONNECTION_TIMEOUT_MS);
+  }, [clearConnectionDeadline, failConnectionAttempt]);
 
   const handlePartnerLeft = useCallback(() => {
     setState(s => {
@@ -213,10 +247,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const handleConnection = useCallback((conn: DataConnection) => {
+    const previousConnection = connRef.current;
     connRef.current = conn;
+    if (previousConnection && previousConnection !== conn) previousConnection.close();
+    if (peerRef.current) startConnectionDeadline(peerRef.current, 'Connection timed out. Check your connection and try joining again.');
     
     conn.on('open', () => {
       if (connRef.current !== conn) return;
+      clearConnectionDeadline();
       hasConnectedRef.current = true;
       remoteLeftRef.current = false;
       setState(s => ({ ...s, isConnected: true, status: 'connected', error: null }));
@@ -296,13 +334,25 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
 
     conn.on('close', () => {
-      if (connRef.current === conn) handlePartnerLeft();
+      if (connRef.current === conn) {
+        clearConnectionDeadline();
+        connRef.current = null;
+        handlePartnerLeft();
+      }
     });
-    conn.on('error', () => { if (connRef.current === conn) handlePartnerLeft(); });
-  }, [handlePartnerLeft]);
+    conn.on('error', () => {
+      if (connRef.current === conn) {
+        clearConnectionDeadline();
+        connRef.current = null;
+        conn.close();
+        handlePartnerLeft();
+      }
+    });
+  }, [handlePartnerLeft, startConnectionDeadline, clearConnectionDeadline]);
 
   const hostRoom = useCallback((code: string, profile: UserProfile, reconnect = false) => {
     cleanup(reconnect);
+    recoveringRef.current = reconnect;
     if (!reconnect) { hasConnectedRef.current = false; remoteLeftRef.current = false; }
     localProfileRef.current = profile;
     setState(s => ({ ...s, status: 'hosting', isHost: true, roomCode: code, error: null }));
@@ -316,9 +366,11 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     });
     peerRef.current = peer;
+    startConnectionDeadline(peer, 'Creating the room timed out. Check your connection and try again.');
 
     peer.on('open', () => {
-      // Waiting for connection
+      if (peerRef.current !== peer) return;
+      if (!connRef.current) clearConnectionDeadline(); // A registered host may wait for a partner indefinitely.
     });
 
     peer.on('connection', (conn) => {
@@ -330,14 +382,14 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
     peer.on('error', (err) => {
       if (peerRef.current !== peer) return;
       console.error(err);
-      setState(s => ({ ...s, status: hasConnectedRef.current ? 'partner_left' : 'error', error: hasConnectedRef.current ? null : 'Failed to create room. Code might be in use.' }));
-      peer.destroy();
+      failConnectionAttempt(peer, 'Failed to create room. Code might be in use.');
     });
-    peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
-  }, [cleanup, handleConnection]);
+    peer.on('disconnected', () => { if (peerRef.current === peer && !peer.destroyed) peer.reconnect(); });
+  }, [cleanup, handleConnection, startConnectionDeadline, clearConnectionDeadline, failConnectionAttempt]);
 
   const joinRoom = useCallback((code: string, profile: UserProfile, reconnect = false) => {
     cleanup(reconnect);
+    recoveringRef.current = reconnect;
     if (!reconnect) { hasConnectedRef.current = false; remoteLeftRef.current = false; }
     localProfileRef.current = profile;
     setState(s => ({ ...s, status: 'joining', isHost: false, roomCode: code, error: null }));
@@ -351,9 +403,13 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
     });
     peerRef.current = peer;
+    startConnectionDeadline(peer, 'Joining timed out. Check the room code and your connection, then try again.');
 
     peer.on('open', () => {
       if (peerRef.current !== peer) return;
+      // Signaling can reconnect while the existing WebRTC channel stays open.
+      // Opening another channel here would interrupt a healthy game session.
+      if (connRef.current?.open) return;
       const conn = peer.connect(getPeerId(code), { reliable: true });
       handleConnection(conn);
     });
@@ -365,16 +421,15 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (err.type === 'peer-unavailable') {
         errorMsg = 'Room does not exist. Please check the code.';
       }
-      setState(s => ({ ...s, status: hasConnectedRef.current ? 'partner_left' : 'error', error: hasConnectedRef.current ? null : errorMsg }));
-      peer.destroy();
+      failConnectionAttempt(peer, errorMsg);
     });
-    peer.on('disconnected', () => { if (!peer.destroyed) peer.reconnect(); });
-  }, [cleanup, handleConnection]);
+    peer.on('disconnected', () => { if (peerRef.current === peer && !peer.destroyed) peer.reconnect(); });
+  }, [cleanup, handleConnection, startConnectionDeadline, failConnectionAttempt]);
 
   useEffect(() => {
     if (state.status !== 'partner_left' || !state.roomCode || !localProfileRef.current || remoteLeftRef.current) return;
     const retry = () => {
-      if (document.visibilityState !== 'visible' || !navigator.onLine || !localProfileRef.current || !state.roomCode) return;
+      if (remoteLeftRef.current || document.visibilityState !== 'visible' || !navigator.onLine || !localProfileRef.current || !state.roomCode) return;
       if (state.isHost) {
         if (!peerRef.current?.open) hostRoom(state.roomCode, localProfileRef.current, true);
       }
@@ -385,6 +440,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [state.status, state.isHost, state.roomCode, hostRoom, joinRoom]);
 
   const leaveRoom = useCallback(() => {
+    clearConnectionDeadline();
     remoteLeftRef.current = true;
     hasConnectedRef.current = false;
     if (connRef.current && connRef.current.open) {
@@ -396,7 +452,7 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // A quick join/create action may already have replaced the room.
       if (connRef.current === connection && peerRef.current === peer) cleanup();
     }, 100);
-  }, [cleanup]);
+  }, [cleanup, clearConnectionDeadline]);
 
   const setGame = useCallback((game: GameMode) => {
     setState(s => ({
@@ -458,12 +514,13 @@ export const MultiplayerProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   useEffect(() => () => {
+    clearConnectionDeadline();
     const connection = connRef.current;
     connRef.current = null;
     connection?.close();
     peerRef.current?.destroy();
     peerRef.current = null;
-  }, []);
+  }, [clearConnectionDeadline]);
 
   const clearUnreadChatCount = useCallback(() => {
     setState(s => ({ ...s, unreadChatCount: 0, latestIncomingMessage: null }));

@@ -87,7 +87,7 @@ export const i18n = {
     roomInputLabel: 'Enter 4-digit Room Code:',
     roomInputPlaceholder: '7482',
     roomStart: 'Join & Start Playing',
-    roomFreeNote: 'Free: 3 multiplayer sessions per day!',
+    roomFreeNote: 'Create a room or join with your partner’s code.',
     // Partner
     addPartner: 'Add Your Person',
     partnerLinked: 'Partner Linked!',
@@ -204,7 +204,7 @@ export const i18n = {
     roomInputLabel: 'Masukkan 4-Digit Kod Bilik:',
     roomInputPlaceholder: '7482',
     roomStart: 'Masuk & Mula Main',
-    roomFreeNote: 'Percuma 3 sesi multiplayer setiap hari tanpa langganan!',
+    roomFreeNote: 'Cipta bilik atau sertai dengan kod pasangan anda.',
     addPartner: 'Tambah Orang Istimewa',
     partnerLinked: 'Pasangan Berjaya Ditambah!',
     partnerCode: 'Kod Pasangan',

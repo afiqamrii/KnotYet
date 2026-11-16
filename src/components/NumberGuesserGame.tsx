@@ -9,6 +9,7 @@ import { sounds } from '../utils/audio';
 import { useGame, HEART_POINTS } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { useMultiplayer, MultiplayerMessage } from '../store/MultiplayerContext';
+import '../styles/number-guesser.css';
 
 const MIN_NUM = 1;
 const MAX_NUM = 100;
@@ -300,7 +301,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
   );
 
   return (
-    <div className="w-full max-w-sm sm:max-w-md md:max-w-xl lg:max-w-2xl flex-1 flex flex-col justify-between h-full animate-fade-in space-y-2 mx-auto">
+    <div className="number-game animate-fade-in" data-number-stage={stage}>
       {/* Standardized Game Header Bar */}
       <div className="game-toolbar w-full flex items-center justify-between px-3 py-2 rounded-2xl shrink-0">
         <div className="flex items-center gap-2.5">
@@ -326,7 +327,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         </button>
       </div>
 
-      <div className="game-card activity-card game-board w-full flex-1 flex flex-col justify-between p-3.5 sm:p-5 overflow-hidden relative animate-pop-in">
+      <div className="game-card activity-card game-board number-board relative animate-pop-in">
         <RoundLabel title={multiplayer.status !== 'connected' && localMode === 'solo' ? 'FIND THE NUMBER' : 'THE NUMBER DUEL'} detail={`ROUND ${round}`} kind="game" />
         {stage === 'setup' && (
           <div className="number-setup-stage w-full flex-1 flex flex-col items-center justify-center animate-slide-up">
@@ -380,7 +381,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
         )}
 
         {stage === 'guess' && (
-          <div className="number-game-stage w-full flex-1 animate-slide-up">
+          <div className="number-game-stage animate-slide-up">
             <section className="number-play-panel" aria-labelledby="number-turn-heading">
               <div className="number-turn-copy">
                 <span className="number-turn-kicker"><Target aria-hidden="true" /> Find the secret number</span>
@@ -391,7 +392,7 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
               <div className="number-range-card" aria-label={`Possible range is ${lowerBound} to ${upperBound}`}>
                 <div className="number-range-values">
                   <span><small>LOW</small>{lowerBound}</span>
-                  <strong>{lowerBound === upperBound ? 'Only one choice!' : 'THE NUMBER IS IN HERE'}</strong>
+                  <strong>{lowerBound === upperBound ? 'Only one choice!' : 'POSSIBLE RANGE'}</strong>
                   <span><small>HIGH</small>{upperBound}</span>
                 </div>
                 <div className="number-range-track" aria-hidden="true">
@@ -457,16 +458,15 @@ const NumberGuesserGameInner: React.FC<Props> = ({ onEndGame }) => {
             <aside className="number-history-panel" aria-label="Guess history">
               <div className="number-history-heading">
                 <div><span>Guess trail</span><strong>{guesses.length} {guesses.length === 1 ? 'try' : 'tries'}</strong></div>
-                {hintPopup && <GiphyReaction mood={hintPopup.hint} seed={`${round}-${guesses.length}`} compact />}
               </div>
               {guesses.length === 0 ? (
                 <div className="number-history-empty">
-                  <span>?</span>
+                  <span aria-hidden="true"><Target /></span>
                   <strong>No guesses yet</strong>
-                  <p>Your clues will stack up here.</p>
+                  <p>Make your first guess.<br />Follow the clues to narrow it down.</p>
                 </div>
               ) : (
-                <ol className="number-history-list">
+                <ol className="number-history-list" tabIndex={0} aria-label="Previous guesses, newest first">
                   {guesses.map((guess, index) => (
                     <li key={`${guess.value}-${index}`}>
                       <span>{guesses.length - index}</span>

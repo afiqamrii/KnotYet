@@ -11,6 +11,8 @@
     "check": "npm run typecheck && npm run build",
     "smoke": "node scripts/smoke.mjs",
     "test:games": "node scripts/review-check.mjs",
+    "test:transport": "node scripts/real-transport-check.mjs",
+    "test:live:public": "node scripts/live-public-check.mjs",
     "test:public": "node scripts/public-deck-check.mjs",
     "test:accounts": "node scripts/account-chat-regression-check.mjs",
     "test:local-games": "node scripts/local-activities-check.mjs",

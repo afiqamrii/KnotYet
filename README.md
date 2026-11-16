@@ -160,11 +160,15 @@ npm run test:public
 npm run test:accounts
 npm run test:progress
 npm run test:local-games
+npm run test:transport
+npm run test:live:public
 ```
 
 The Supabase project configuration is supplied through environment variables.
 
 Browser suites expect the Vite server on port 5174: `npm run dev -- --host 127.0.0.1 --port 5174`. Public routes include `/try` for conversation cards and `/arcade` for the free local games. `npm run test:games` includes the new local games, progress-concurrency checks, and navigation fixtures. `npm run smoke` covers current public routes, account/chat providers, and multiplayer UI/recovery fixtures without modifying real accounts. See `docs/UI_REDESIGN.md` for coverage and production verification limits.
+
+`test:games` also checks the real auth-to-room provider lifecycle with controlled service boundaries and the Number Guesser layout at five screen sizes. `test:transport` uses the local app with actual PeerJS signaling and WebRTC; it requires network access and uses synthetic profiles. `test:live:public` checks the deployed public deck and arcade without mocks, capturing screenshots and a JSON report under `artifacts/live/`. Set `LIVE_URL` to test another deployment. Neither suite verifies separate-account authentication or cellular-network connectivity.
 
 ## Development Status
 

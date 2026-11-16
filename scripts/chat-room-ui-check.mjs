@@ -3,16 +3,17 @@ import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
 await mkdir('artifacts', { recursive: true });
-const baseUrl = 'http://localhost:5174';
+const baseUrl = process.env.SMOKE_URL || 'http://127.0.0.1:5174';
 const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
 const errors = [];
-const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"/><script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script></head><body><main class="play-shell arcade-play"><div class="play-console" style="min-height:700px"></div></main><div id="root"></div><script type="module">import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';import { InGameChat } from '/src/components/InGameChat.tsx';import '/src/index.css';import '/src/styles/play.css';ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(InGameChat));</script></body></html>`;
+const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"/><script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;</script></head><body><main class="play-shell arcade-play"><div class="play-console" style="min-height:700px"><button type="button" style="margin:180px 20px 0;padding:20px" onclick="window.gameClicks=(window.gameClicks||0)+1">Make a guess</button></div></main><div id="root"></div><script type="module">import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';import { InGameChat } from '/src/components/InGameChat.tsx';import '/src/index.css';import '/src/styles/play.css';ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(InGameChat));</script></body></html>`;
 const mock = `import React from '/node_modules/.vite/deps/react.js';
 const listeners=new Set();const publish=()=>listeners.forEach(fn=>fn());
-let current={status:'connected',chatMessages:[{id:'incoming',senderId:'partner',senderName:'Mochi',senderAvatar:'mochi',text:'I knew you would pick that one!',timestamp:Date.now()}],unreadChatCount:1,latestIncomingMessage:null,remoteProfile:{name:'Mochi',avatarId:'mochi'}};
+let current={status:location.search.includes('disconnected')?'disconnected':'connected',activeGame:'lobby',chatMessages:[{id:'incoming',senderId:'partner',senderName:'Mochi',senderAvatar:'mochi',text:'I knew you would pick that one!',timestamp:Date.now()}],unreadChatCount:1,latestIncomingMessage:null,remoteProfile:{name:'Mochi',avatarId:'mochi'}};
 const subscribe=fn=>{listeners.add(fn);return()=>listeners.delete(fn)};
 const sendChatMessage=(text,isQuickReaction)=>{if(window.failSend)return false;current={...current,chatMessages:[...current.chatMessages,{id:crypto.randomUUID(),senderId:'me',senderName:'Alex',senderAvatar:'sunny',text,timestamp:Date.now(),isQuickReaction}]};publish();return true;};
 const clearUnreadChatCount=()=>{if(!current.unreadChatCount&&!current.latestIncomingMessage)return;current={...current,unreadChatCount:0,latestIncomingMessage:null};publish();};
+window.setRoomChatState=next=>{current={...current,...next};publish();};
 window.disconnectChat=()=>{current={...current,status:'partner_left'};publish();};
 export const useMultiplayer=()=>({...React.useSyncExternalStore(subscribe,()=>current),sendChatMessage,clearUnreadChatCount});`;
 
@@ -64,5 +65,44 @@ try {
     console.log(`${viewport.width}x${viewport.height}: side chat, sending, draft retention, quick replies, layout, collapse, and disconnect passed`);
     await context.close();
   }
+  // A desktop auto-open dock must not turn into a blocking mobile bottom sheet.
+  for (const startDesktop of [true, false]) {
+    const context = await browser.newContext({ viewport: startDesktop ? { width: 1536, height: 800 } : { width: 390, height: 844 }, reducedMotion: 'reduce' });
+    await context.route('**/*', route => {
+      const url = new URL(route.request().url());
+      if (url.pathname === '/room-chat-ui-fixture') return route.fulfill({ contentType: 'text/html', body: html });
+      if (url.pathname === '/src/store/MultiplayerContext.tsx') return route.fulfill({ contentType: 'application/javascript', body: mock });
+      return route.continue();
+    });
+    const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`${baseUrl}/room-chat-ui-fixture${startDesktop ? '' : '?disconnected'}`);
+    await page.waitForFunction(() => typeof window.setRoomChatState === 'function');
+    if (startDesktop) {
+      await page.locator('.room-chat-dock').waitFor();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.locator('.room-chat-dock').waitFor({ state: 'detached' });
+    } else await page.evaluate(() => window.setRoomChatState({ status: 'connected' }));
+    await page.getByRole('button', { name: /Open room chat/ }).waitFor();
+    await page.evaluate(() => window.setRoomChatState({ activeGame: 'number' }));
+    assert.equal(await page.locator('.room-chat-dock').count(), 0, 'phone room join and game start keep chat minimized');
+    await page.getByRole('button', { name: 'Make a guess' }).click();
+    assert.equal(await page.evaluate(() => window.gameClicks), 1, 'the game remains clickable without dismissing chat');
+    assert.equal(await page.locator('html').evaluate(el => el.classList.contains('room-chat-docked')), false);
+    await page.getByRole('button', { name: /Open room chat/ }).click();
+    await page.getByRole('textbox', { name: 'Message Mochi' }).fill('Keep my draft through rotation.');
+    await page.setViewportSize({ width: 844, height: 390 });
+    assert.equal(await page.getByRole('textbox', { name: 'Message Mochi' }).inputValue(), 'Keep my draft through rotation.', 'explicitly opened chat survives rotation');
+    await page.evaluate(() => window.disconnectChat());
+    await page.locator('.room-chat-dock').waitFor({ state: 'detached' });
+    await page.evaluate(() => window.setRoomChatState({ status: 'connected' }));
+    await page.getByRole('textbox', { name: 'Message Mochi' }).waitFor();
+    assert.equal(await page.getByRole('textbox', { name: 'Message Mochi' }).inputValue(), 'Keep my draft through rotation.', 'explicit open and draft survive reconnection');
+    await page.getByRole('button', { name: 'Minimize room chat' }).click();
+    await page.setViewportSize({ width: 1536, height: 800 });
+    await page.getByRole('button', { name: /Open room chat/ }).waitFor();
+    assert.equal(await page.locator('.room-chat-dock').count(), 0, 'an explicit minimize is respected on desktop too');
+    await context.close();
+  }
   assert.deepEqual(errors, []);
+  console.log('Responsive room chat: mobile join/gameplay, desktop-to-phone collapse, explicit visibility and draft retention passed.');
 } finally { await browser.close(); }

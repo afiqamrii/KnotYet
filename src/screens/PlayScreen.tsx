@@ -158,6 +158,23 @@ export const PlayScreen: React.FC = () => {
     setIsSummaryOpen(false);
   };
 
+  const leaveMultiplayerRoom = () => {
+    // An online round must not remain mounted as a local game after leaving:
+    // a recovering guest may still be waiting for the host's state snapshot.
+    const nextTab = multiplayer.activeGame !== 'lobby' && multiplayer.activeGame !== 'secret-race'
+      ? multiplayer.activeGame : (activeTab === 'secret-race' ? 'swipe' : activeTab);
+    sessionRestoredRef.current = false;
+    setIsDisconnectModalOpen(false);
+    setIsRoomModalOpen(false);
+    setIsEndGameModalOpen(false);
+    clearStorageKeys(sessionStorage, GAME_SESSION_KEYS);
+    writeJson(sessionStorage, STORAGE_KEYS.introShown, {});
+    setIntroShown({});
+    resetSwipeRound();
+    setActiveTab(nextTab);
+    multiplayer.leaveRoom();
+  };
+
   const confirmEndGame = () => {
     const currentTabToReset = multiplayer.status === 'connected' && multiplayer.activeGame !== 'lobby'
       ? multiplayer.activeGame
@@ -526,11 +543,7 @@ export const PlayScreen: React.FC = () => {
   const finishDeck = () => {
     if (multiplayer.status === 'partner_left') return;
     if (multiplayer.status === 'connected' && !multiplayer.isHost) {
-      multiplayer.leaveRoom();
-      markIntroNotShown('swipe');
-      setActiveTab('swipe');
-      sessionStorage.removeItem('swipe_deck');
-      resetSwipeRound();
+      leaveMultiplayerRoom();
     } else confirmEndGame();
   };
 
@@ -564,7 +577,7 @@ export const PlayScreen: React.FC = () => {
 
   // ---- Multiplayer Waiting / Connecting Overlay ----
   if (multiplayer.status === 'hosting' || multiplayer.status === 'joining') {
-    return <MultiplayerWaitingRoom status={multiplayer.status} roomCode={multiplayer.roomCode} profile={profile} onCancel={() => multiplayer.leaveRoom()} />;
+    return <MultiplayerWaitingRoom status={multiplayer.status} roomCode={multiplayer.roomCode} profile={profile} onCancel={leaveMultiplayerRoom} />;
   }
 
   return (
@@ -856,7 +869,7 @@ export const PlayScreen: React.FC = () => {
 
         <RoomModal 
           isOpen={isRoomModalOpen} 
-          onClose={() => setIsRoomModalOpen(false)} 
+          onClose={() => { if (multiplayer.status === 'error') leaveMultiplayerRoom(); else setIsRoomModalOpen(false); }}
         />
 
         <SummaryModal
@@ -924,7 +937,7 @@ export const PlayScreen: React.FC = () => {
                 <button onClick={() => setIsDisconnectModalOpen(false)} className="flex-1 py-3 rounded-2xl font-bold text-ink-3 bg-stone-100 hover:bg-stone-200 transition">
                   Cancel
                 </button>
-                <button onClick={() => { setIsDisconnectModalOpen(false); multiplayer.leaveRoom(); }} className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/30">
+                <button onClick={leaveMultiplayerRoom} className="flex-1 py-3 rounded-2xl font-bold text-white bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/30">
                   Disconnect
                 </button>
               </div>
@@ -942,7 +955,7 @@ export const PlayScreen: React.FC = () => {
               <p id="partner-away-description">Keep this room open if they are coming back. Your game can continue when you reconnect.</p>
               <div className="partner-away-status"><span aria-hidden="true" /> Waiting for your person</div>
               <div className="partner-away-actions">
-                <button type="button" className="partner-away-leave" onClick={() => multiplayer.leaveRoom()}>Leave room</button>
+                <button type="button" className="partner-away-leave" onClick={leaveMultiplayerRoom}>Leave room</button>
               </div>
             </section>
           </div>

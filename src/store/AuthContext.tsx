@@ -188,7 +188,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      setIsLoading(true);
+      // applySession owns blocking loading when the account identity changes.
+      // Same-account SIGNED_IN/TOKEN_REFRESHED events refresh this data in the
+      // background so protected game routes and their peer connections stay mounted.
       // Fetch Profile
       const profileRequest = ++profileReadVersion.current;
       let { data: prof } = await supabase
