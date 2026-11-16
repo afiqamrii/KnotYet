@@ -2,6 +2,7 @@ import type { MultiplayerMessage } from '../store/MultiplayerContext';
 import { isChoiceRound } from './choiceGame';
 import { validateNumberSnapshot } from './numberSession';
 import { validateLetterSnapshot } from './letterSession';
+import { validateSecretRaceState } from './secretRaceSession';
 
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const text = (value: unknown, max = 2000): value is string => typeof value === 'string' && value.length <= max;
@@ -11,13 +12,6 @@ const finite = (value: unknown): value is number => typeof value === 'number' &&
 const game = (value: unknown) => ['lobby', 'swipe', 'quiz', 'wheel', 'match', 'number', 'letter', 'secret-race', 'choices'].includes(value as string);
 const ids = (value: unknown): value is string[] => Array.isArray(value) && value.length <= 500 && value.every(id) && new Set(value).size === value.length;
 const equation = (value: unknown) => record(value) && integer(value.hostNumber, 1, 20) && integer(value.partnerNumber, 1, 20) && integer(value.answer, -400, 400);
-const race = (value: unknown) => record(value) && id(value.matchId) && integer(value.round, 1, 5) &&
-  ['+', '−', '×'].includes(value.operation as string) && ['picking', 'countdown', 'answering', 'result', 'complete'].includes(value.phase as string) &&
-  typeof value.hostLocked === 'boolean' && typeof value.partnerLocked === 'boolean' &&
-  record(value.scores) && integer(value.scores.host, 0, 5) && integer(value.scores.partner, 0, 5) &&
-  (value.equation === undefined || equation(value.equation)) &&
-  (!['answering', 'result', 'complete'].includes(value.phase as string) || equation(value.equation)) &&
-  (value.winner === undefined || ['host', 'partner', 'tie'].includes(value.winner as string));
 
 /** Peer packets are runtime input, even when our sender is typed. Reject an
  * incompatible/malformed packet before it reaches state or game subscribers. */
@@ -43,7 +37,7 @@ export function isMultiplayerMessage(value: unknown): value is MultiplayerMessag
     case 'NUM_SET_SECRET': return integer(p, 1, 100);
     case 'NUM_GUESS': return integer(p, 1, 100) || (record(p) && integer(p.val, 1, 100) && (p.name === undefined || text(p.name)) && (p.round === undefined || integer(p.round, 1)));
     case 'NUM_STATE': return validateNumberSnapshot(p);
-    case 'SECRET_RACE_START': case 'SECRET_RACE_STATE': case 'SECRET_RACE_RESULT': return race(p);
+    case 'SECRET_RACE_START': case 'SECRET_RACE_STATE': case 'SECRET_RACE_RESULT': return validateSecretRaceState(p);
     case 'SECRET_RACE_LOCK': return record(p) && id(p.matchId) && integer(p.number, 1, 20);
     case 'SECRET_RACE_GO': return record(p) && id(p.matchId) && equation(p.equation);
     case 'SECRET_RACE_ANSWER': return record(p) && id(p.matchId) && integer(p.answer, Number.MIN_SAFE_INTEGER);
@@ -57,7 +51,7 @@ export function isMultiplayerMessage(value: unknown): value is MultiplayerMessag
     case 'START_COUNTDOWN': return record(p) && game(p.game);
     case 'CHAT_MESSAGE': return record(p) && id(p.id) && text(p.senderId, 200) && text(p.senderName) && text(p.senderAvatar) && text(p.text) && !!p.text.trim() && integer(p.timestamp) && p.timestamp <= 8640000000000000 && (p.isQuickReaction === undefined || typeof p.isQuickReaction === 'boolean');
     case 'CHAT_TYPING': return record(p) && typeof p.isTyping === 'boolean';
-    case 'CHOICES_REQUEST': case 'QUIZ_NEXT': case 'MATCH_NEXT': case 'NUM_NEXT': case 'NUM_REQUEST': case 'LETTER_NEXT': case 'LETTER_REQUEST': case 'END_GAME': case 'LEAVE_ROOM': return true;
+    case 'CHOICES_REQUEST': case 'QUIZ_NEXT': case 'MATCH_NEXT': case 'NUM_NEXT': case 'NUM_REQUEST': case 'SECRET_RACE_REQUEST': case 'LETTER_NEXT': case 'LETTER_REQUEST': case 'END_GAME': case 'LEAVE_ROOM': return true;
     default: return false;
   }
 }

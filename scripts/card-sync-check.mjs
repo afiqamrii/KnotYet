@@ -9,7 +9,7 @@ const fixture = `<!doctype html><html><head><meta name="viewport" content="width
 import RefreshRuntime from '/@react-refresh';RefreshRuntime.injectIntoGlobalHook(window);window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
 await import('/src/index.css');
 localStorage.setItem('jodohdeck_profile',JSON.stringify({name:'Alex',avatarId:'sunny',heartPoints:0}));
-const solo=location.search.includes('solo'),dare=location.search.includes('dare'),category=dare?'dare-santai':'vibe-check';
+const solo=location.search.includes('solo'),dare=location.search.includes('dare'),category=new URLSearchParams(location.search).get('category')||(dare?'dare-santai':'vibe-check');
 sessionStorage.setItem('swipe_category',category);
 const { SWIPE_CARDS } = await import('/src/data/questions.ts');
 const deck=SWIPE_CARDS.filter(c=>c.category===category).slice(0,4).map(c=>c.id);
@@ -22,10 +22,8 @@ const React=(await import('/@id/react')).default;const {createRoot}=(await impor
 const {GameProvider}=await import('${gameContextUrl}');const {PlayScreen}=await import('/src/screens/PlayScreen.tsx');
 const root=createRoot(document.getElementById('root'));window.renderApp=()=>root.render(React.createElement(GameProvider,null,React.createElement(React.Suspense,{fallback:'Loading'},React.createElement(PlayScreen))));window.renderApp();
 </script></body></html>`;
-try {
-  for (const mode of ['host','guest','guest-leave','solo','dare']) {
-    const guest=mode.startsWith('guest');
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+async function setup(mode, viewport) {
+    const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.pathname === '/card-sync-fixture') return route.fulfill({ contentType: 'text/html', body: fixture });
@@ -38,6 +36,61 @@ try {
     const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${base}/card-sync-fixture?${mode}`);
     await page.locator('#intro-swipe').waitFor({timeout: 10000}).catch(async e => { throw new Error(errors.join(' | ') || await page.locator('body').innerText() || e.message); });
+    return { context, page };
+}
+try {
+  // The outer Skip/Answered row must never hide the card's distinct answer controls.
+  for (const { width, height, guest, category } of [
+    {width:1536,height:800,guest:false,category:'vibe-check'},
+    {width:1920,height:880,guest:true,category:'taaruf-realiti'},
+    {width:1536,height:800,guest:false,category:'teka-teki'},
+    {width:1920,height:880,guest:true,category:'teka-teki'},
+    {width:1280,height:600,guest:true,category:'teka-teki'},
+  ].filter(item=>!process.env.CARD_WIDTH||item.width===Number(process.env.CARD_WIDTH))) {
+    const {context,page}=await setup(`${guest?'guest':'host'}&category=${category}`,{width,height});
+    if(guest)await page.evaluate(()=>window.receive({type:'START_GAME',payload:{game:'swipe'}}));
+    else await page.getByRole('button',{name:'Start together'}).click();
+    await page.locator('.game-action-skip').waitFor();
+    const riddle=category==='teka-teki';
+    const label=riddle?(guest?'Lock in my guess':'Peek at the answer privately'):'Share your answers';
+    const action=page.locator('.swipe-card-front .card-reveal-button:enabled');
+    await page.screenshot({path:`artifacts/card-desktop-${width}-${category}-front.png`,fullPage:true});
+    if(!await action.isVisible())await page.screenshot({path:'artifacts/card-desktop-hidden-action.png',fullPage:true});
+    assert.equal(await action.isVisible(),true,`${width}: ${label} is visible on the desktop card`);
+    const bounds=await action.boundingBox();
+    assert.ok(bounds.width>=44&&bounds.height>=44&&bounds.y>=0&&bounds.y+bounds.height<height,`${width}: card action fits and remains touch-friendly`);
+    assert.equal(await action.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}),true,'the answer control is not behind another card or chat');
+    const cardId=await page.evaluate(()=>window.mp.questionDecks.swipe[0]);
+    if(riddle&&guest) {
+      await page.getByRole('textbox',{name:'What is your guess?'}).fill('A thoughtful guess');
+      await page.getByRole('button',{name:label,exact:true}).click();
+      assert.equal(await page.evaluate(()=>window.sent.some(m=>m.type==='CARD_SUBMIT'&&m.payload.answer==='A thoughtful guess')),true,'desktop riddle guess is sent');
+      await page.evaluate(cardId=>window.receive({type:'RIDDLE_REVEAL',payload:{cardId}}),cardId);
+      await page.locator('.swipe-card-back[aria-hidden="false"]').last().waitFor();
+    } else {
+      await page.getByRole('button',{name:label,exact:true}).focus();
+      await page.keyboard.press('Enter');
+      if(riddle) {
+        await page.evaluate(cardId=>window.receive({type:'CARD_SUBMIT',payload:{cardId,answer:'A thoughtful guess'}}),cardId);
+        await page.getByRole('button',{name:'Reveal to both of you',exact:true}).click();
+        await page.waitForFunction(()=>window.sent.some(m=>m.type==='RIDDLE_REVEAL'));
+      } else {
+        await page.getByLabel('Your answer',{exact:true}).fill('A walk after dinner.');
+        await page.getByRole('button',{name:'Submit & reveal',exact:true}).click();
+        assert.equal(await page.evaluate(()=>window.sent.some(m=>m.type==='CARD_SUBMIT'&&m.payload.answer==='A walk after dinner.')),true,'desktop answer is sent');
+        await page.evaluate(cardId=>window.receive({type:'CARD_SUBMIT',payload:{cardId,answer:'A quiet morning.'}}),cardId);
+        await page.waitForFunction(()=>!document.querySelector('.game-action-next').disabled);
+        assert.equal(await page.locator('.paired-answers').count(),1,'both submitted answers are revealed');
+      }
+    }
+    await page.waitForFunction(()=>!document.querySelector('.game-action-next').disabled);
+    await page.screenshot({path:`artifacts/card-desktop-${width}-${category}-answered.png`,fullPage:true});
+    console.log(`${width}x${height}: ${guest?'guest':'host'} ${category} answer control and reveal flow passed`);
+    await context.close();
+  }
+  for (const mode of process.env.CARD_DESKTOP_ONLY ? [] : ['host','guest','guest-leave','solo','dare']) {
+    const guest=mode.startsWith('guest');
+    const {context,page}=await setup(mode,{width:390,height:844});
     if (guest) await page.evaluate(() => window.receive({ type: 'START_GAME', payload: { game: 'swipe' } }));
     else await page.getByRole('button', { name: mode==='solo' ? 'Start with a card' : 'Start together' }).click();
     await page.locator('.game-action-skip').waitFor();

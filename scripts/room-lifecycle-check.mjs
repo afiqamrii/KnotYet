@@ -91,6 +91,7 @@ try {
   await status(page, 'hosting');
   await page.evaluate(() => { window.originalPeer=window.mockPeers.at(-1);window.originalPeer.ready();window.originalConnection=window.originalPeer.incoming();window.originalConnection.ready(); });
   await status(page, 'connected');
+  await page.evaluate(() => { sessionStorage.setItem('num_session','private-round');sessionStorage.setItem('secret_race_host_session','private-picks');sessionStorage.setItem('story_session','local-story'); });
   for (const event of ['SIGNED_IN', 'TOKEN_REFRESHED']) {
     const reads = await page.evaluate(() => window.mock.profileReads);
     await page.evaluate(event => { window.pendingProfile=window.mock.deferProfile();window.mock.emit('account-a',event); }, event);
@@ -99,14 +100,18 @@ try {
       {loading:false,mounts:1,unmounts:0,destroyed:false,status:'connected'}, `${event} keeps the actual protected game route and peer connection alive while account reads are pending`);
     await page.evaluate(event => window.pendingProfile.resolve({data:{id:'account-a',name:event,avatar_id:'sunny'},error:null}), event);
     await page.waitForFunction(event => window.auth.profile?.name === event, event);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('num_session')), 'private-round', 'same-account refresh preserves the current game snapshot');
   }
   await page.evaluate(() => { window.pendingProfile=window.mock.deferProfile();window.mock.emit('account-b'); });
   await page.waitForFunction(() => window.auth.isLoading && window.originalPeer.destroyed);
   assert.equal(await page.evaluate(() => window.unmounts), 1, 'switching accounts still unmounts the prior protected room');
+  assert.deepEqual(await page.evaluate(() => ['mp_roomCode','mp_isHost','mp_activeGame','num_session','secret_race_host_session'].map(key=>sessionStorage.getItem(key))), [null,null,null,null,null], 'account switch clears room restoration and private round state');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('story_session')), 'local-story', 'public local activities remain available');
   await page.evaluate(() => window.pendingProfile.resolve({data:{id:'account-b',name:'Other Player',avatar_id:'sunny'},error:null}));
   await page.waitForFunction(() => window.mounts >= 2 && !window.auth.isLoading && window.auth.progress?.user_id === 'account-b');
-  await page.evaluate(() => window.mock.emit(null,'SIGNED_OUT'));
+  await page.evaluate(() => { sessionStorage.setItem('mp_roomCode','9876');sessionStorage.setItem('guess_actualAnswer','private-answer');window.mock.emit(null,'SIGNED_OUT'); });
   await page.waitForFunction(() => window.unmounts === window.mounts && !window.auth.isLoading && !window.auth.user);
+  assert.deepEqual(await page.evaluate(() => ['mp_roomCode','guess_actualAnswer'].map(key=>sessionStorage.getItem(key))), [null,null], 'sign-out clears the next account’s room and private answers');
   await ctx.close();
   console.log('Room lifecycle: actual protected route survives same-account SIGNED_IN/TOKEN_REFRESHED; account switch and sign-out still unmount.');
 

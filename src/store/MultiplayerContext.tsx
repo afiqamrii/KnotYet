@@ -62,6 +62,7 @@ export type MultiplayerMessage =
   | { type: 'NUM_REQUEST' }
   | { type: 'NUM_STATE'; payload: NumberRoundSnapshot }
   | { type: 'NUM_NEXT' }
+  | { type: 'SECRET_RACE_REQUEST' }
   | { type: 'SECRET_RACE_START'; payload: SecretRaceState }
   | { type: 'SECRET_RACE_STATE'; payload: SecretRaceState }
   | { type: 'SECRET_RACE_LOCK'; payload: { matchId: string; number: number } }

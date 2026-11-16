@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { supabase, UserProfile, UserProgress, CoupleProgress } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { createLegacyMigrationRunner, updateDailyPlayCount } from '../utils/progressPersistence';
+import { GAME_SESSION_KEYS, STORAGE_KEYS } from '../utils/storage';
 
 const clearAccountCache = () => {
   [
@@ -13,6 +14,12 @@ const clearAccountCache = () => {
     'knotyet_seen_questions',
   ].forEach(key => {
     try { localStorage.removeItem(key); } catch { /* Optional cache cleanup must never block an account change. */ }
+  });
+  // A new identity must not reconnect to the previous player's room or read
+  // their private answers. Same-account refreshes never call this cleanup.
+  [...GAME_SESSION_KEYS, STORAGE_KEYS.introShown, STORAGE_KEYS.multiplayerRoomCode,
+    STORAGE_KEYS.multiplayerIsHost, STORAGE_KEYS.multiplayerActiveGame].forEach(key => {
+    try { sessionStorage.removeItem(key); } catch { /* Keep sign-out usable when storage is blocked. */ }
   });
 };
 interface AuthContextType {

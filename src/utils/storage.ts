@@ -17,6 +17,7 @@ export const GAME_SESSION_KEYS = [
   'swipe_partnerAnswer', 'swipe_riddleRevealed',
   'num_session', 'num_stage', 'num_secret', 'num_guesses', 'num_round', 'num_p1', 'num_p2', 'num_winner',
   'letter_session', 'letter_stage', 'letter_letter', 'letter_char', 'letter_winner', 'letter_roundId',
+  'secret_race_host_session', 'secret_race_guest_session',
   'guess_stage', 'guess_questions', 'guess_currentIndex', 'guess_actualAnswer',
   'guess_guessedAnswer', 'guess_score', 'guess_completed', 'guess_isMySecret',
   'wheel_spin_state', 'wheel_rotation', 'wheel_selectedIdea',

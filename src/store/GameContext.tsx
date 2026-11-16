@@ -212,9 +212,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const sharedCouple = isMultiplayer && couple && user && remoteAccountId &&
       ((couple.user1_id === user.id && couple.user2_id === remoteAccountId) ||
        (couple.user2_id === user.id && couple.user1_id === remoteAccountId)) ? couple : null;
-    // Both clients reveal the same result, but only the host changes their
-    // shared total. Unpaired friends still each earn their personal hearts.
-    if (sharedCouple && !sharedAwardAuthority) return;
+    const sharedAccount = isMultiplayer && user && remoteAccountId === user.id;
+    // Both clients reveal the same result. A couple total or the same personal
+    // account used on both devices must be changed once, by the host. Different
+    // unpaired accounts still each receive their own personal result.
+    if ((sharedCouple || sharedAccount) && !sharedAwardAuthority) return;
     if (!user) {
       setProfileState(previous => {
         if (!previous) return previous;

@@ -6,11 +6,12 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 const html = `<!doctype html><html><body><div id="root"></div><script type="module">
 import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$=()=>{};window.$RefreshSig$=()=>type=>type;window.__vite_plugin_react_preamble_installed__=true;
 const React=(await import('/@id/react')).default;const ReactDOM=(await import('/@id/react-dom/client')).default;
-window.authListeners=new Set();window.renderListeners=new Set();window.db={user_progress:{user_id:'alice',heart_points:100,answered_questions:[]},couples:{id:'pair',user1_id:'alice',user2_id:'bob',couple_points:20}};window.writes=[];window.failWrite=false;window.paired=false;
+window.authListeners=new Set();window.renderListeners=new Set();window.db={user_progress:{user_id:'alice',heart_points:100,answered_questions:[]},couples:{id:'pair',user1_id:'alice',user2_id:'bob',couple_points:20}};window.writes=[];window.failWrite=false;window.paired=false;window.games={};
 window.refresh=()=>{window.auth={user:{id:'alice'},profile:{id:'alice',name:'Alice',avatar_id:'sunny'},progress:{...window.db.user_progress},couple:window.paired?{...window.db.couples}:null,refreshProgress:async()=>window.refresh(),refreshCouple:async()=>window.refresh()};window.renderListeners.forEach(fn=>fn());};window.refresh();
 const {GameProvider,useGame}=await import('/src/store/GameContext.tsx');
-function Probe(){const game=useGame();React.useEffect(()=>{window.game=game;},[game]);return React.createElement('p',null,game.profile?.heartPoints);}
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(GameProvider,null,React.createElement(Probe)));
+function Probe({role}){const game=useGame();React.useEffect(()=>{window.games[role]=game;if(role==='host')window.game=game;},[game,role]);return React.createElement('p',null,game.profile?.heartPoints);}
+// Independent providers model two tabs: separate reward queues, one account row.
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,...['host','guest'].map(role=>React.createElement(GameProvider,{key:role},React.createElement(Probe,{role})))));
 </script></body></html>`;
 const authMock = `import React from '/node_modules/.vite/deps/react.js';const subscribe=fn=>{window.renderListeners.add(fn);return()=>window.renderListeners.delete(fn)};export const useAuth=()=>React.useSyncExternalStore(subscribe,()=>window.auth);`;
 const supabaseMock = `export const supabase={auth:{onAuthStateChange:fn=>{window.authListeners.add(fn);return{data:{subscription:{unsubscribe:()=>window.authListeners.delete(fn)}}}}},from:table=>{const filters=[];let patch=null,signal;return{select(){return this;},single(){return this;},maybeSingle(){return this;},update(value){patch=value;return this;},eq(key,value){filters.push([key,value]);return this;},is(key,value){filters.push([key,value]);return this;},abortSignal(value){signal=value;return this;},async then(resolve,reject){try{signal?.throwIfAborted();await new Promise(r=>setTimeout(r,5));signal?.throwIfAborted();const row=window.db[table];if(patch){window.writes.push({table,patch});if(window.failWrite)return resolve({data:null,error:new Error('offline')});if(!filters.every(([key,value])=>row[key]===value))return resolve({data:null,error:null});Object.assign(row,patch);}return resolve({data:{...row},error:null});}catch(error){return reject(error);}}}}};`;
@@ -55,6 +56,29 @@ try {
   await page.waitForFunction(() => !window.game.isSavingProgress && window.db.user_progress.heart_points === 150);
   assert.equal(await page.evaluate(() => window.db.couples.couple_points), 25, 'playing another friend cannot change unrelated couple points');
   assert.equal(await page.evaluate(() => window.game.profile.accountId), 'alice', 'room profile carries the current account identity');
+  let personalTotal = 150;
+  for (const paired of [false, true]) {
+    await page.evaluate(paired => { window.paired=paired;window.refresh(); }, paired);
+    await page.waitForTimeout(30);
+    const writesBefore = await page.evaluate(() => window.writes.length);
+    await page.evaluate(() => {
+      window.games.host.addHeartPoints(15, true, true, 'alice');
+      window.games.guest.addHeartPoints(15, true, false, 'alice');
+    });
+    await page.waitForFunction(before => window.writes.length > before && !window.games.host.isSavingProgress && !window.games.guest.isSavingProgress, writesBefore);
+    personalTotal += 15;
+    assert.equal(await page.evaluate(() => window.db.user_progress.heart_points), personalTotal, 'two peers using the same account receive one result reward');
+    assert.equal(await page.evaluate(() => window.writes.length), writesBefore+1, 'only the host writes the same-account reward');
+    await page.evaluate(() => {
+      window.games.host.deductHeartPoints(5, true, true, 'alice');
+      window.games.guest.deductHeartPoints(5, true, false, 'alice');
+    });
+    await page.waitForFunction(before => window.writes.length > before+1 && !window.games.host.isSavingProgress && !window.games.guest.isSavingProgress, writesBefore);
+    personalTotal -= 5;
+    assert.equal(await page.evaluate(() => window.db.user_progress.heart_points), personalTotal, 'a same-account quiz mismatch deducts once');
+    assert.equal(await page.evaluate(() => window.writes.length), writesBefore+2, 'only the host writes the same-account deduction');
+    assert.equal(await page.evaluate(() => window.db.couples.couple_points), 25, 'same-account play never awards a couple with an absent partner');
+  }
   assert.deepEqual(errors, []);
-  console.log('Progress provider: sequential rewards, shared host authority, confirmed totals, and visible save failure passed.');
+  console.log('Progress provider: sequential rewards, shared host authority, same-account two-provider rewards/deductions, distinct-account personal rewards, confirmed totals, and visible save failure passed.');
 } finally { await browser.close(); }

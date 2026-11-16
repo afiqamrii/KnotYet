@@ -22,7 +22,7 @@ const cases = [
   ['MATCH_RESTART', { questionIds: ['one'] }], ['QUIZ_RESTART', { questionIds: ['one'] }],
   ['NUM_SET_SECRET', 42], ['NUM_GUESS', 20], ['NUM_GUESS', { val: 20, name: 'Alex', round: 1 }],
   ['NUM_STATE', { roomCode: '123456', round: 1, secret: 42, guesses: [{ value: 20, hint: 'higher' }], stage: 'guess', winnerName: null }],
-  ['SECRET_RACE_START', race], ['SECRET_RACE_STATE', { ...race, phase: 'answering', equation }], ['SECRET_RACE_RESULT', { ...race, phase: 'result', equation, winner: 'host' }],
+  ['SECRET_RACE_START', race], ['SECRET_RACE_STATE', { ...race, hostLocked: true, partnerLocked: true, phase: 'answering', equation }], ['SECRET_RACE_RESULT', { ...race, hostLocked: true, partnerLocked: true, phase: 'result', equation, winner: 'host' }],
   ['SECRET_RACE_LOCK', { matchId: 'race-1', number: 4 }], ['SECRET_RACE_GO', { matchId: 'race-1', equation }], ['SECRET_RACE_ANSWER', { matchId: 'race-1', answer: 1000 }],
   ['SECRET_RACE_WRONG', { matchId: 'race-1', delayMs: 2000 }], ['SECRET_RACE_NEXT', { matchId: 'race-1' }], ['SECRET_RACE_RESTART', { matchId: 'race-1' }],
   ['LETTER_START', 'A'], ['LETTER_START', { letter: 'A', roundId: 'r' }], ['LETTER_WORD_SUBMIT', 'APPLE'], ['LETTER_WORD_SUBMIT', { word: 'APPLE', roundId: 'r' }], ['LETTER_RESULT', { name: 'Alex', word: 'APPLE', roundId: 'r' }],
@@ -31,7 +31,7 @@ const cases = [
   ['CHAT_MESSAGE', { id: 'm1', senderId: 'me', senderName: 'Alex', senderAvatar: 'sunny', text: 'Hello', timestamp: Date.now(), isQuickReaction: false }], ['CHAT_TYPING', { isTyping: true }],
 ];
 for (const [type, payload] of cases) assert.equal(valid({ type, payload }), true, `accept valid ${type}`);
-for (const type of ['CHOICES_REQUEST', 'QUIZ_NEXT', 'MATCH_NEXT', 'NUM_NEXT', 'NUM_REQUEST', 'LETTER_NEXT', 'LETTER_REQUEST', 'END_GAME', 'LEAVE_ROOM', 'RIDDLE_REVEAL', 'MATCH_RESTART', 'QUIZ_RESTART']) assert.equal(valid({ type }), true, `accept payload-free ${type}`);
+for (const type of ['CHOICES_REQUEST', 'QUIZ_NEXT', 'MATCH_NEXT', 'NUM_NEXT', 'NUM_REQUEST', 'SECRET_RACE_REQUEST', 'LETTER_NEXT', 'LETTER_REQUEST', 'END_GAME', 'LEAVE_ROOM', 'RIDDLE_REVEAL', 'MATCH_RESTART', 'QUIZ_RESTART']) assert.equal(valid({ type }), true, `accept payload-free ${type}`);
 for (const value of [null, [], 'SET_GAME', {}, { type: 'unknown' }, { type: 'SET_GAME', payload: 'story' },
   { type: 'CARD_SUBMIT', payload: { cardId: 'one', answer: null } },
   { type: 'SYNC_QUESTION_IDS', payload: { game: 'swipe', questionIds: ['one'], currentIndex: 2 } },
